@@ -17,6 +17,8 @@ pub struct Config {
     pub hotkey_enabled: bool,
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+    #[serde(default = "default_auto_paste")]
+    pub auto_paste: bool,
 }
 
 fn default_history_max_entries() -> usize {
@@ -39,6 +41,10 @@ fn default_hotkey() -> String {
     "Control+Shift+Space".to_string()
 }
 
+fn default_auto_paste() -> bool {
+    false
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -49,6 +55,7 @@ impl Default for Config {
             auto_copy: default_auto_copy(),
             hotkey_enabled: default_hotkey_enabled(),
             hotkey: default_hotkey(),
+            auto_paste: default_auto_paste(),
         }
     }
 }

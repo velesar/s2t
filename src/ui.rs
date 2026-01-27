@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::history::{save_history, History, HistoryEntry};
 use crate::history_dialog::show_history_dialog;
 use crate::model_dialog::show_model_dialog;
+use crate::paste::paste_from_clipboard;
 use crate::settings_dialog::show_settings_dialog;
 use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
@@ -475,13 +476,26 @@ fn handle_stop_recording(
                         status_label.set_text("Готово!");
                         result_label.set_text(&text);
 
-                        // Auto-copy if enabled
-                        let auto_copy_enabled = {
+                        // Get config values
+                        let (auto_copy_enabled, auto_paste_enabled) = {
                             let cfg = config_for_auto_copy.lock().unwrap();
-                            cfg.auto_copy
+                            (cfg.auto_copy, cfg.auto_paste)
                         };
-                        if auto_copy_enabled {
+
+                        // Copy to clipboard if auto-copy or auto-paste is enabled
+                        // (auto-paste requires clipboard to work)
+                        if auto_copy_enabled || auto_paste_enabled {
                             copy_to_clipboard(&text);
+                        }
+
+                        // Auto-paste if enabled (simulates Ctrl+V)
+                        if auto_paste_enabled {
+                            // Small delay to ensure clipboard is ready
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                            if let Err(e) = paste_from_clipboard() {
+                                eprintln!("Помилка автоматичної вставки: {}", e);
+                                status_label.set_text(&format!("Готово! (помилка вставки: {})", e));
+                            }
                         }
 
                         // Save to history

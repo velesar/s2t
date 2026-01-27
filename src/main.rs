@@ -5,6 +5,7 @@ mod history_dialog;
 mod hotkeys;
 mod model_dialog;
 mod models;
+mod paste;
 mod settings_dialog;
 mod tray;
 mod ui;
