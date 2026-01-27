@@ -90,14 +90,20 @@ cat > "$HOME/.local/share/applications/voice-dictation.desktop" << EOF
 Type=Application
 Name=Voice Dictation
 Name[uk]=Голосова диктовка
-Comment=Voice-to-text dictation using Whisper
-Comment[uk]=Голосове введення тексту через Whisper
-Exec=$HOME/.local/bin/voice-dictation
+Comment=Offline speech-to-text using Whisper
+Comment[uk]=Офлайн розпізнавання мовлення через Whisper
+Exec=voice-dictation
 Icon=audio-input-microphone
 Terminal=false
-Categories=Utility;Audio;Accessibility;
-Keywords=voice;dictation;speech;whisper;
+Categories=AudioVideo;Audio;Utility;
+Keywords=voice;dictation;speech;whisper;transcription;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
 EOF
+
+# Also create autostart entry
+mkdir -p "$HOME/.config/autostart"
+cp "$HOME/.local/share/applications/voice-dictation.desktop" "$HOME/.config/autostart/"
 
 # Check for GNOME tray extension
 if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ]; then

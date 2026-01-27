@@ -161,9 +161,6 @@ impl AudioRecorder {
         (samples, completion_rx)
     }
 
-    pub fn is_recording(&self) -> bool {
-        self.is_recording.load(Ordering::SeqCst)
-    }
 }
 
 impl Default for AudioRecorder {
@@ -175,18 +172,6 @@ impl Default for AudioRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_audio_recorder_new() {
-        let recorder = AudioRecorder::new();
-        assert!(!recorder.is_recording());
-    }
-
-    #[test]
-    fn test_audio_recorder_default() {
-        let recorder = AudioRecorder::default();
-        assert!(!recorder.is_recording());
-    }
 
     #[test]
     fn test_audio_recorder_initial_samples_empty() {
@@ -207,13 +192,4 @@ mod tests {
         assert_eq!(WHISPER_SAMPLE_RATE, 16000);
     }
 
-    #[test]
-    fn test_multiple_recorders_independent() {
-        let recorder1 = AudioRecorder::new();
-        let recorder2 = AudioRecorder::new();
-
-        // Вони мають бути незалежними
-        assert!(!recorder1.is_recording());
-        assert!(!recorder2.is_recording());
-    }
 }
