@@ -1,7 +1,27 @@
 # ADR-005: STT Alternatives and Optimization Approaches
 
 ## Status
-Proposed
+**Accepted** - Phase 1 implemented (quantized model support added)
+
+## Decision Summary
+
+After comprehensive research (January 2026), we decided to **stay with whisper-rs and add quantized model support**. Key findings:
+
+| Option | Status | Pure Rust | Streaming | Ukrainian | Decision |
+|--------|--------|-----------|-----------|-----------|----------|
+| **whisper-rs** | Active (v0.15.1, Sept 2025) | No (C++) | No | Yes | **Keep using** |
+| **whisper-rs + quantization** | Ready now | No (C++) | No | Yes | **Implemented** |
+| **candle-whisper** | Active (HuggingFace) | Yes | No | Yes | Future option |
+| **whisper-apr** | Early (v0.1.1) | Yes | Yes | Yes | Too immature |
+| **faster-whisper-rs** | Dead (~2023) | No (Python!) | Limited | Yes | Avoid |
+| **Vosk** | Active | No (C) | Yes | Yes | Lower quality (10-15% WER) |
+| **Coqui STT** | Dead (2023) | No | Yes | Unknown | Avoid |
+
+### Key Research Findings (January 2026)
+
+- **whisper-rs**: Moved to Codeberg (July 2025) but actively maintained. Best accuracy: 2-5% WER.
+- **candle-whisper**: Pure Rust, HuggingFace-backed, good future migration path.
+- **Vosk**: Fast streaming but 10-15% WER (much worse than Whisper's 2-5%).
 
 ## Context
 Поточна реалізація використовує Whisper через `whisper-rs` (обгортка навколо whisper.cpp). Проблеми:

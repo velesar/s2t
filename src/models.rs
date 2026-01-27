@@ -17,6 +17,44 @@ const HUGGINGFACE_BASE_URL: &str =
 
 pub fn get_available_models() -> Vec<ModelInfo> {
     vec![
+        // Quantized models (recommended for faster performance)
+        ModelInfo {
+            filename: "ggml-tiny-q5_1.bin".to_string(),
+            display_name: "Tiny Q5".to_string(),
+            size_bytes: 32_000_000,
+            description: "Найшвидша квантована, ~2x швидше".to_string(),
+        },
+        ModelInfo {
+            filename: "ggml-base-q5_1.bin".to_string(),
+            display_name: "Base Q5 (Рекомендовано)".to_string(),
+            size_bytes: 60_000_000,
+            description: "Швидка + якісна, оптимальний баланс".to_string(),
+        },
+        ModelInfo {
+            filename: "ggml-base-q8_0.bin".to_string(),
+            display_name: "Base Q8".to_string(),
+            size_bytes: 83_000_000,
+            description: "Квантована, найкраща якість серед Q".to_string(),
+        },
+        ModelInfo {
+            filename: "ggml-small-q5_1.bin".to_string(),
+            display_name: "Small Q5".to_string(),
+            size_bytes: 190_000_000,
+            description: "Хороша якість, швидша за звичайну".to_string(),
+        },
+        ModelInfo {
+            filename: "ggml-small-q8_0.bin".to_string(),
+            display_name: "Small Q8".to_string(),
+            size_bytes: 264_000_000,
+            description: "Висока якість серед квантованих".to_string(),
+        },
+        ModelInfo {
+            filename: "ggml-medium-q5_0.bin".to_string(),
+            display_name: "Medium Q5".to_string(),
+            size_bytes: 539_000_000,
+            description: "Велика квантована, хороша якість".to_string(),
+        },
+        // Full precision models
         ModelInfo {
             filename: "ggml-tiny.bin".to_string(),
             display_name: "Tiny".to_string(),
@@ -190,7 +228,7 @@ mod tests {
     #[test]
     fn test_get_available_models_count() {
         let models = get_available_models();
-        assert_eq!(models.len(), 5);
+        assert_eq!(models.len(), 11); // 6 quantized + 5 full precision
     }
 
     #[test]
@@ -203,16 +241,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_available_models_ordered_by_size() {
+    fn test_get_available_models_has_quantized_and_full() {
         let models = get_available_models();
-        for i in 1..models.len() {
-            assert!(
-                models[i].size_bytes >= models[i - 1].size_bytes,
-                "Models should be ordered by size: {} >= {}",
-                models[i].filename,
-                models[i - 1].filename
-            );
-        }
+        let quantized_count = models.iter().filter(|m| m.filename.contains("q5_") || m.filename.contains("q8_")).count();
+        let full_count = models.iter().filter(|m| !m.filename.contains("q5_") && !m.filename.contains("q8_")).count();
+
+        assert!(quantized_count >= 5, "Should have at least 5 quantized models");
+        assert!(full_count >= 5, "Should have at least 5 full precision models");
     }
 
     #[test]
