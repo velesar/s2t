@@ -90,10 +90,20 @@ pw-loopback --capture-props="media.class=Audio/Source"
 
 ## Результати тестування
 
-### Система 1: Fedora 41 (PipeWire)
-- [ ] CPAL бачить monitor sources?
-- [ ] Які назви пристроїв?
-- [ ] Чи працює запис?
+### Система 1: Fedora 41 (PipeWire) — ✅ Протестовано 2026-01-28
+- [x] CPAL бачить monitor sources? **НІ!**
+- [x] Які назви пристроїв?
+  - CPAL бачить: `pipewire`, `default`, `sysdefault:CARD=PCH`, `front:CARD=PCH,DEV=0`, тощо
+  - CPAL **НЕ** бачить: `alsa_output.pci-0000_00_1f.3.analog-stereo.monitor`
+- [x] Чи працює запис через CPAL? **НІ** (monitor source не доступний)
+- [x] Чи працює запис через pactl? **ТАК**
+  ```
+  pactl list sources short:
+  49  alsa_output.pci-0000_00_1f.3.analog-stereo.monitor  PipeWire  s32le 2ch 48000Hz
+  50  alsa_input.pci-0000_00_1f.3.analog-stereo           PipeWire  s32le 2ch 48000Hz
+  ```
+
+**Висновок**: Option 1 (CPAL + monitor sources) **НЕ ПРАЦЮЄ** на Fedora 41.
 
 ### Система 2: Ubuntu 22.04 (PipeWire)
 - [ ] CPAL бачить monitor sources?
@@ -107,21 +117,34 @@ pw-loopback --capture-props="media.class=Audio/Source"
 
 ## Рекомендації після тестування
 
-1. **Якщо CPAL бачить monitor sources:**
-   - Використовувати Option 1 (CPAL + monitor sources)
-   - Найпростіша реалізація
+### Підтверджено: CPAL НЕ бачить monitor sources на Linux
 
-2. **Якщо CPAL НЕ бачить monitor sources:**
-   - Використовувати Option 2 (PulseAudio API) або Option 3 (PipeWire API)
-   - Потрібна додаткова залежність
+**Рекомендований підхід: Option 3 — PipeWire Rust bindings**
 
-3. **Якщо різні результати на різних системах:**
-   - Використовувати Option 4 (Hybrid approach)
-   - Детектувати систему та використовувати відповідний API
+Доступні Rust crates:
+1. **`pipewire` crate (v0.9.2)** — офіційні bindings
+   - Stream API для capture: `PW_DIRECTION_INPUT`
+   - Потребує: `pipewire = "0.9"`
+   - Документація: https://docs.rs/pipewire
+
+2. **`pipewire-native` crate** — pure Rust реалізація протоколу
+   - Не потребує C bindings
+   - API ще нестабільний
+   - Активна розробка (PipeWire Workshop 2025)
+
+3. **CPAL PR #938** — PipeWire implementation для CPAL
+   - Ще не merged
+   - Може спростити інтеграцію в майбутньому
+
+**Альтернатива: pavucontrol workaround**
+- Можна вручну направити monitor source на CPAL input через pavucontrol
+- Не автоматичний — потребує дій користувача
+- Підходить для MVP якщо pipewire crate надто складний
 
 ## Наступні кроки
 
-1. Запустити тести на різних системах
-2. Записати результати в цей документ
-3. Оновити ADR-003 з результатами
-4. Реалізувати обраний підхід
+1. ~~Запустити тести на різних системах~~ ✅ Fedora 41 протестовано
+2. ~~Записати результати в цей документ~~ ✅
+3. [ ] Оновити ADR-003 з результатами
+4. [ ] Створити PoC з `pipewire` crate для loopback recording
+5. [ ] Протестувати синхронізацію двох потоків (мікрофон + loopback)

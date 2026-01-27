@@ -1,7 +1,27 @@
 # ADR-003: Loopback Recording Implementation Approach
 
 ## Status
-Proposed
+**Accepted** (Updated 2026-01-28)
+
+## Test Results Summary (2026-01-28)
+
+### ❌ Option 1 (CPAL + Monitor Sources) — DOES NOT WORK
+
+**Tested on:** Fedora 41 (PipeWire)
+
+**Finding:** CPAL does NOT see PipeWire/PulseAudio monitor sources as input devices.
+
+```
+# Available via pactl:
+alsa_output.pci-0000_00_1f.3.analog-stereo.monitor  ← EXISTS
+
+# CPAL sees only:
+pipewire, default, sysdefault:CARD=PCH, front:CARD=PCH,DEV=0...  ← NO .monitor
+```
+
+### ✅ Recommended: Option 3 (PipeWire Direct API)
+
+The `pipewire` crate (v0.9.2) provides direct access to monitor sources via Stream API.
 
 ## Context
 Для функції запису конференцій потрібно записувати одночасно:
@@ -15,10 +35,25 @@ Proposed
 
 ## Research Findings
 
-### 1. CPAL Limitations
+### 1. CPAL Limitations ⚠️ CONFIRMED
+
 - **Issue #906**: Відкритий запит на loopback support для Linux
 - **Поточний стан**: CPAL підтримує loopback на Windows і macOS, але не на Linux
 - **Причина**: Складність абстракції різних Linux аудіо систем (ALSA, PulseAudio, PipeWire)
+- **PR #938**: PipeWire implementation для CPAL — ще не merged (станом на 2026-01)
+
+**✅ Протестовано 2026-01-28 на Fedora 41:**
+```rust
+// CPAL enumeration test
+let host = cpal::default_host();
+for device in host.input_devices()? {
+    println!("{}", device.name()?);
+}
+// Output: pipewire, default, sysdefault:CARD=PCH, front:CARD=PCH,DEV=0...
+// ❌ NO monitor sources visible!
+```
+
+**Висновок:** Option 1 (CPAL + monitor sources) **не працює** на сучасних Linux системах.
 
 ### 2. PulseAudio Approach
 **Monitor Sources** - віртуальні input пристрої, які записують вихід конкретного sink.
@@ -46,21 +81,53 @@ parec -d alsa_output.pci-0000_00_1f.3.analog-stereo.monitor | oggenc -o output.o
 - Потрібно знати назву sink (може змінюватися)
 - CPAL може не бачити monitor sources як input devices
 
-### 3. PipeWire Approach
+### 3. PipeWire Approach ⭐ RECOMMENDED
+
 **Стан підтримки:**
-- PipeWire замінює PulseAudio на сучасних дистрибутивах (Fedora, Ubuntu 22.04+)
-- CPAL має PR #692 для PipeWire support, але ще не merged
-- PipeWire має власні Rust bindings через upstream проект
+- PipeWire замінює PulseAudio на сучасних дистрибутивах (Fedora 34+, Ubuntu 22.04+)
+- CPAL має PR #938 для PipeWire support, але ще не merged
+- **`pipewire` crate (v0.9.2)** — офіційні Rust bindings
 
 **Можливості:**
 - Прямий доступ до PipeWire Stream API
 - Можна створити capture stream з `MEDIA_CATEGORY = "Capture"`
 - Підтримка monitor streams
+- Loopback module для routing audio
 
-**Приклад створення loopback:**
+**Rust Crates (досліджено 2026-01-28):**
+
+| Crate | Version | Status | Notes |
+|-------|---------|--------|-------|
+| `pipewire` | 0.9.2 | ✅ Stable | Official bindings, recommended |
+| `pipewire-native` | 0.1.x | ⚠️ Experimental | Pure Rust, unstable API |
+
+**Залежності:**
+```toml
+pipewire = "0.9"
+```
+
+**Приклад capture stream:**
+```rust
+use pipewire as pw;
+
+let props = pw::properties! {
+    *pw::keys::MEDIA_TYPE => "Audio",
+    *pw::keys::MEDIA_CATEGORY => "Capture",
+    *pw::keys::MEDIA_ROLE => "Music",
+};
+
+let stream = pw::stream::Stream::new(&core, "loopback-capture", props)?;
+// Connect to monitor source...
+```
+
+**CLI test:**
 ```bash
 # Створення loopback device (PipeWire 0.3.25+)
 pw-loopback --capture-props="media.class=Audio/Source"
+
+# List available sources (includes monitors)
+pactl list sources short
+# → alsa_output.pci-0000_00_1f.3.analog-stereo.monitor  ← TARGET
 ```
 
 ### 4. ALSA Approach
@@ -76,7 +143,7 @@ pw-loopback --capture-props="media.class=Audio/Source"
 
 ## Decision Options
 
-### Option 1: CPAL + PulseAudio Monitor Sources (Recommended for MVP)
+### Option 1: CPAL + PulseAudio Monitor Sources ❌ DOES NOT WORK
 **Підхід:**
 - Використовувати CPAL для мікрофона (як зараз)
 - Для loopback: використовувати PulseAudio monitor sources через CPAL
@@ -95,15 +162,12 @@ for device in devices {
 }
 ```
 
-**Переваги:**
-- Використовує існуючу бібліотеку (cpal)
-- Мінімальні зміни в архітектурі
-- Працює на системах з PulseAudio
+**⚠️ Test Result (2026-01-28, Fedora 41):**
+- CPAL **does NOT** see `.monitor` sources
+- Only ALSA devices visible: `pipewire`, `default`, `sysdefault:CARD=PCH`...
+- Monitor source exists in PipeWire but not exposed to CPAL
 
-**Недоліки:**
-- Може не працювати, якщо CPAL не бачить monitor sources
-- Не працює на PipeWire без PulseAudio compatibility layer
-- Потрібно тестувати на різних системах
+**Висновок:** ❌ **Відхилено** — не працює на сучасних Linux системах з PipeWire.
 
 ### Option 2: Direct PulseAudio API
 **Підхід:**
@@ -127,26 +191,52 @@ libpulse-simple = "0.1"
 - Більше коду для підтримки
 - PulseAudio-specific (не працює на PipeWire без compatibility)
 
-### Option 3: PipeWire Direct API
+### Option 3: PipeWire Direct API ⭐ RECOMMENDED
 **Підхід:**
 - Використовувати PipeWire Rust bindings напряму
 - Створювати capture streams для системного аудіо
-- CPAL тільки для мікрофона
+- CPAL залишається для мікрофона (працює)
 
 **Залежності:**
 ```toml
-pipewire = "0.4"  # або через системні бібліотеки
+pipewire = "0.9"  # latest stable (2026-01)
 ```
 
 **Переваги:**
-- Майбутнє-орієнтований підхід (PipeWire - майбутнє Linux audio)
-- Потужний API з багатьма можливостями
-- Працює на сучасних дистрибутивах
+- ✅ Майбутнє-орієнтований підхід (PipeWire - стандарт Linux audio)
+- ✅ Потужний API з багатьма можливостями
+- ✅ Працює на сучасних дистрибутивах (Fedora 34+, Ubuntu 22.04+)
+- ✅ Прямий доступ до monitor sources
+- ✅ Офіційні bindings з хорошою документацією
 
 **Недоліки:**
-- Складніша реалізація
-- Менше документації та прикладів
-- Може не працювати на старих системах з PulseAudio
+- ⚠️ Додаткова залежність (libpipewire-dev)
+- ⚠️ Може не працювати на старих системах з pure PulseAudio
+- ⚠️ Потребує системних бібліотек PipeWire
+
+**Реалізація:**
+```rust
+use pipewire as pw;
+use pw::stream::{Stream, StreamFlags};
+
+// Create capture stream for monitor source
+let props = pw::properties! {
+    *pw::keys::MEDIA_TYPE => "Audio",
+    *pw::keys::MEDIA_CATEGORY => "Capture",
+    *pw::keys::MEDIA_ROLE => "Music",
+    *pw::keys::NODE_TARGET => "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor",
+};
+
+let stream = Stream::new(&core, "conference-loopback", props)?;
+stream.connect(
+    pw::spa::Direction::Input,
+    None,
+    StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS,
+    &mut [],
+)?;
+```
+
+**Висновок:** ✅ **Рекомендовано** для production на сучасних Linux системах.
 
 ### Option 4: Hybrid Approach (Recommended for Production)
 **Підхід:**
@@ -187,71 +277,142 @@ fn detect_backend() -> AudioBackend {
 - Потрібна підтримка кількох API
 - Більше коду
 
-## Recommended Decision
+## Recommended Decision (Updated 2026-01-28)
 
-**Для MVP (Minimum Viable Product):**
-**Option 1** - Спробувати використати CPAL з PulseAudio monitor sources.
-
-**Обґрунтування:**
-- Мінімальні зміни в коді
-- Використовує існуючу бібліотеку
-- Швидка реалізація
-- Якщо не працює, легко перейти на Option 2
-
-**Для Production:**
-**Option 4** - Hybrid approach з детекцією аудіо системи.
+### ✅ ACCEPTED: Option 3 — PipeWire Direct API
 
 **Обґрунтування:**
-- Максимальна сумісність
-- Підтримка як PulseAudio, так і PipeWire
-- Майбутнє-орієнтований підхід
+- ❌ Option 1 (CPAL + monitor) **не працює** — протестовано на Fedora 41
+- ✅ PipeWire — стандарт для сучасних Linux дистрибутивів
+- ✅ `pipewire` crate (v0.9.2) — стабільний, добре документований
+- ✅ Прямий доступ до monitor sources
+- ✅ CPAL залишається для мікрофона (працює)
 
-## Implementation Plan
+**Залежності:**
+```toml
+[dependencies]
+pipewire = "0.9"
 
-### Phase 1: Proof of Concept (Option 1)
-1. Додати функцію для переліку всіх input devices через CPAL
-2. Знайти monitor sources (devices з назвою, що містить ".monitor")
-3. Створити окремий `ConferenceRecorder`, який записує з двох джерел
-4. Тестувати на системі з PulseAudio
+[target.'cfg(target_os = "linux")'.dependencies]
+pipewire = "0.9"
+```
 
-### Phase 2: Fallback (Option 2)
-Якщо Option 1 не працює:
-1. Додати `pulse-binding-rs` залежність
-2. Реалізувати прямий доступ до PulseAudio monitor sources
-3. Інтегрувати з існуючим `AudioRecorder`
+**System requirements:**
+```bash
+# Fedora
+sudo dnf install pipewire-devel
 
-### Phase 3: Production (Option 4)
-1. Додати детекцію аудіо системи
-2. Реалізувати підтримку PipeWire (якщо потрібно)
-3. Додати fallback на ALSA (якщо потрібно)
+# Ubuntu/Debian
+sudo apt install libpipewire-0.3-dev
+```
 
-## Testing Requirements
+### Fallback Strategy
 
-1. **PulseAudio systems**: Fedora (стара версія), Ubuntu (до 22.04)
-2. **PipeWire systems**: Fedora 34+, Ubuntu 22.04+
-3. **Різні конфігурації**: один/кілька sinks, різні назви пристроїв
-4. **Синхронізація**: перевірити, що два потоки синхронізовані
+Для старих систем з pure PulseAudio (без PipeWire):
+1. Детектувати наявність PipeWire
+2. Якщо немає — використовувати Option 2 (pulse-binding-rs)
+3. Показати warning користувачу
+
+```rust
+fn has_pipewire() -> bool {
+    std::process::Command::new("pw-cli")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+```
+
+## Implementation Plan (Updated 2026-01-28)
+
+### Phase 1: PipeWire PoC ✅ CURRENT
+1. ~~Тестувати CPAL з monitor sources~~ ❌ Не працює
+2. Додати `pipewire = "0.9"` залежність
+3. Створити `LoopbackRecorder` модуль для capture з monitor source
+4. Тестувати запис системного аудіо на Fedora 41
+
+### Phase 2: ConferenceRecorder
+1. Створити `ConferenceRecorder` struct:
+   - CPAL для мікрофона (існуючий код)
+   - PipeWire для loopback (новий)
+2. Синхронізувати два потоки (timestamps)
+3. Зберігати в окремі буфери для diarization
+
+### Phase 3: Integration
+1. Інтегрувати з `ConferenceTranscriber` (ADR-004)
+2. Додати UI для вибору режиму запису
+3. Зберігати аудіо файли на диск
+
+### Phase 4: Fallback (Optional)
+1. Детектувати наявність PipeWire
+2. Якщо немає — fallback на `pulse-binding-rs`
+3. Показати warning для unsupported систем
+
+### Code Structure
+```
+src/
+├── audio.rs              # Existing mic recording (CPAL)
+├── loopback.rs           # NEW: PipeWire loopback capture
+├── conference_recorder.rs # NEW: Dual recording (mic + loopback)
+└── ...
+```
+
+## Testing Requirements (Updated 2026-01-28)
+
+### Completed ✅
+1. **Fedora 41 (PipeWire)**: CPAL не бачить monitor sources
+2. **Monitor source available**: `alsa_output.pci-0000_00_1f.3.analog-stereo.monitor`
+
+### TODO
+1. **PipeWire capture test**: Записати системний аудіо через `pipewire` crate
+2. **Dual recording test**: Одночасний запис мікрофона (CPAL) + loopback (PipeWire)
+3. **Синхронізація**: Перевірити timestamp alignment між потоками
+4. **Різні конфігурації**: Кілька sinks, HDMI audio, USB audio
+5. **Ubuntu 22.04+**: Тестувати на іншому дистрибутиві з PipeWire
+
+### Edge Cases
+1. Немає системного аудіо (тиша)
+2. Зміна audio sink під час запису
+3. Headphones vs speakers
 
 ## Consequences
 
 ### Positive
 - ✅ Можливість записувати системний аудіо
 - ✅ Підтримка запису конференцій
-- ✅ Гнучкість в обранні підходу
+- ✅ PipeWire — стандарт для сучасних Linux
+- ✅ Офіційні Rust bindings з активною підтримкою
 
 ### Negative
-- ⚠️ Додаткова складність в коді
-- ⚠️ Можливі проблеми сумісності на різних системах
+- ⚠️ Додаткова залежність (pipewire crate + system lib)
+- ⚠️ Не працює на старих системах без PipeWire
 - ⚠️ Потрібне тестування на різних конфігураціях
 - ⚠️ Можливі проблеми з синхронізацією потоків
 
+### Risks
+- ⚠️ PipeWire API може змінитися (minor versions)
+- ⚠️ Різні версії PipeWire на різних дистрибутивах
+
 ## Related Files
 - [docs/backlog/conference-recording.md](../backlog/conference-recording.md) - Feature description
+- [docs/research/loopback-recording-test.md](../research/loopback-recording-test.md) - Test results
+- [docs/adr/004-speaker-diarization-approach.md](004-speaker-diarization-approach.md) - Speaker diarization ADR
 - [src/audio.rs](../../src/audio.rs) - Current audio recording implementation
 - [Cargo.toml](../../Cargo.toml) - Dependencies
 
 ## References
+
+### PipeWire (Recommended)
+- [pipewire crate on crates.io](https://crates.io/crates/pipewire) - v0.9.2
+- [pipewire-rs documentation](https://pipewire.pages.freedesktop.org/pipewire-rs/pipewire/)
+- [PipeWire Rust Tutorial](https://acalustra.com/playing-with-pipewire-audio-streams-and-rust.html)
+- [PipeWire Loopback Module](https://docs.pipewire.org/page_module_loopback.html)
+- [PipeWire Workshop 2025](https://www.collabora.com/news-and-blog/blog/2025/07/03/pipewire-workshop-2025-updates-video-transport-rust-bluetooth/)
+
+### CPAL
 - [CPAL GitHub Issue #906](https://github.com/RustAudio/cpal/issues/906) - Loopback support request
-- [PipeWire Rust Guide](https://acalustra.com/playing-with-pipewire-audio-streams-and-rust.html)
+- [CPAL PR #938](https://github.com/RustAudio/cpal/pull/938) - PipeWire implementation (not merged)
+
+### Other
 - [PulseAudio Monitor Sources](https://wiki.ubuntu.com/record_system_sound)
 - [ALSA Loopback Module](https://wiki.debian.org/audio-loopback)

@@ -24,24 +24,46 @@ As a user, I want to record both my microphone input and system audio output (fr
 
 #### 1. Dual Audio Recording
 Extend `AudioRecorder` in [src/audio.rs](src/audio.rs) to support recording from two sources simultaneously:
-- **Input device**: Microphone (existing functionality)
-- **Output device**: Loopback/playback device (new)
+- **Input device**: Microphone (existing functionality via CPAL)
+- **Output device**: Loopback/monitor source (new, via PipeWire)
 
 **Challenges:**
-- Loopback recording on Linux requires access to PulseAudio/PipeWire monitor sources
-- Different audio systems: ALSA, PulseAudio, PipeWire
+- Loopback recording on Linux requires access to PipeWire monitor sources
+- ❌ CPAL doesn't see monitor sources on Linux (tested on Fedora 41)
 - Synchronization between two audio streams (timing alignment)
-- CPAL doesn't have native loopback support on Linux (see [ADR-003](../adr/003-loopback-recording-approach.md))
 
-**Solution:**
-See detailed research and recommendations in [ADR-003: Loopback Recording Implementation Approach](../adr/003-loopback-recording-approach.md).
+**Solution — Decided (ADR-003, 2026-01-28):**
 
-**Recommended approach (MVP):**
-- Try using CPAL to enumerate devices and find monitor sources (names containing ".monitor")
-- If CPAL doesn't see monitor sources, use direct PulseAudio API via `pulse-binding-rs`
-- For PipeWire systems, use PipeWire bindings or PulseAudio compatibility layer
-- Create separate recording threads for input and output
-- Use timestamps to synchronize streams during merge
+| Component | Library | Notes |
+|-----------|---------|-------|
+| Microphone | CPAL (existing) | Works, no changes needed |
+| Loopback | **`pipewire` crate v0.9** | Direct access to monitor sources |
+
+**Implementation approach:**
+```rust
+// Microphone: existing CPAL code (src/audio.rs)
+let mic_device = host.default_input_device()?;
+
+// Loopback: new PipeWire code (src/loopback.rs)
+use pipewire as pw;
+let props = pw::properties! {
+    *pw::keys::MEDIA_TYPE => "Audio",
+    *pw::keys::MEDIA_CATEGORY => "Capture",
+    *pw::keys::NODE_TARGET => "alsa_output.*.monitor",
+};
+let stream = pw::stream::Stream::new(&core, "loopback", props)?;
+```
+
+**System requirements:**
+```bash
+# Fedora
+sudo dnf install pipewire-devel
+
+# Ubuntu/Debian
+sudo apt install libpipewire-0.3-dev
+```
+
+See [ADR-003](../adr/003-loopback-recording-approach.md) for full details.
 
 #### 2. Audio Stream Merging
 Merge two mono streams into a single stereo or mono file:
@@ -67,66 +89,139 @@ Identify different speakers in the conversation.
 
 **Important**: Whisper **does not support** speaker diarization natively. See detailed research in [ADR-004: Speaker Diarization Implementation Approach](../adr/004-speaker-diarization-approach.md).
 
-**Recommended approaches:**
+**Solution — Decided (ADR-004, 2026-01-28):**
 
-1. **Channel-Based (MVP - Recommended)**: 
-   - Use separate channels (microphone vs system audio) as speaker identifiers
-   - Label as "Ви" (You) for microphone input and "Учасник" (Participant) for system audio
-   - Simplest implementation, works immediately
-   - Sufficient for basic conference case (2 speakers)
+| Phase | Approach | Speakers | Library |
+|-------|----------|----------|---------|
+| **MVP** | Channel-Based | 2 (fixed) | None |
+| **Production** | Sortformer ⭐ | 2-4 | `parakeet-rs` |
+| Optional | pyannote-rs | 5+ | `pyannote-rs` |
 
-2. **pyannote-rs (Advanced - Optional)**:
-   - Use `pyannote-rs` Rust crate for full speaker diarization
-   - Identifies multiple speakers in system audio
-   - Requires model download (~100-200MB)
-   - Better for complex scenarios with 3+ speakers
+**Phase 1: Channel-Based (MVP)**
+- Use separate channels (microphone vs system audio) as speaker identifiers
+- Label as "[Ви]" for microphone, "[Учасник]" for system audio
+- 100% accuracy for 2 speakers, zero dependencies
 
-**Recommended**: Start with Channel-Based for MVP, add pyannote-rs as optional advanced feature.
+**Phase 2: Sortformer (Production) ⭐ RECOMMENDED**
+- NVIDIA Streaming Sortformer — SOTA model (2025)
+- Real-time streaming diarization
+- Up to 4 speakers
+- Fast on CPU
+
+```rust
+use parakeet_rs::sortformer::{Sortformer, DiarizationConfig};
+
+let mut sortformer = Sortformer::with_config(
+    "diar_streaming_sortformer_4spk-v2.onnx",
+    None,
+    DiarizationConfig::callhome(),
+)?;
+
+let segments = sortformer.diarize(audio, 16000, 1)?;
+```
+
+**Phase 3: pyannote-rs (Optional)**
+- Only if >4 speakers needed
+- Batch processing (not streaming)
 
 **Dependencies:**
-- Channel-Based: None (uses existing infrastructure)
-- Advanced: `pyannote-rs = "0.3"` or `native-pyannote-rs = "0.3"`
+```toml
+# MVP: none
+
+# Production (optional feature):
+parakeet-rs = { version = "0.3", features = ["sortformer"], optional = true }
+
+# Advanced (optional feature):
+pyannote-rs = { version = "0.3", optional = true }
+```
+
+**Model licenses:**
+- Sortformer: CC-BY-4.0 (NVIDIA attribution required)
+- pyannote: MIT
 
 #### 5. Transcription with Speaker Labels
 Extend Whisper transcription to include speaker information.
 
-**Channel-Based approach:**
-- Transcribe microphone and system audio separately
-- Combine with speaker labels: `[Ви] текст` and `[Учасник] текст`
-- Simple concatenation with timestamps
+**MVP (Channel-Based):**
+```
+[Ви] Привіт, як справи?
+[Учасник] Добре, дякую. А у тебе?
+[Ви] Теж добре. Почнемо?
+```
 
-**Advanced approach (with pyannote-rs):**
-- Segment audio by speaker using diarization
-- Transcribe each segment with Whisper
-- Combine with speaker labels: `[Speaker 1]`, `[Speaker 2]`, etc.
-- More sophisticated, handles multiple speakers in system audio
+**Production (Sortformer):**
+```
+[Speaker 1] Привіт, як справи?
+[Speaker 2] Добре, дякую. А у тебе?
+[Speaker 1] Теж добре. Почнемо?
+[Speaker 3] Я також готовий.
+```
+
+**Implementation:**
+1. Diarization runs first (Sortformer or channel-based)
+2. Audio segmented by speaker
+3. Each segment transcribed with Whisper
+4. Results merged with timestamps and speaker labels
 
 See [ADR-004](../adr/004-speaker-diarization-approach.md) for detailed implementation approaches.
 
-### Code Structure
+### Code Structure (Updated 2026-01-28)
+
+#### New Module: `src/loopback.rs`
+PipeWire-based loopback recording.
+```rust
+use pipewire as pw;
+
+pub struct LoopbackRecorder {
+    samples: Arc<Mutex<Vec<f32>>>,
+    stream: Option<pw::stream::Stream>,
+}
+
+impl LoopbackRecorder {
+    pub fn new() -> Result<Self>;
+    pub fn start_recording(&mut self, monitor_source: &str) -> Result<()>;
+    pub fn stop_recording(&mut self) -> Vec<f32>;
+}
+```
 
 #### New Module: `src/conference_recorder.rs`
+Dual recording combining CPAL (mic) + PipeWire (loopback).
 ```rust
 pub struct ConferenceRecorder {
-    input_samples: Arc<Mutex<Vec<f32>>>,
-    output_samples: Arc<Mutex<Vec<f32>>>,
-    // ... similar to AudioRecorder
+    mic_recorder: AudioRecorder,      // Existing CPAL-based
+    loopback_recorder: LoopbackRecorder, // New PipeWire-based
+    start_time: Instant,
 }
 
 impl ConferenceRecorder {
-    pub fn start_recording(&self) -> Result<()> {
-        // Start input recording (microphone)
-        // Start output recording (loopback)
-        // Synchronize timestamps
+    pub fn start_recording(&mut self) -> Result<()> {
+        self.start_time = Instant::now();
+        self.mic_recorder.start_recording()?;
+        self.loopback_recorder.start_recording("auto")?; // auto-detect monitor
+        Ok(())
     }
-    
-    pub fn stop_recording(&self) -> (Vec<f32>, Vec<f32>, Option<Receiver<()>>) {
-        // Return both streams
+
+    pub fn stop_recording(&mut self) -> ConferenceAudio {
+        let mic_samples = self.mic_recorder.stop_recording();
+        let loopback_samples = self.loopback_recorder.stop_recording();
+        ConferenceAudio { mic_samples, loopback_samples }
     }
-    
-    pub fn save_to_file(&self, input: &[f32], output: &[f32], path: &Path) -> Result<()> {
-        // Merge and encode to audio file
-    }
+}
+```
+
+#### New Module: `src/diarization.rs`
+Speaker diarization with multiple backends.
+```rust
+pub enum DiarizationMode {
+    ChannelBased,  // MVP: mic = "Ви", loopback = "Учасник"
+    Streaming,     // Production: parakeet-rs Sortformer
+    Advanced,      // Optional: pyannote-rs
+}
+
+pub struct Diarizer {
+    mode: DiarizationMode,
+    #[cfg(feature = "sortformer")]
+    sortformer: Option<Sortformer>,
 }
 ```
 
@@ -200,58 +295,145 @@ max_recordings = 100
 recording_format = "wav"
 ```
 
-## Dependencies
+## Dependencies (Updated 2026-01-28)
 
 ### Required New Dependencies
-- **Audio encoding**: `hound = "0.4"` (WAV) or `symphonia = "0.5"` (multiple formats)
-- **Optional**: `webrtc-vad = "0.4"` for voice activity detection
-- **Optional**: `rodio = "0.17"` for audio playback in UI
+```toml
+# Loopback recording (required for conference mode)
+pipewire = "0.9"
+
+# Audio encoding
+hound = "0.4"  # WAV format
+
+# Optional: Speaker diarization
+[features]
+default = []
+sortformer = ["parakeet-rs/sortformer"]
+diarization-advanced = ["pyannote-rs"]
+
+[dependencies.parakeet-rs]
+version = "0.3"
+features = ["sortformer"]
+optional = true
+
+[dependencies.pyannote-rs]
+version = "0.3"
+optional = true
+```
 
 ### System Dependencies
-- PulseAudio or PipeWire for loopback recording
-- May need additional permissions for accessing system audio
+```bash
+# Fedora
+sudo dnf install pipewire-devel
 
-## Technical Challenges
+# Ubuntu/Debian
+sudo apt install libpipewire-0.3-dev
 
-1. **Loopback Recording on Linux**:
-   - PulseAudio: Use monitor sources (`pactl list sources`)
-   - PipeWire: Similar monitor sources
-   - ALSA: More complex, may need `alsa-utils`
-   - Solution: Detect audio system and use appropriate API
+# Models (downloaded on first use)
+# Sortformer: nvidia/diar_streaming_sortformer_4spk-v2 (~50MB, CC-BY-4.0)
+# pyannote: segmentation-3.0 + wespeaker (~100-200MB, MIT)
+```
 
-2. **Synchronization**:
+### Compatibility
+- ✅ PipeWire systems: Fedora 34+, Ubuntu 22.04+, Arch, etc.
+- ⚠️ Pure PulseAudio: Fallback needed (pulse-binding-rs)
+- ❌ Pure ALSA: Not supported
+
+## Technical Challenges (Updated 2026-01-28)
+
+1. **Loopback Recording on Linux** ✅ RESOLVED
+   - ❌ CPAL doesn't see monitor sources (tested)
+   - ✅ Solution: Use `pipewire` crate directly
+   - See [ADR-003](../adr/003-loopback-recording-approach.md)
+
+2. **Synchronization** ⏳ TODO
    - Two audio streams may have different latencies
    - Need timestamp-based alignment
    - Solution: Use system timestamps and align during merge
 
-3. **Speaker Diarization**:
-   - Complex ML problem
-   - Initial simple solution: channel-based (input vs output)
-   - Future: ML-based diarization for multiple speakers
+3. **Speaker Diarization** ✅ RESOLVED
+   - ✅ MVP: Channel-based (mic vs loopback) — 100% accuracy for 2 speakers
+   - ✅ Production: Sortformer (parakeet-rs) — SOTA, up to 4 speakers
+   - ✅ Optional: pyannote-rs — unlimited speakers
+   - See [ADR-004](../adr/004-speaker-diarization-approach.md)
 
-4. **File Size**:
+4. **File Size** ⏳ TODO
    - Uncompressed WAV files are large (1 hour ≈ 500MB)
    - Consider compression (OGG/MP3)
    - Solution: Make format configurable, default to compressed
 
+5. **Model Attribution** ⚠️ NEW
+   - Sortformer models are CC-BY-4.0 (NVIDIA)
+   - Must include attribution in app/docs
+
 ## Priority
-P3 - Future (complex feature, requires ADR-003 and ADR-004 research)
+**P2** - Medium (research completed, ready for implementation)
 
 ## Status
-📋 **Planned** - Requires loopback recording research (ADR-003) and speaker diarization (ADR-004)
+🚀 **Ready for Implementation** - ADR-003 and ADR-004 research completed (2026-01-28)
+
+## Implementation Phases
+
+### Phase 1: MVP (Channel-Based)
+- [ ] Create `src/loopback.rs` with PipeWire capture
+- [ ] Create `src/conference_recorder.rs` (mic + loopback)
+- [ ] Add mode selector UI: "Диктовка" / "Конференція"
+- [ ] Channel-based diarization: `[Ви]` / `[Учасник]`
+- [ ] Save audio files to disk
+
+**Dependencies:** `pipewire = "0.9"`, `hound = "0.4"`
+
+### Phase 2: Production (Sortformer)
+- [ ] Add `parakeet-rs` with Sortformer feature
+- [ ] Create `src/diarization.rs` with streaming diarization
+- [ ] Support up to 4 speakers
+- [ ] Add recordings management UI
+
+**Dependencies:** `parakeet-rs = { version = "0.3", features = ["sortformer"] }`
+
+### Phase 3: Polish
+- [ ] Recordings playback with speaker highlighting
+- [ ] Export to SRT subtitles
+- [ ] Compression options (OGG/MP3)
+- [ ] Optional pyannote-rs for >4 speakers
 
 ## Related Files
-- [src/audio.rs](../../src/audio.rs) - Current audio recording implementation
+
+### Source Code
+- [src/audio.rs](../../src/audio.rs) - Current audio recording (CPAL, mic only)
 - [src/config.rs](../../src/config.rs) - Configuration structure
 - [src/ui.rs](../../src/ui.rs) - Main UI where mode selector will be added
 - [src/whisper.rs](../../src/whisper.rs) - Whisper integration for transcription
-- [src/history.rs](../../src/history.rs) - History management (may extend for recordings)
-- [src/history_dialog.rs](../../src/history_dialog.rs) - Reference for recordings dialog UI
+- [src/history.rs](../../src/history.rs) - History management (extend for recordings)
+
+### New Modules (to be created)
+- `src/loopback.rs` - PipeWire loopback recording
+- `src/conference_recorder.rs` - Dual recording (mic + loopback)
+- `src/diarization.rs` - Speaker diarization
+- `src/recordings.rs` - Recordings management
+- `src/recordings_dialog.rs` - Recordings UI
+
+### ADRs
+- [ADR-003](../adr/003-loopback-recording-approach.md) - Loopback recording ✅ Accepted
+- [ADR-004](../adr/004-speaker-diarization-approach.md) - Speaker diarization ✅ Accepted
+
+### Research
+- [loopback-recording-test.md](../research/loopback-recording-test.md) - Test results
+- [speaker-diarization-test.md](../research/speaker-diarization-test.md) - Diarization comparison
 
 ## Future Enhancements
-- Multiple speaker identification (more than 2 speakers)
+
+### Now Possible (with current tech stack)
+- ✅ Multiple speaker identification (up to 4 with Sortformer)
+- ✅ Real-time transcription during recording (Sortformer is streaming)
+- ⏳ Unlimited speakers (pyannote-rs optional feature)
+
+### Planned
 - Automatic speaker naming (learn names from transcription)
-- Real-time transcription during recording
 - Export to various formats (SRT subtitles, etc.)
+- Playback with speaker highlighting
+
+### Future
 - Cloud sync for recordings
 - Integration with calendar apps to auto-record meetings
+- GPU acceleration (CUDA, CoreML)
