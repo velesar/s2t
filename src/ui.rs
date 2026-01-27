@@ -129,7 +129,7 @@ fn handle_stop_recording(
     let status_label = status_label.clone();
     let result_label = result_label.clone();
 
-    let (tx, rx) = glib::MainContext::channel(glib::Priority::DEFAULT);
+    let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
 
     thread::spawn(move || {
         let result = if samples.len() < MIN_RECORDING_SAMPLES {
@@ -137,24 +137,25 @@ fn handle_stop_recording(
         } else {
             whisper.transcribe(&samples, Some("uk"))
         };
-        let _ = tx.send(result);
+        let _ = tx.send_blocking(result);
     });
 
-    rx.attach(None, move |result| {
-        match result {
-            Ok(text) => {
-                if text.is_empty() {
-                    status_label.set_text("Не вдалося розпізнати мову");
-                } else {
-                    status_label.set_text("Готово!");
-                    result_label.set_text(&text);
+    glib::spawn_future_local(async move {
+        if let Ok(result) = rx.recv().await {
+            match result {
+                Ok(text) => {
+                    if text.is_empty() {
+                        status_label.set_text("Не вдалося розпізнати мову");
+                    } else {
+                        status_label.set_text("Готово!");
+                        result_label.set_text(&text);
+                    }
+                }
+                Err(e) => {
+                    status_label.set_text(&format!("Помилка: {}", e));
                 }
             }
-            Err(e) => {
-                status_label.set_text(&format!("Помилка: {}", e));
-            }
         }
-        glib::ControlFlow::Break
     });
 }
 

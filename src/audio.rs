@@ -35,6 +35,7 @@ impl AudioRecorder {
 
         let samples = self.samples.clone();
         let is_recording = self.is_recording.clone();
+        let is_recording_for_loop = self.is_recording.clone();
 
         let resample_ratio = WHISPER_SAMPLE_RATE as f32 / sample_rate as f32;
 
@@ -74,7 +75,7 @@ impl AudioRecorder {
 
             stream.play().unwrap();
 
-            while is_recording.load(Ordering::SeqCst) {
+            while is_recording_for_loop.load(Ordering::SeqCst) {
                 thread::sleep(Duration::from_millis(100));
             }
         });

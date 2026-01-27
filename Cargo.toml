@@ -25,6 +25,7 @@ whisper-rs = "0.12"
 # Utilities
 anyhow = "1.0"
 dirs = "5.0"
+async-channel = "2.3"
 
 [profile.release]
 opt-level = 3
