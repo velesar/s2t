@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -15,6 +15,8 @@ pub struct AudioRecorder {
     samples: Arc<Mutex<Vec<f32>>>,
     is_recording: Arc<AtomicBool>,
     completion_rx: Arc<Mutex<Option<Receiver<()>>>>,
+    /// Current audio amplitude (RMS), stored as u32 bits for atomic access
+    current_amplitude: Arc<AtomicU32>,
 }
 
 impl AudioRecorder {
@@ -23,7 +25,13 @@ impl AudioRecorder {
             samples: Arc::new(Mutex::new(Vec::new())),
             is_recording: Arc::new(AtomicBool::new(false)),
             completion_rx: Arc::new(Mutex::new(None)),
+            current_amplitude: Arc::new(AtomicU32::new(0)),
         }
+    }
+
+    /// Get current audio amplitude (0.0 - 1.0 range, normalized RMS)
+    pub fn get_amplitude(&self) -> f32 {
+        f32::from_bits(self.current_amplitude.load(Ordering::Relaxed))
     }
 
     pub fn start_recording(&self) -> Result<()> {
@@ -46,6 +54,7 @@ impl AudioRecorder {
         let samples = self.samples.clone();
         let is_recording = self.is_recording.clone();
         let is_recording_for_loop = self.is_recording.clone();
+        let current_amplitude = self.current_amplitude.clone();
 
         let resample_ratio = WHISPER_SAMPLE_RATE as f64 / sample_rate as f64;
 
@@ -69,6 +78,7 @@ impl AudioRecorder {
 
         thread::spawn(move || {
             let resampler = resampler.clone();
+            let current_amplitude = current_amplitude.clone();
 
             let stream = device
                 .build_input_stream(
@@ -86,6 +96,15 @@ impl AudioRecorder {
                         } else {
                             data.to_vec()
                         };
+
+                        // Calculate RMS amplitude for visualization
+                        if !mono.is_empty() {
+                            let sum_squares: f32 = mono.iter().map(|s| s * s).sum();
+                            let rms = (sum_squares / mono.len() as f32).sqrt();
+                            // Normalize to 0-1 range (typical speech is ~0.1-0.3 RMS)
+                            let normalized = (rms * 3.0).min(1.0);
+                            current_amplitude.store(normalized.to_bits(), Ordering::Relaxed);
+                        }
 
                         // Resample to 16kHz using high-quality sinc interpolation
                         let mut resampler = resampler.lock().unwrap();
@@ -136,6 +155,7 @@ impl AudioRecorder {
 
     pub fn stop_recording(&self) -> (Vec<f32>, Option<Receiver<()>>) {
         self.is_recording.store(false, Ordering::SeqCst);
+        self.current_amplitude.store(0.0_f32.to_bits(), Ordering::Relaxed);
         let completion_rx = self.completion_rx.lock().unwrap().take();
         let samples = self.samples.lock().unwrap().clone();
         (samples, completion_rx)

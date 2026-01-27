@@ -3,10 +3,21 @@ use crate::config::Config;
 use crate::model_dialog::show_model_dialog;
 use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
-use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, Orientation};
+use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, LevelBar, Orientation, Spinner};
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
-const MIN_RECORDING_SAMPLES: usize = 16000; // 1 second at 16kHz
+#[derive(Clone, Copy, PartialEq)]
+enum AppState {
+    Idle,
+    Recording,
+    Processing,
+}
+
+const WHISPER_SAMPLE_RATE: usize = 16000;
+const MIN_RECORDING_SAMPLES: usize = WHISPER_SAMPLE_RATE; // 1 second
 
 pub fn build_ui(
     app: &Application,
@@ -29,8 +40,31 @@ pub fn build_ui(
     main_box.set_margin_start(20);
     main_box.set_margin_end(20);
 
+    // Status row with label and spinner
+    let status_box = GtkBox::new(Orientation::Horizontal, 8);
+    status_box.set_halign(gtk4::Align::Center);
+
     let status_label = Label::new(Some("Натисніть кнопку для запису"));
     status_label.add_css_class("title-2");
+
+    let spinner = Spinner::new();
+    spinner.set_visible(false);
+
+    status_box.append(&status_label);
+    status_box.append(&spinner);
+
+    // Timer label for recording duration
+    let timer_label = Label::new(Some(""));
+    timer_label.add_css_class("monospace");
+    timer_label.set_visible(false);
+
+    // Audio level indicator
+    let level_bar = LevelBar::new();
+    level_bar.set_min_value(0.0);
+    level_bar.set_max_value(1.0);
+    level_bar.set_value(0.0);
+    level_bar.set_visible(false);
+    level_bar.set_size_request(200, -1);
 
     let result_label = Label::new(Some(""));
     result_label.set_wrap(true);
@@ -42,8 +76,24 @@ pub fn build_ui(
     record_button.add_css_class("suggested-action");
     record_button.add_css_class("pill");
 
+    // Shared application state
+    let app_state = Rc::new(Cell::new(AppState::Idle));
+    let recording_start_time: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
+
     let config_for_ui = config.clone();
-    setup_record_button(&record_button, &status_label, &result_label, recorder, whisper.clone(), config_for_ui);
+    setup_record_button(
+        &record_button,
+        &status_label,
+        &result_label,
+        &timer_label,
+        &level_bar,
+        &spinner,
+        recorder,
+        whisper.clone(),
+        config_for_ui,
+        app_state,
+        recording_start_time,
+    );
 
     let copy_button = Button::with_label("Копіювати");
     setup_copy_button(&copy_button, &result_label);
@@ -64,7 +114,9 @@ pub fn build_ui(
     button_box.append(&copy_button);
     button_box.append(&models_button);
 
-    main_box.append(&status_label);
+    main_box.append(&status_box);
+    main_box.append(&timer_label);
+    main_box.append(&level_bar);
     main_box.append(&result_label);
     main_box.append(&button_box);
 
@@ -94,33 +146,58 @@ fn setup_record_button(
     button: &Button,
     status_label: &Label,
     result_label: &Label,
+    timer_label: &Label,
+    level_bar: &LevelBar,
+    spinner: &Spinner,
     recorder: Arc<AudioRecorder>,
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
     config: Arc<Mutex<Config>>,
+    app_state: Rc<Cell<AppState>>,
+    recording_start_time: Rc<Cell<Option<Instant>>>,
 ) {
     let recorder_clone = recorder.clone();
     let status_label_clone = status_label.clone();
     let result_label_clone = result_label.clone();
+    let timer_label_clone = timer_label.clone();
+    let level_bar_clone = level_bar.clone();
+    let spinner_clone = spinner.clone();
     let button_clone = button.clone();
+    let app_state_clone = app_state.clone();
+    let recording_start_time_clone = recording_start_time.clone();
 
     button.connect_clicked(move |_| {
-        if recorder_clone.is_recording() {
-            handle_stop_recording(
-                &button_clone,
-                &status_label_clone,
-                &result_label_clone,
-                &recorder_clone,
-                &whisper,
-                &config,
-            );
-        } else {
-            handle_start_recording(
-                &button_clone,
-                &status_label_clone,
-                &result_label_clone,
-                &recorder_clone,
-                &whisper,
-            );
+        match app_state_clone.get() {
+            AppState::Idle => {
+                handle_start_recording(
+                    &button_clone,
+                    &status_label_clone,
+                    &result_label_clone,
+                    &timer_label_clone,
+                    &level_bar_clone,
+                    &recorder_clone,
+                    &whisper,
+                    &app_state_clone,
+                    &recording_start_time_clone,
+                );
+            }
+            AppState::Recording => {
+                handle_stop_recording(
+                    &button_clone,
+                    &status_label_clone,
+                    &result_label_clone,
+                    &timer_label_clone,
+                    &level_bar_clone,
+                    &spinner_clone,
+                    &recorder_clone,
+                    &whisper,
+                    &config,
+                    &app_state_clone,
+                    &recording_start_time_clone,
+                );
+            }
+            AppState::Processing => {
+                // Ignore clicks while processing
+            }
         }
     });
 }
@@ -129,8 +206,12 @@ fn handle_start_recording(
     button: &Button,
     status_label: &Label,
     result_label: &Label,
+    timer_label: &Label,
+    level_bar: &LevelBar,
     recorder: &Arc<AudioRecorder>,
     whisper: &Arc<Mutex<Option<WhisperSTT>>>,
+    app_state: &Rc<Cell<AppState>>,
+    recording_start_time: &Rc<Cell<Option<Instant>>>,
 ) {
     {
         let w = whisper.lock().unwrap();
@@ -142,11 +223,50 @@ fn handle_start_recording(
 
     match recorder.start_recording() {
         Ok(()) => {
+            app_state.set(AppState::Recording);
+            recording_start_time.set(Some(Instant::now()));
+
             button.set_label("Зупинити запис");
             button.remove_css_class("suggested-action");
             button.add_css_class("destructive-action");
             status_label.set_text("Запис...");
             result_label.set_text("");
+
+            // Show timer and level bar
+            timer_label.set_text("00:00");
+            timer_label.set_visible(true);
+            level_bar.set_value(0.0);
+            level_bar.set_visible(true);
+
+            // Start timer update loop (1 second interval)
+            let timer_label_clone = timer_label.clone();
+            let app_state_clone = app_state.clone();
+            let recording_start_time_clone = recording_start_time.clone();
+            glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+                if app_state_clone.get() != AppState::Recording {
+                    return glib::ControlFlow::Break;
+                }
+                if let Some(start) = recording_start_time_clone.get() {
+                    let elapsed = start.elapsed().as_secs();
+                    let minutes = elapsed / 60;
+                    let seconds = elapsed % 60;
+                    timer_label_clone.set_text(&format!("{:02}:{:02}", minutes, seconds));
+                }
+                glib::ControlFlow::Continue
+            });
+
+            // Start level bar update loop (faster interval for smooth visualization)
+            let level_bar_clone = level_bar.clone();
+            let recorder_clone = recorder.clone();
+            let app_state_clone = app_state.clone();
+            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                if app_state_clone.get() != AppState::Recording {
+                    return glib::ControlFlow::Break;
+                }
+                let amplitude = recorder_clone.get_amplitude();
+                level_bar_clone.set_value(amplitude as f64);
+                glib::ControlFlow::Continue
+            });
         }
         Err(e) => {
             status_label.set_text(&format!("Помилка: {}", e));
@@ -158,19 +278,47 @@ fn handle_stop_recording(
     button: &Button,
     status_label: &Label,
     result_label: &Label,
+    timer_label: &Label,
+    level_bar: &LevelBar,
+    spinner: &Spinner,
     recorder: &Arc<AudioRecorder>,
     whisper: &Arc<Mutex<Option<WhisperSTT>>>,
     config: &Arc<Mutex<Config>>,
+    app_state: &Rc<Cell<AppState>>,
+    recording_start_time: &Rc<Cell<Option<Instant>>>,
 ) {
-    button.set_label("Почати запис");
+    // Transition to Processing state
+    app_state.set(AppState::Processing);
+    recording_start_time.set(None);
+
+    // Update UI for processing state
+    button.set_label("Обробка...");
     button.remove_css_class("destructive-action");
-    button.add_css_class("suggested-action");
+    button.remove_css_class("suggested-action");
+    button.set_sensitive(false);
     status_label.set_text("Обробка...");
+    timer_label.set_visible(false);
+    level_bar.set_visible(false);
+    spinner.set_visible(true);
+    spinner.start();
 
     let (samples, completion_rx) = recorder.stop_recording();
+
+    // Calculate and display recording duration
+    let duration_secs = samples.len() as f32 / WHISPER_SAMPLE_RATE as f32;
+    let duration_mins = (duration_secs / 60.0).floor() as u32;
+    let duration_remaining_secs = (duration_secs % 60.0).floor() as u32;
+    status_label.set_text(&format!(
+        "Обробка запису {:02}:{:02}...",
+        duration_mins, duration_remaining_secs
+    ));
+
     let whisper = whisper.clone();
     let status_label = status_label.clone();
     let result_label = result_label.clone();
+    let button = button.clone();
+    let spinner = spinner.clone();
+    let app_state = app_state.clone();
     let language = {
         let cfg = config.lock().unwrap();
         cfg.language.clone()
@@ -214,6 +362,14 @@ fn handle_stop_recording(
                 }
             }
         }
+
+        // Transition back to Idle state
+        app_state.set(AppState::Idle);
+        spinner.stop();
+        spinner.set_visible(false);
+        button.set_label("Почати запис");
+        button.add_css_class("suggested-action");
+        button.set_sensitive(true);
     });
 }
 

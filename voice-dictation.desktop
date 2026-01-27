@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Voice Dictation
+Name[uk]=Голосова диктовка
+Comment=Offline speech-to-text using Whisper
+Comment[uk]=Офлайн розпізнавання мовлення через Whisper
+Exec=voice-dictation
+Icon=audio-input-microphone
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+Keywords=voice;dictation;speech;whisper;transcription;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
