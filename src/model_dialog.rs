@@ -9,8 +9,17 @@ use gtk4::{
     ScrolledWindow, SelectionMode, Window,
 };
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+
+struct RowWidgets {
+    indicator: Label,
+    set_default_button: Button,
+    delete_button: Button,
+}
+
+type RowWidgetsMap = Rc<RefCell<HashMap<String, RowWidgets>>>;
 
 pub fn show_model_dialog(
     parent: &impl IsA<Window>,
@@ -40,8 +49,10 @@ pub fn show_model_dialog(
     list_box.set_margin_start(12);
     list_box.set_margin_end(12);
 
-    let download_states: Rc<RefCell<std::collections::HashMap<String, DownloadState>>> =
-        Rc::new(RefCell::new(std::collections::HashMap::new()));
+    let download_states: Rc<RefCell<HashMap<String, DownloadState>>> =
+        Rc::new(RefCell::new(HashMap::new()));
+
+    let row_widgets: RowWidgetsMap = Rc::new(RefCell::new(HashMap::new()));
 
     for model in get_available_models() {
         let row = create_model_row(
@@ -52,6 +63,7 @@ pub fn show_model_dialog(
             config.clone(),
             whisper.clone(),
             download_states.clone(),
+            row_widgets.clone(),
         );
         list_box.append(&row);
     }
@@ -94,7 +106,8 @@ fn create_model_row(
     description: &str,
     config: Arc<Mutex<Config>>,
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
-    download_states: Rc<RefCell<std::collections::HashMap<String, DownloadState>>>,
+    download_states: Rc<RefCell<HashMap<String, DownloadState>>>,
+    row_widgets: RowWidgetsMap,
 ) -> ListBoxRow {
     let row = ListBoxRow::new();
     row.set_activatable(false);
@@ -161,12 +174,23 @@ fn create_model_row(
     delete_button.add_css_class("destructive-action");
     delete_button.set_sensitive(is_downloaded && !is_default);
 
+    // Register this row's widgets for cross-row updates
+    {
+        let mut widgets = row_widgets.borrow_mut();
+        widgets.insert(
+            filename.to_string(),
+            RowWidgets {
+                indicator: default_indicator.clone(),
+                set_default_button: set_default_button.clone(),
+                delete_button: delete_button.clone(),
+            },
+        );
+    }
+
     let filename_owned = filename.to_string();
     let config_clone = config.clone();
     let whisper_clone = whisper.clone();
-    let default_indicator_clone = default_indicator.clone();
-    let set_default_button_clone = set_default_button.clone();
-    let delete_button_clone = delete_button.clone();
+    let row_widgets_clone = row_widgets.clone();
 
     set_default_button.connect_clicked(move |_| {
         let mut cfg = config_clone.lock().unwrap();
@@ -188,9 +212,21 @@ fn create_model_row(
             }
         }
 
-        default_indicator_clone.set_text("[*]");
-        set_default_button_clone.set_sensitive(false);
-        delete_button_clone.set_sensitive(false);
+        // Update all row indicators
+        let widgets = row_widgets_clone.borrow();
+        for (fname, rw) in widgets.iter() {
+            if fname == &filename_owned {
+                rw.indicator.set_text("[*]");
+                rw.set_default_button.set_sensitive(false);
+                rw.delete_button.set_sensitive(false);
+            } else {
+                rw.indicator.set_text("[ ]");
+                // Only enable set_default if model is downloaded
+                let is_downloaded = is_model_downloaded(fname);
+                rw.set_default_button.set_sensitive(is_downloaded);
+                rw.delete_button.set_sensitive(is_downloaded);
+            }
+        }
     });
 
     let filename_owned = filename.to_string();

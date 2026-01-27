@@ -9,7 +9,12 @@ use std::thread;
 
 const MIN_RECORDING_SAMPLES: usize = 16000; // 1 second at 16kHz
 
-pub fn build_ui(app: &Application, whisper: Arc<Mutex<Option<WhisperSTT>>>, config: Arc<Mutex<Config>>) {
+pub fn build_ui(
+    app: &Application,
+    whisper: Arc<Mutex<Option<WhisperSTT>>>,
+    config: Arc<Mutex<Config>>,
+    open_models_rx: async_channel::Receiver<()>,
+) {
     let recorder = Arc::new(AudioRecorder::new());
 
     let window = ApplicationWindow::builder()
@@ -69,6 +74,18 @@ pub fn build_ui(app: &Application, whisper: Arc<Mutex<Option<WhisperSTT>>>, conf
     window.connect_close_request(|window| {
         window.hide();
         glib::Propagation::Stop
+    });
+
+    // Listen for "open models dialog" signal from tray
+    let window_for_models = window.downgrade();
+    let config_for_tray = config.clone();
+    let whisper_for_tray = whisper.clone();
+    glib::spawn_future_local(async move {
+        while open_models_rx.recv().await.is_ok() {
+            if let Some(window) = window_for_models.upgrade() {
+                show_model_dialog(&window, config_for_tray.clone(), whisper_for_tray.clone());
+            }
+        }
     });
 
     window.present();

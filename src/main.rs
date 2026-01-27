@@ -79,23 +79,35 @@ fn main() -> Result<()> {
 
     let app = Application::builder().application_id(APP_ID).build();
 
+    let (open_models_tx, open_models_rx) = async_channel::bounded::<()>(1);
+
     let whisper_for_app = whisper.clone();
     let config_for_app = config.clone();
     app.connect_activate(move |app| {
-        ui::build_ui(app, whisper_for_app.clone(), config_for_app.clone());
+        ui::build_ui(app, whisper_for_app.clone(), config_for_app.clone(), open_models_rx.clone());
     });
 
     let app_weak = app.downgrade();
     glib::timeout_add_local(Duration::from_millis(100), move || {
         if let Ok(action) = tray_rx.try_recv() {
             match action {
-                TrayAction::OpenWindow | TrayAction::ManageModels => {
+                TrayAction::OpenWindow => {
                     if let Some(app) = app_weak.upgrade() {
                         if let Some(window) = app.active_window() {
                             window.present();
                         } else {
                             app.activate();
                         }
+                    }
+                }
+                TrayAction::ManageModels => {
+                    if let Some(app) = app_weak.upgrade() {
+                        if let Some(window) = app.active_window() {
+                            window.present();
+                        } else {
+                            app.activate();
+                        }
+                        let _ = open_models_tx.try_send(());
                     }
                 }
                 TrayAction::Quit => {
