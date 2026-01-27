@@ -21,6 +21,14 @@ pub struct Config {
     pub auto_paste: bool,
     #[serde(default = "default_recording_mode")]
     pub recording_mode: String,
+    #[serde(default = "default_diarization_method")]
+    pub diarization_method: String,
+    #[serde(default)]
+    pub sortformer_model_path: Option<String>,
+}
+
+fn default_diarization_method() -> String {
+    "channel".to_string() // "channel" or "sortformer"
 }
 
 fn default_history_max_entries() -> usize {
@@ -63,6 +71,8 @@ impl Default for Config {
             hotkey: default_hotkey(),
             auto_paste: default_auto_paste(),
             recording_mode: default_recording_mode(),
+            diarization_method: default_diarization_method(),
+            sortformer_model_path: None,
         }
     }
 }
@@ -88,6 +98,13 @@ pub fn recordings_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("voice-dictation")
         .join("recordings")
+}
+
+pub fn sortformer_models_dir() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("voice-dictation")
+        .join("sortformer")
 }
 
 pub fn load_config() -> Result<Config> {

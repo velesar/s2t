@@ -1,6 +1,7 @@
 mod audio;
 mod config;
 mod conference_recorder;
+mod diarization;
 mod history;
 mod history_dialog;
 mod hotkeys;
@@ -15,10 +16,12 @@ mod ui;
 mod whisper;
 
 use anyhow::Result;
-use config::{load_config, models_dir, Config};
+use config::{load_config, models_dir, sortformer_models_dir, Config};
+use diarization::DiarizationEngine;
 use gtk4::{glib, prelude::*, Application};
 use history::{load_history, save_history, History};
 use models::get_model_path;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use hotkeys::HotkeyManager;
@@ -105,6 +108,29 @@ fn main() -> Result<()> {
         }
     };
 
+    // Initialize diarization engine
+    let diarization_engine: Arc<Mutex<DiarizationEngine>> = {
+        let cfg = config.lock().unwrap();
+        let model_path = if let Some(ref path) = cfg.sortformer_model_path {
+            Some(PathBuf::from(path))
+        } else {
+            // Try default location
+            let default_path = sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
+            if default_path.exists() {
+                Some(default_path)
+            } else {
+                None
+            }
+        };
+
+        let mut engine = DiarizationEngine::new(model_path);
+        if let Err(e) = engine.load_model() {
+            eprintln!("Не вдалося завантажити модель Sortformer: {}", e);
+            eprintln!("Diarization буде використовувати channel-based метод.");
+        }
+        Arc::new(Mutex::new(engine))
+    };
+
     let (tray_tx, tray_rx) = async_channel::unbounded();
     let tray_handle = DictationTray::spawn_service(tray_tx, config.clone(), whisper.clone());
 
@@ -160,6 +186,7 @@ fn main() -> Result<()> {
     let whisper_for_app = whisper.clone();
     let config_for_app = config.clone();
     let history_for_app = history.clone();
+    let diarization_engine_for_app = diarization_engine.clone();
     let reload_hotkeys_tx_for_app = reload_hotkeys_tx.clone();
     app.connect_activate(move |app| {
         ui::build_ui(
@@ -167,6 +194,7 @@ fn main() -> Result<()> {
             whisper_for_app.clone(),
             config_for_app.clone(),
             history_for_app.clone(),
+            diarization_engine_for_app.clone(),
             open_models_rx.clone(),
             open_history_rx.clone(),
             open_settings_rx.clone(),

@@ -1,3 +1,4 @@
+use crate::diarization::{DiarizationEngine, DiarizationSegment};
 use anyhow::{Context, Result};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -86,6 +87,102 @@ impl WhisperSTT {
         }
 
         Ok(result)
+    }
+
+    /// Transcribe with Sortformer-based diarization (Production approach)
+    /// Uses Sortformer to identify speakers, then transcribes each segment
+    pub fn transcribe_with_sortformer(
+        &self,
+        mic_samples: &[f32],
+        loopback_samples: &[f32],
+        language: Option<&str>,
+        diarization_engine: &mut DiarizationEngine,
+    ) -> Result<String> {
+        // Merge mic and loopback into mono mix for diarization
+        // This gives us a single audio stream with all speakers
+        let max_len = mic_samples.len().max(loopback_samples.len());
+        let mut mixed_samples = Vec::with_capacity(max_len);
+
+        for i in 0..max_len {
+            let mic_val = mic_samples.get(i).copied().unwrap_or(0.0);
+            let loopback_val = loopback_samples.get(i).copied().unwrap_or(0.0);
+            // Mix both channels (simple average)
+            mixed_samples.push((mic_val + loopback_val) / 2.0);
+        }
+
+        // Perform diarization
+        let diarization_segments = diarization_engine
+            .diarize(&mixed_samples)
+            .context("Помилка diarization")?;
+
+        if diarization_segments.is_empty() {
+            // Fallback to channel-based if no segments found
+            return self.transcribe_with_diarization(mic_samples, loopback_samples, language);
+        }
+
+        // Transcribe each segment
+        let mut result_parts = Vec::new();
+
+        for seg in diarization_segments {
+            let start_idx = (seg.start_time * 16000.0) as usize;
+            let end_idx = (seg.end_time * 16000.0).min(mixed_samples.len() as f64) as usize;
+
+            if start_idx >= end_idx || start_idx >= mixed_samples.len() {
+                continue;
+            }
+
+            let segment_samples = &mixed_samples[start_idx..end_idx.min(mixed_samples.len())];
+
+            if segment_samples.is_empty() {
+                continue;
+            }
+
+            // Transcribe this segment
+            let segment_text = self.transcribe(segment_samples, language)?;
+
+            if !segment_text.is_empty() {
+                result_parts.push(format!(
+                    "[Спікер {}] {}",
+                    seg.speaker_id + 1, // 1-indexed for user
+                    segment_text
+                ));
+            }
+        }
+
+        if result_parts.is_empty() {
+            // Fallback if no transcription succeeded
+            return self.transcribe_with_diarization(mic_samples, loopback_samples, language);
+        }
+
+        Ok(result_parts.join(" "))
+    }
+
+    /// Transcribe with automatic diarization method selection
+    /// Uses Sortformer if available, otherwise falls back to channel-based
+    pub fn transcribe_with_auto_diarization(
+        &self,
+        mic_samples: &[f32],
+        loopback_samples: &[f32],
+        language: Option<&str>,
+        diarization_method: &str,
+        diarization_engine: Option<&mut DiarizationEngine>,
+    ) -> Result<String> {
+        // Use Sortformer if method is "sortformer" and engine is available
+        if diarization_method == "sortformer" {
+            if let Some(engine) = diarization_engine {
+                if engine.is_available() {
+                    return self.transcribe_with_sortformer(
+                        mic_samples,
+                        loopback_samples,
+                        language,
+                        engine,
+                    );
+                }
+            }
+        }
+
+        // Fallback to channel-based
+        self.transcribe_with_diarization(mic_samples, loopback_samples, language)
     }
 
 }

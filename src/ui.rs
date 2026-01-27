@@ -29,6 +29,7 @@ pub fn build_ui(
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
     config: Arc<Mutex<Config>>,
     history: Arc<Mutex<History>>,
+    diarization_engine: Arc<Mutex<crate::diarization::DiarizationEngine>>,
     open_models_rx: async_channel::Receiver<()>,
     open_history_rx: async_channel::Receiver<()>,
     open_settings_rx: async_channel::Receiver<()>,
@@ -170,6 +171,7 @@ pub fn build_ui(
 
     let config_for_ui = config.clone();
     let history_for_ui = history.clone();
+    let diarization_engine_for_ui = diarization_engine.clone();
     let recorder_for_button = recorder.clone();
     let conference_recorder_for_button = conference_recorder.clone();
     let app_state_for_button = app_state.clone();
@@ -193,6 +195,7 @@ pub fn build_ui(
         whisper.clone(),
         config_for_ui,
         history_for_ui,
+        diarization_engine_for_ui,
         app_state_for_button,
         recording_start_time_for_button,
     );
@@ -307,6 +310,7 @@ pub fn build_ui(
     let spinner_for_hotkey = spinner.clone();
     let recorder_for_hotkey = recorder.clone();
     let conference_recorder_for_hotkey = conference_recorder.clone();
+    let diarization_engine_for_hotkey = diarization_engine.clone();
     let mode_combo_for_hotkey = mode_combo.clone();
     let whisper_for_hotkey = whisper.clone();
     let config_for_hotkey = config.clone();
@@ -360,6 +364,7 @@ pub fn build_ui(
                             &whisper_for_hotkey,
                             &config_for_hotkey,
                             &history_for_hotkey,
+                            &diarization_engine_for_hotkey,
                             &app_state_for_hotkey,
                             &recording_start_time_for_hotkey,
                         );
@@ -405,11 +410,13 @@ fn setup_record_button(
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
     config: Arc<Mutex<Config>>,
     history: Arc<Mutex<History>>,
+    diarization_engine: Arc<Mutex<crate::diarization::DiarizationEngine>>,
     app_state: Rc<Cell<AppState>>,
     recording_start_time: Rc<Cell<Option<Instant>>>,
 ) {
     let recorder_clone = recorder.clone();
     let conference_recorder_clone = conference_recorder.clone();
+    let diarization_engine_clone = diarization_engine.clone();
     let mode_combo_clone = mode_combo.clone();
     let status_label_clone = status_label.clone();
     let result_text_view_clone = result_text_view.clone();
@@ -468,6 +475,7 @@ fn setup_record_button(
                         &whisper,
                         &config,
                         &history,
+                        &diarization_engine_clone,
                         &app_state_clone,
                         &recording_start_time_clone,
                     );
@@ -809,6 +817,7 @@ fn handle_stop_conference(
     whisper: &Arc<Mutex<Option<WhisperSTT>>>,
     config: &Arc<Mutex<Config>>,
     history: &Arc<Mutex<History>>,
+    diarization_engine: &Arc<Mutex<crate::diarization::DiarizationEngine>>,
     app_state: &Rc<Cell<AppState>>,
     recording_start_time: &Rc<Cell<Option<Instant>>>,
 ) {
@@ -848,6 +857,7 @@ fn handle_stop_conference(
     let whisper = whisper.clone();
     let history = history.clone();
     let config_for_auto_copy = config.clone();
+    let diarization_engine_for_transcribe = diarization_engine.clone();
     let status_label = status_label.clone();
     let result_text_view = result_text_view.clone();
     let button = button.clone();
@@ -875,16 +885,25 @@ fn handle_stop_conference(
             eprintln!("Помилка збереження аудіо файлу: {}", e);
         }
 
-        // Transcribe with diarization
+        // Get diarization method from config
+        let diarization_method = {
+            let cfg = config_for_auto_copy.lock().unwrap();
+            cfg.diarization_method.clone()
+        };
+
+        // Transcribe with diarization (auto-selects method)
         let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
 
         std::thread::spawn(move || {
             let w = whisper.lock().unwrap();
             if let Some(ref whisper) = *w {
-                let result = whisper.transcribe_with_diarization(
+                let mut engine_guard = diarization_engine_for_transcribe.lock().unwrap();
+                let result = whisper.transcribe_with_auto_diarization(
                     &mic_samples,
                     &loopback_samples,
                     Some(&language),
+                    &diarization_method,
+                    Some(&mut *engine_guard),
                 );
                 let _ = tx.send_blocking(result);
             } else {

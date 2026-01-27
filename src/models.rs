@@ -194,6 +194,81 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
+// Sortformer model management
+pub fn get_sortformer_model_info() -> ModelInfo {
+    ModelInfo {
+        filename: "diar_streaming_sortformer_4spk-v2.1.onnx".to_string(),
+        display_name: "Sortformer v2.1 (4 speakers)".to_string(),
+        size_bytes: 50_000_000, // ~50MB
+        description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)".to_string(),
+    }
+}
+
+pub fn get_sortformer_model_path() -> PathBuf {
+    crate::config::sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx")
+}
+
+pub fn is_sortformer_model_downloaded() -> bool {
+    get_sortformer_model_path().exists()
+}
+
+pub async fn download_sortformer_model<F>(progress_callback: F) -> Result<()>
+where
+    F: Fn(u64, u64) + Send + 'static,
+{
+    // Download from HuggingFace
+    let url = "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1/resolve/main/model.onnx";
+    let dir = crate::config::sortformer_models_dir();
+    let filename = "diar_streaming_sortformer_4spk-v2.1.onnx";
+
+    fs::create_dir_all(&dir)
+        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
+
+    let temp_path = dir.join(format!("{}.downloading", filename));
+    let final_path = dir.join(filename);
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .with_context(|| format!("Не вдалося підключитися: {}", url))?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Помилка завантаження: HTTP {}",
+            response.status()
+        ));
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+
+    let mut file = fs::File::create(&temp_path)
+        .with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
+
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.context("Помилка при завантаженні")?;
+        std::io::Write::write_all(&mut file, &chunk)
+            .context("Не вдалося записати дані")?;
+
+        downloaded += chunk.len() as u64;
+        progress_callback(downloaded, total_size);
+    }
+
+    fs::rename(&temp_path, &final_path).with_context(|| {
+        format!(
+            "Не вдалося перейменувати {} -> {}",
+            temp_path.display(),
+            final_path.display()
+        )
+    })?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

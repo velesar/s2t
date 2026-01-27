@@ -52,6 +52,18 @@ pipewire = "0.9"
 # Audio file encoding (WAV format)
 hound = "3.5"
 
+# Speaker diarization with Sortformer
+# Note: Requires rustc 1.88+ and ort dependency
+# Enable with: cargo build --features sortformer
+[features]
+default = []
+sortformer = ["parakeet-rs"]
+
+[dependencies.parakeet-rs]
+version = "0.2"
+features = ["sortformer"]
+optional = true
+
 [profile.release]
 opt-level = 3
 lto = true

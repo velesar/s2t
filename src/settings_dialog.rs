@@ -102,6 +102,39 @@ pub fn show_settings_dialog(
     mode_combo.set_halign(Align::Start);
     main_box.append(&mode_combo);
 
+    // Diarization method selector (only for conference mode)
+    let diarization_label = Label::new(Some("Метод розпізнавання мовців:"));
+    diarization_label.set_halign(Align::Start);
+    diarization_label.set_margin_top(12);
+    main_box.append(&diarization_label);
+
+    let diarization_combo = ComboBoxText::new();
+    diarization_combo.append_text("За каналами (2 мовці)");
+    diarization_combo.append_text("Sortformer (до 4 мовців)");
+    
+    let current_diarization = {
+        let cfg = config.lock().unwrap();
+        cfg.diarization_method.clone()
+    };
+    if current_diarization == "sortformer" {
+        diarization_combo.set_active(Some(1));
+    } else {
+        diarization_combo.set_active(Some(0));
+    }
+    diarization_combo.set_halign(Align::Start);
+    
+    // Check if Sortformer model is available
+    let sortformer_available = crate::models::is_sortformer_model_downloaded();
+    if !sortformer_available {
+        diarization_combo.set_sensitive(false);
+        let info_label = Label::new(Some("(Завантажте модель Sortformer через меню 'Моделі')"));
+        info_label.add_css_class("dim-label");
+        info_label.set_halign(Align::Start);
+        main_box.append(&info_label);
+    }
+    
+    main_box.append(&diarization_combo);
+
     // Auto-copy checkbox
     let auto_copy_check = CheckButton::with_label("Автоматично копіювати результат");
     let auto_copy_enabled = {
@@ -226,6 +259,7 @@ pub fn show_settings_dialog(
     let auto_copy_check_clone = auto_copy_check.clone();
     let auto_paste_check_clone = auto_paste_check.clone();
     let mode_combo_clone = mode_combo.clone();
+    let diarization_combo_clone = diarization_combo.clone();
     let hotkey_enabled_check_clone = hotkey_enabled_check.clone();
     let hotkey_entry_clone = hotkey_entry.clone();
     let max_entries_spin_clone = max_entries_spin.clone();
@@ -267,12 +301,20 @@ pub fn show_settings_dialog(
             "dictation".to_string()
         };
 
+        // Get diarization method
+        let diarization_method = if diarization_combo_clone.active() == Some(1) {
+            "sortformer".to_string()
+        } else {
+            "channel".to_string()
+        };
+
         // Update config
         let mut cfg = config_clone.lock().unwrap();
         cfg.language = language;
         cfg.auto_copy = auto_copy_check_clone.is_active();
         cfg.auto_paste = auto_paste_check_clone.is_active();
         cfg.recording_mode = recording_mode;
+        cfg.diarization_method = diarization_method;
         cfg.hotkey_enabled = hotkey_enabled_check_clone.is_active();
         cfg.hotkey = hotkey;
         cfg.history_max_entries = max_entries_spin_clone.value() as usize;
