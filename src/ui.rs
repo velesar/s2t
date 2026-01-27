@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::history::{save_history, History, HistoryEntry};
 use crate::history_dialog::show_history_dialog;
 use crate::model_dialog::show_model_dialog;
+use crate::settings_dialog::show_settings_dialog;
 use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, LevelBar, Orientation, Spinner};
@@ -28,6 +29,8 @@ pub fn build_ui(
     history: Arc<Mutex<History>>,
     open_models_rx: async_channel::Receiver<()>,
     open_history_rx: async_channel::Receiver<()>,
+    open_settings_rx: async_channel::Receiver<()>,
+    toggle_recording_rx: async_channel::Receiver<()>,
 ) {
     let recorder = Arc::new(AudioRecorder::new());
 
@@ -37,6 +40,10 @@ pub fn build_ui(
         .default_width(500)
         .default_height(300)
         .build();
+
+    // Note: Window positioning in GTK4 is handled by the window manager.
+    // Direct position setting is not supported, especially on Wayland.
+    // The window will be positioned by the window manager according to its policies.
 
     let main_box = GtkBox::new(Orientation::Vertical, 12);
     main_box.set_margin_top(20);
@@ -86,6 +93,9 @@ pub fn build_ui(
 
     let config_for_ui = config.clone();
     let history_for_ui = history.clone();
+    let recorder_for_button = recorder.clone();
+    let app_state_for_button = app_state.clone();
+    let recording_start_time_for_button = recording_start_time.clone();
     setup_record_button(
         &record_button,
         &status_label,
@@ -93,12 +103,12 @@ pub fn build_ui(
         &timer_label,
         &level_bar,
         &spinner,
-        recorder,
+        recorder_for_button,
         whisper.clone(),
         config_for_ui,
         history_for_ui,
-        app_state,
-        recording_start_time,
+        app_state_for_button,
+        recording_start_time_for_button,
     );
 
     let copy_button = Button::with_label("Копіювати");
@@ -123,12 +133,22 @@ pub fn build_ui(
         }
     });
 
+    let settings_button = Button::with_label("Налаштування");
+    let window_weak = window.downgrade();
+    let config_for_settings = config.clone();
+    settings_button.connect_clicked(move |_| {
+        if let Some(window) = window_weak.upgrade() {
+            show_settings_dialog(&window, config_for_settings.clone());
+        }
+    });
+
     let button_box = GtkBox::new(Orientation::Horizontal, 12);
     button_box.set_halign(gtk4::Align::Center);
     button_box.append(&record_button);
     button_box.append(&copy_button);
     button_box.append(&models_button);
     button_box.append(&history_button);
+    button_box.append(&settings_button);
 
     main_box.append(&status_box);
     main_box.append(&timer_label);
@@ -162,6 +182,69 @@ pub fn build_ui(
         while open_history_rx.recv().await.is_ok() {
             if let Some(window) = window_for_history.upgrade() {
                 show_history_dialog(&window, history_for_tray.clone());
+            }
+        }
+    });
+
+    // Listen for "open settings dialog" signal from tray
+    let window_for_settings = window.downgrade();
+    let config_for_tray = config.clone();
+    glib::spawn_future_local(async move {
+        while open_settings_rx.recv().await.is_ok() {
+            if let Some(window) = window_for_settings.upgrade() {
+                show_settings_dialog(&window, config_for_tray.clone());
+            }
+        }
+    });
+
+    // Listen for hotkey toggle recording signal
+    let record_button_for_hotkey = record_button.clone();
+    let status_label_for_hotkey = status_label.clone();
+    let result_label_for_hotkey = result_label.clone();
+    let timer_label_for_hotkey = timer_label.clone();
+    let level_bar_for_hotkey = level_bar.clone();
+    let spinner_for_hotkey = spinner.clone();
+    let recorder_for_hotkey = recorder.clone();
+    let whisper_for_hotkey = whisper.clone();
+    let config_for_hotkey = config.clone();
+    let history_for_hotkey = history.clone();
+    let app_state_for_hotkey = app_state.clone();
+    let recording_start_time_for_hotkey = recording_start_time.clone();
+    glib::spawn_future_local(async move {
+        while toggle_recording_rx.recv().await.is_ok() {
+            match app_state_for_hotkey.get() {
+                AppState::Idle => {
+                    handle_start_recording(
+                        &record_button_for_hotkey,
+                        &status_label_for_hotkey,
+                        &result_label_for_hotkey,
+                        &timer_label_for_hotkey,
+                        &level_bar_for_hotkey,
+                        &recorder_for_hotkey,
+                        &whisper_for_hotkey,
+                        &app_state_for_hotkey,
+                        &recording_start_time_for_hotkey,
+                    );
+                }
+                AppState::Recording => {
+                    handle_stop_recording(
+                        &record_button_for_hotkey,
+                        &status_label_for_hotkey,
+                        &result_label_for_hotkey,
+                        &timer_label_for_hotkey,
+                        &level_bar_for_hotkey,
+                        &spinner_for_hotkey,
+                        &recorder_for_hotkey,
+                        &whisper_for_hotkey,
+                        &config_for_hotkey,
+                        &history_for_hotkey,
+                        &app_state_for_hotkey,
+                        &recording_start_time_for_hotkey,
+                    );
+                }
+                AppState::Processing => {
+                    // Ignore hotkey while processing
+                }
             }
         }
     });
@@ -345,6 +428,7 @@ fn handle_stop_recording(
 
     let whisper = whisper.clone();
     let history = history.clone();
+    let config_for_auto_copy = config.clone();
     let status_label = status_label.clone();
     let result_label = result_label.clone();
     let button = button.clone();
@@ -388,6 +472,15 @@ fn handle_stop_recording(
                         status_label.set_text("Готово!");
                         result_label.set_text(&text);
 
+                        // Auto-copy if enabled
+                        let auto_copy_enabled = {
+                            let cfg = config_for_auto_copy.lock().unwrap();
+                            cfg.auto_copy
+                        };
+                        if auto_copy_enabled {
+                            copy_to_clipboard(&text);
+                        }
+
                         // Save to history
                         let entry = HistoryEntry::new(
                             text,
@@ -417,16 +510,20 @@ fn handle_stop_recording(
     });
 }
 
+fn copy_to_clipboard(text: &str) {
+    if let Some(display) = gtk4::gdk::Display::default() {
+        let clipboard = display.clipboard();
+        if !text.is_empty() {
+            clipboard.set_text(text);
+        }
+    }
+}
+
 fn setup_copy_button(button: &Button, result_label: &Label) {
     let result_label_clone = result_label.clone();
 
     button.connect_clicked(move |_| {
-        if let Some(display) = gtk4::gdk::Display::default() {
-            let clipboard = display.clipboard();
-            let text = result_label_clone.text();
-            if !text.is_empty() {
-                clipboard.set_text(&text);
-            }
-        }
+        let text = result_label_clone.text();
+        copy_to_clipboard(&text);
     });
 }

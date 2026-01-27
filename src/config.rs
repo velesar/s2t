@@ -11,6 +11,12 @@ pub struct Config {
     pub history_max_entries: usize,
     #[serde(default = "default_history_max_age_days")]
     pub history_max_age_days: i64,
+    #[serde(default = "default_auto_copy")]
+    pub auto_copy: bool,
+    #[serde(default = "default_hotkey_enabled")]
+    pub hotkey_enabled: bool,
+    #[serde(default = "default_hotkey")]
+    pub hotkey: String,
 }
 
 fn default_history_max_entries() -> usize {
@@ -21,6 +27,18 @@ fn default_history_max_age_days() -> i64 {
     90
 }
 
+fn default_auto_copy() -> bool {
+    false
+}
+
+fn default_hotkey_enabled() -> bool {
+    false
+}
+
+fn default_hotkey() -> String {
+    "Control+Shift+Space".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -28,6 +46,9 @@ impl Default for Config {
             language: "uk".to_string(),
             history_max_entries: default_history_max_entries(),
             history_max_age_days: default_history_max_age_days(),
+            auto_copy: default_auto_copy(),
+            hotkey_enabled: default_hotkey_enabled(),
+            hotkey: default_hotkey(),
         }
     }
 }

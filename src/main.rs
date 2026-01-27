@@ -2,8 +2,10 @@ mod audio;
 mod config;
 mod history;
 mod history_dialog;
+mod hotkeys;
 mod model_dialog;
 mod models;
+mod settings_dialog;
 mod tray;
 mod ui;
 mod whisper;
@@ -15,8 +17,10 @@ use history::{load_history, save_history, History};
 use models::get_model_path;
 use std::sync::{Arc, Mutex};
 
+use hotkeys::HotkeyManager;
 use tray::{DictationTray, TrayAction};
 use whisper::WhisperSTT;
+use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 
 const APP_ID: &str = "ua.voice.dictation";
 
@@ -99,6 +103,36 @@ fn main() -> Result<()> {
 
     let (open_models_tx, open_models_rx) = async_channel::bounded::<()>(1);
     let (open_history_tx, open_history_rx) = async_channel::bounded::<()>(1);
+    let (open_settings_tx, open_settings_rx) = async_channel::bounded::<()>(1);
+    let (toggle_recording_tx, toggle_recording_rx) = async_channel::bounded::<()>(1);
+
+    // Initialize hotkey manager
+    let mut hotkey_manager = HotkeyManager::new().unwrap_or_else(|e| {
+        eprintln!("Помилка ініціалізації гарячих клавіш: {}", e);
+        // Continue without hotkeys
+        std::process::exit(1);
+    });
+
+    // Register hotkeys from config
+    {
+        let cfg = config.lock().unwrap();
+        if let Err(e) = hotkey_manager.register_from_config(&cfg) {
+            eprintln!("Помилка реєстрації гарячих клавіш: {}", e);
+        }
+    }
+
+    // Listen for hotkey events
+    let toggle_recording_tx_for_hotkey = toggle_recording_tx.clone();
+    std::thread::spawn(move || {
+        loop {
+            if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
+                if event.state == HotKeyState::Pressed {
+                    let _ = toggle_recording_tx_for_hotkey.try_send(());
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    });
 
     let whisper_for_app = whisper.clone();
     let config_for_app = config.clone();
@@ -111,6 +145,8 @@ fn main() -> Result<()> {
             history_for_app.clone(),
             open_models_rx.clone(),
             open_history_rx.clone(),
+            open_settings_rx.clone(),
+            toggle_recording_rx.clone(),
         );
     });
 
@@ -145,6 +181,16 @@ fn main() -> Result<()> {
                             app.activate();
                         }
                         let _ = open_history_tx.try_send(());
+                    }
+                }
+                TrayAction::OpenSettings => {
+                    if let Some(app) = app_weak.upgrade() {
+                        if let Some(window) = app.active_window() {
+                            window.present();
+                        } else {
+                            app.activate();
+                        }
+                        let _ = open_settings_tx.try_send(());
                     }
                 }
                 TrayAction::Quit => {

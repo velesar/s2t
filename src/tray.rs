@@ -13,6 +13,7 @@ pub enum TrayAction {
     OpenWindow,
     ManageModels,
     OpenHistory,
+    OpenSettings,
     Quit,
 }
 
@@ -146,6 +147,14 @@ impl Tray for DictationTray {
                 label: "Історія...".to_string(),
                 activate: Box::new(|tray: &mut Self| {
                     let _ = tray.tx.try_send(TrayAction::OpenHistory);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: "Налаштування...".to_string(),
+                activate: Box::new(|tray: &mut Self| {
+                    let _ = tray.tx.try_send(TrayAction::OpenSettings);
                 }),
                 ..Default::default()
             }
