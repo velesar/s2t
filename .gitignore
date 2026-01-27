@@ -1,0 +1,27 @@
+# Rust build artifacts
+/target/
+
+# Claude Code
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Whisper models (large binary files)
+*.bin
+models/
+
+# Debug and logs
+*.log
+*.pdb
+
+# Backup files
+*~
+*.bak
+*.swp

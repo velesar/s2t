@@ -1,0 +1,31 @@
+[package]
+name = "voice-dictation"
+version = "0.1.0"
+edition = "2021"
+description = "System tray voice dictation app using Whisper for offline speech-to-text on Linux"
+license = "MIT"
+keywords = ["voice", "dictation", "whisper", "speech-to-text", "gtk"]
+categories = ["multimedia::audio"]
+
+[dependencies]
+# GUI
+gtk4 = "0.9"
+glib = "0.20"
+gio = "0.20"
+
+# System tray (StatusNotifierItem for modern Linux)
+ksni = "0.2"
+
+# Audio recording
+cpal = "0.15"
+
+# Whisper speech recognition
+whisper-rs = "0.12"
+
+# Utilities
+anyhow = "1.0"
+dirs = "5.0"
+
+[profile.release]
+opt-level = 3
+lto = true
