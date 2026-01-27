@@ -7,6 +7,18 @@ use std::path::PathBuf;
 pub struct Config {
     pub default_model: String,
     pub language: String,
+    #[serde(default = "default_history_max_entries")]
+    pub history_max_entries: usize,
+    #[serde(default = "default_history_max_age_days")]
+    pub history_max_age_days: i64,
+}
+
+fn default_history_max_entries() -> usize {
+    500
+}
+
+fn default_history_max_age_days() -> i64 {
+    90
 }
 
 impl Default for Config {
@@ -14,6 +26,8 @@ impl Default for Config {
         Self {
             default_model: "ggml-base.bin".to_string(),
             language: "uk".to_string(),
+            history_max_entries: default_history_max_entries(),
+            history_max_age_days: default_history_max_age_days(),
         }
     }
 }
@@ -77,6 +91,8 @@ mod tests {
         let config = Config {
             default_model: "ggml-tiny.bin".to_string(),
             language: "en".to_string(),
+            history_max_entries: 500,
+            history_max_age_days: 90,
         };
 
         let toml_str = toml::to_string(&config).unwrap();

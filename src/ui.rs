@@ -1,5 +1,7 @@
 use crate::audio::AudioRecorder;
 use crate::config::Config;
+use crate::history::{save_history, History, HistoryEntry};
+use crate::history_dialog::show_history_dialog;
 use crate::model_dialog::show_model_dialog;
 use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
@@ -23,7 +25,9 @@ pub fn build_ui(
     app: &Application,
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
     config: Arc<Mutex<Config>>,
+    history: Arc<Mutex<History>>,
     open_models_rx: async_channel::Receiver<()>,
+    open_history_rx: async_channel::Receiver<()>,
 ) {
     let recorder = Arc::new(AudioRecorder::new());
 
@@ -81,6 +85,7 @@ pub fn build_ui(
     let recording_start_time: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
 
     let config_for_ui = config.clone();
+    let history_for_ui = history.clone();
     setup_record_button(
         &record_button,
         &status_label,
@@ -91,6 +96,7 @@ pub fn build_ui(
         recorder,
         whisper.clone(),
         config_for_ui,
+        history_for_ui,
         app_state,
         recording_start_time,
     );
@@ -108,11 +114,21 @@ pub fn build_ui(
         }
     });
 
+    let history_button = Button::with_label("Історія");
+    let window_weak = window.downgrade();
+    let history_for_button = history.clone();
+    history_button.connect_clicked(move |_| {
+        if let Some(window) = window_weak.upgrade() {
+            show_history_dialog(&window, history_for_button.clone());
+        }
+    });
+
     let button_box = GtkBox::new(Orientation::Horizontal, 12);
     button_box.set_halign(gtk4::Align::Center);
     button_box.append(&record_button);
     button_box.append(&copy_button);
     button_box.append(&models_button);
+    button_box.append(&history_button);
 
     main_box.append(&status_box);
     main_box.append(&timer_label);
@@ -139,6 +155,17 @@ pub fn build_ui(
         }
     });
 
+    // Listen for "open history dialog" signal from tray
+    let window_for_history = window.downgrade();
+    let history_for_tray = history.clone();
+    glib::spawn_future_local(async move {
+        while open_history_rx.recv().await.is_ok() {
+            if let Some(window) = window_for_history.upgrade() {
+                show_history_dialog(&window, history_for_tray.clone());
+            }
+        }
+    });
+
     window.present();
 }
 
@@ -152,6 +179,7 @@ fn setup_record_button(
     recorder: Arc<AudioRecorder>,
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
     config: Arc<Mutex<Config>>,
+    history: Arc<Mutex<History>>,
     app_state: Rc<Cell<AppState>>,
     recording_start_time: Rc<Cell<Option<Instant>>>,
 ) {
@@ -191,6 +219,7 @@ fn setup_record_button(
                     &recorder_clone,
                     &whisper,
                     &config,
+                    &history,
                     &app_state_clone,
                     &recording_start_time_clone,
                 );
@@ -284,6 +313,7 @@ fn handle_stop_recording(
     recorder: &Arc<AudioRecorder>,
     whisper: &Arc<Mutex<Option<WhisperSTT>>>,
     config: &Arc<Mutex<Config>>,
+    history: &Arc<Mutex<History>>,
     app_state: &Rc<Cell<AppState>>,
     recording_start_time: &Rc<Cell<Option<Instant>>>,
 ) {
@@ -314,6 +344,7 @@ fn handle_stop_recording(
     ));
 
     let whisper = whisper.clone();
+    let history = history.clone();
     let status_label = status_label.clone();
     let result_label = result_label.clone();
     let button = button.clone();
@@ -323,6 +354,7 @@ fn handle_stop_recording(
         let cfg = config.lock().unwrap();
         cfg.language.clone()
     };
+    let language_for_history = language.clone();
 
     glib::spawn_future_local(async move {
         // Wait for recording thread to finish (non-blocking for GTK)
@@ -355,6 +387,18 @@ fn handle_stop_recording(
                     } else {
                         status_label.set_text("Готово!");
                         result_label.set_text(&text);
+
+                        // Save to history
+                        let entry = HistoryEntry::new(
+                            text,
+                            duration_secs,
+                            language_for_history.clone(),
+                        );
+                        let mut h = history.lock().unwrap();
+                        h.add(entry);
+                        if let Err(e) = save_history(&h) {
+                            eprintln!("Помилка збереження історії: {}", e);
+                        }
                     }
                 }
                 Err(e) => {

@@ -1,5 +1,7 @@
 mod audio;
 mod config;
+mod history;
+mod history_dialog;
 mod model_dialog;
 mod models;
 mod tray;
@@ -9,6 +11,7 @@ mod whisper;
 use anyhow::Result;
 use config::{load_config, models_dir, Config};
 use gtk4::{glib, prelude::*, Application};
+use history::{load_history, save_history, History};
 use models::get_model_path;
 use std::sync::{Arc, Mutex};
 
@@ -52,6 +55,22 @@ fn main() -> Result<()> {
     });
     let config = Arc::new(Mutex::new(config));
 
+    // Load and cleanup history
+    let history = {
+        let mut h = load_history().unwrap_or_else(|e| {
+            eprintln!("Помилка завантаження історії: {}. Створюю нову.", e);
+            History::default()
+        });
+        let cfg = config.lock().unwrap();
+        h.cleanup_old_entries(cfg.history_max_age_days);
+        h.trim_to_limit(cfg.history_max_entries);
+        drop(cfg);
+        if let Err(e) = save_history(&h) {
+            eprintln!("Помилка збереження історії: {}", e);
+        }
+        Arc::new(Mutex::new(h))
+    };
+
     let whisper: Arc<Mutex<Option<WhisperSTT>>> = {
         let cfg = config.lock().unwrap();
         if let Some(model_path) = find_model_path(&cfg) {
@@ -79,11 +98,20 @@ fn main() -> Result<()> {
     let app = Application::builder().application_id(APP_ID).build();
 
     let (open_models_tx, open_models_rx) = async_channel::bounded::<()>(1);
+    let (open_history_tx, open_history_rx) = async_channel::bounded::<()>(1);
 
     let whisper_for_app = whisper.clone();
     let config_for_app = config.clone();
+    let history_for_app = history.clone();
     app.connect_activate(move |app| {
-        ui::build_ui(app, whisper_for_app.clone(), config_for_app.clone(), open_models_rx.clone());
+        ui::build_ui(
+            app,
+            whisper_for_app.clone(),
+            config_for_app.clone(),
+            history_for_app.clone(),
+            open_models_rx.clone(),
+            open_history_rx.clone(),
+        );
     });
 
     let app_weak = app.downgrade();
@@ -107,6 +135,16 @@ fn main() -> Result<()> {
                             app.activate();
                         }
                         let _ = open_models_tx.try_send(());
+                    }
+                }
+                TrayAction::OpenHistory => {
+                    if let Some(app) = app_weak.upgrade() {
+                        if let Some(window) = app.active_window() {
+                            window.present();
+                        } else {
+                            app.activate();
+                        }
+                        let _ = open_history_tx.try_send(());
                     }
                 }
                 TrayAction::Quit => {

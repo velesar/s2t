@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 pub enum TrayAction {
     OpenWindow,
     ManageModels,
+    OpenHistory,
     Quit,
 }
 
@@ -137,6 +138,14 @@ impl Tray for DictationTray {
                 label: "Керування моделями...".to_string(),
                 activate: Box::new(|tray: &mut Self| {
                     let _ = tray.tx.try_send(TrayAction::ManageModels);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: "Історія...".to_string(),
+                activate: Box::new(|tray: &mut Self| {
+                    let _ = tray.tx.try_send(TrayAction::OpenHistory);
                 }),
                 ..Default::default()
             }
