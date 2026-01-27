@@ -155,3 +155,82 @@ pub fn format_size(bytes: u64) -> String {
         format!("{} B", bytes)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_size_bytes() {
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(512), "512 B");
+        assert_eq!(format_size(1023), "1023 B");
+    }
+
+    #[test]
+    fn test_format_size_kilobytes() {
+        assert_eq!(format_size(1024), "1 KB");
+        assert_eq!(format_size(2048), "2 KB");
+        assert_eq!(format_size(1024 * 1023), "1023 KB");
+    }
+
+    #[test]
+    fn test_format_size_megabytes() {
+        assert_eq!(format_size(1024 * 1024), "1 MB");
+        assert_eq!(format_size(148_000_000), "141 MB");
+        assert_eq!(format_size(500 * 1024 * 1024), "500 MB");
+    }
+
+    #[test]
+    fn test_format_size_gigabytes() {
+        assert_eq!(format_size(1024 * 1024 * 1024), "1.0 GB");
+        assert_eq!(format_size(3_100_000_000), "2.9 GB");
+    }
+
+    #[test]
+    fn test_get_available_models_count() {
+        let models = get_available_models();
+        assert_eq!(models.len(), 5);
+    }
+
+    #[test]
+    fn test_get_available_models_contains_base() {
+        let models = get_available_models();
+        let base = models.iter().find(|m| m.filename == "ggml-base.bin");
+        assert!(base.is_some());
+        let base = base.unwrap();
+        assert_eq!(base.display_name, "Base");
+    }
+
+    #[test]
+    fn test_get_available_models_ordered_by_size() {
+        let models = get_available_models();
+        for i in 1..models.len() {
+            assert!(
+                models[i].size_bytes >= models[i - 1].size_bytes,
+                "Models should be ordered by size: {} >= {}",
+                models[i].filename,
+                models[i - 1].filename
+            );
+        }
+    }
+
+    #[test]
+    fn test_model_info_has_all_fields() {
+        let models = get_available_models();
+        for model in models {
+            assert!(!model.filename.is_empty());
+            assert!(!model.display_name.is_empty());
+            assert!(!model.description.is_empty());
+            assert!(model.size_bytes > 0);
+            assert!(model.filename.ends_with(".bin"));
+        }
+    }
+
+    #[test]
+    fn test_get_model_path_constructs_correctly() {
+        let path = get_model_path("ggml-base.bin");
+        assert!(path.to_string_lossy().contains("whisper"));
+        assert!(path.to_string_lossy().ends_with("ggml-base.bin"));
+    }
+}

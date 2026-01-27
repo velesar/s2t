@@ -121,7 +121,7 @@ impl Tray for DictationTray {
             StandardItem {
                 label: "Відкрити диктовку".to_string(),
                 activate: Box::new(|tray: &mut Self| {
-                    let _ = tray.tx.send(TrayAction::OpenWindow);
+                    let _ = tray.tx.try_send(TrayAction::OpenWindow);
                 }),
                 ..Default::default()
             }
@@ -136,7 +136,7 @@ impl Tray for DictationTray {
             StandardItem {
                 label: "Керування моделями...".to_string(),
                 activate: Box::new(|tray: &mut Self| {
-                    let _ = tray.tx.send(TrayAction::ManageModels);
+                    let _ = tray.tx.try_send(TrayAction::ManageModels);
                 }),
                 ..Default::default()
             }
@@ -145,7 +145,7 @@ impl Tray for DictationTray {
             StandardItem {
                 label: "Вийти".to_string(),
                 activate: Box::new(|tray: &mut Self| {
-                    let _ = tray.tx.send(TrayAction::Quit);
+                    let _ = tray.tx.try_send(TrayAction::Quit);
                 }),
                 ..Default::default()
             }
@@ -154,6 +154,6 @@ impl Tray for DictationTray {
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
-        let _ = self.tx.send(TrayAction::OpenWindow);
+        let _ = self.tx.try_send(TrayAction::OpenWindow);
     }
 }

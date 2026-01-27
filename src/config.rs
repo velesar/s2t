@@ -60,3 +60,49 @@ pub fn save_config(config: &Config) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.default_model, "ggml-base.bin");
+        assert_eq!(config.language, "uk");
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = Config {
+            default_model: "ggml-tiny.bin".to_string(),
+            language: "en".to_string(),
+        };
+
+        let toml_str = toml::to_string(&config).unwrap();
+        assert!(toml_str.contains("ggml-tiny.bin"));
+        assert!(toml_str.contains("en"));
+
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.default_model, config.default_model);
+        assert_eq!(parsed.language, config.language);
+    }
+
+    #[test]
+    fn test_config_dir_not_empty() {
+        let dir = config_dir();
+        assert!(dir.to_string_lossy().contains("voice-dictation"));
+    }
+
+    #[test]
+    fn test_models_dir_not_empty() {
+        let dir = models_dir();
+        assert!(dir.to_string_lossy().contains("whisper"));
+    }
+
+    #[test]
+    fn test_config_path_is_toml() {
+        let path = config_path();
+        assert!(path.to_string_lossy().ends_with("config.toml"));
+    }
+}
