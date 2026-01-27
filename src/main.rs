@@ -1,11 +1,16 @@
 mod audio;
+mod config;
+mod model_dialog;
+mod models;
 mod tray;
 mod ui;
 mod whisper;
 
 use anyhow::Result;
+use config::{load_config, models_dir, Config};
 use gtk4::{glib, prelude::*, Application};
-use std::sync::Arc;
+use models::get_model_path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tray::{DictationTray, TrayAction};
@@ -13,11 +18,14 @@ use whisper::WhisperSTT;
 
 const APP_ID: &str = "ua.voice.dictation";
 
-fn get_model_path() -> Result<String> {
-    let paths = vec![
-        dirs::data_local_dir()
-            .map(|p| p.join("whisper/ggml-base.bin"))
-            .unwrap_or_default(),
+fn find_model_path(config: &Config) -> Option<String> {
+    let config_model_path = get_model_path(&config.default_model);
+    if config_model_path.exists() {
+        return Some(config_model_path.to_string_lossy().to_string());
+    }
+
+    let fallback_paths = vec![
+        models_dir().join("ggml-base.bin"),
         dirs::home_dir()
             .map(|p| p.join(".local/share/whisper/ggml-base.bin"))
             .unwrap_or_default(),
@@ -27,51 +35,61 @@ fn get_model_path() -> Result<String> {
         std::path::PathBuf::from("/usr/local/share/whisper/ggml-base.bin"),
     ];
 
-    for path in paths {
+    for path in fallback_paths {
         if path.exists() {
-            return Ok(path.to_string_lossy().to_string());
+            return Some(path.to_string_lossy().to_string());
         }
     }
 
-    Err(anyhow::anyhow!(
-        r#"Модель Whisper не знайдено!
-
-Завантажте модель командою:
-    mkdir -p ~/.local/share/whisper
-    curl -L -o ~/.local/share/whisper/ggml-base.bin \
-        https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-
-Для кращої якості можна завантажити більшу модель:
-    ggml-small.bin  (~500MB) - краща якість
-    ggml-medium.bin (~1.5GB) - ще краща
-    ggml-large-v3.bin (~3GB) - найкраща"#
-    ))
+    None
 }
 
 fn main() -> Result<()> {
     gtk4::init()?;
 
-    let model_path = get_model_path()?;
-    println!("Завантаження моделі: {}", model_path);
+    let config = load_config().unwrap_or_else(|e| {
+        eprintln!("Помилка завантаження конфігу: {}. Використовую значення за замовчуванням.", e);
+        Config::default()
+    });
+    let config = Arc::new(Mutex::new(config));
 
-    let whisper = Arc::new(WhisperSTT::new(&model_path)?);
-    println!("Модель завантажено!");
+    let whisper: Arc<Mutex<Option<WhisperSTT>>> = {
+        let cfg = config.lock().unwrap();
+        if let Some(model_path) = find_model_path(&cfg) {
+            println!("Завантаження моделі: {}", model_path);
+            match WhisperSTT::new(&model_path) {
+                Ok(w) => {
+                    println!("Модель завантажено!");
+                    Arc::new(Mutex::new(Some(w)))
+                }
+                Err(e) => {
+                    eprintln!("Не вдалося завантажити модель: {}", e);
+                    eprintln!("Запустіть додаток і завантажте модель через меню 'Моделі'");
+                    Arc::new(Mutex::new(None))
+                }
+            }
+        } else {
+            println!("Модель не знайдено. Завантажте через меню 'Моделі'.");
+            Arc::new(Mutex::new(None))
+        }
+    };
 
     let (tray_tx, tray_rx) = std::sync::mpsc::channel();
-    let tray_handle = DictationTray::spawn_service(tray_tx);
+    let tray_handle = DictationTray::spawn_service(tray_tx, config.clone(), whisper.clone());
 
     let app = Application::builder().application_id(APP_ID).build();
 
     let whisper_for_app = whisper.clone();
+    let config_for_app = config.clone();
     app.connect_activate(move |app| {
-        ui::build_ui(app, whisper_for_app.clone());
+        ui::build_ui(app, whisper_for_app.clone(), config_for_app.clone());
     });
 
     let app_weak = app.downgrade();
     glib::timeout_add_local(Duration::from_millis(100), move || {
         if let Ok(action) = tray_rx.try_recv() {
             match action {
-                TrayAction::OpenWindow => {
+                TrayAction::OpenWindow | TrayAction::ManageModels => {
                     if let Some(app) = app_weak.upgrade() {
                         if let Some(window) = app.active_window() {
                             window.present();

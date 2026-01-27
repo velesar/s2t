@@ -3,6 +3,8 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 pub struct WhisperSTT {
     ctx: WhisperContext,
+    #[allow(dead_code)]
+    model_path: String,
 }
 
 impl WhisperSTT {
@@ -10,7 +12,10 @@ impl WhisperSTT {
         let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
             .context("Не вдалося завантажити модель Whisper")?;
 
-        Ok(Self { ctx })
+        Ok(Self {
+            ctx,
+            model_path: model_path.to_string(),
+        })
     }
 
     pub fn transcribe(&self, samples: &[f32], language: Option<&str>) -> Result<String> {
@@ -41,4 +46,5 @@ impl WhisperSTT {
 
         Ok(text.trim().to_string())
     }
+
 }
