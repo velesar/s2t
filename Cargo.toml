@@ -46,6 +46,12 @@ global-hotkey = "0.5"
 # Keyboard simulation for auto-paste
 # Note: Uses xdotool command-line tool (install with: sudo dnf install xdotool)
 
+# PipeWire for loopback recording
+pipewire = "0.9"
+
+# Audio file encoding (WAV format)
+hound = "3.5"
+
 [profile.release]
 opt-level = 3
 lto = true

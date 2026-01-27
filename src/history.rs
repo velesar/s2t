@@ -12,6 +12,10 @@ pub struct HistoryEntry {
     pub timestamp: DateTime<Utc>,
     pub duration_secs: f32,
     pub language: String,
+    #[serde(default)]
+    pub recording_path: Option<String>,
+    #[serde(default)]
+    pub speakers: Vec<String>,
 }
 
 impl HistoryEntry {
@@ -22,6 +26,26 @@ impl HistoryEntry {
             timestamp: Utc::now(),
             duration_secs,
             language,
+            recording_path: None,
+            speakers: Vec::new(),
+        }
+    }
+
+    pub fn new_with_recording(
+        text: String,
+        duration_secs: f32,
+        language: String,
+        recording_path: Option<String>,
+        speakers: Vec<String>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            text,
+            timestamp: Utc::now(),
+            duration_secs,
+            language,
+            recording_path,
+            speakers,
         }
     }
 

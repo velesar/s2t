@@ -19,6 +19,8 @@ pub struct Config {
     pub hotkey: String,
     #[serde(default = "default_auto_paste")]
     pub auto_paste: bool,
+    #[serde(default = "default_recording_mode")]
+    pub recording_mode: String,
 }
 
 fn default_history_max_entries() -> usize {
@@ -45,6 +47,10 @@ fn default_auto_paste() -> bool {
     false
 }
 
+fn default_recording_mode() -> String {
+    "dictation".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -56,6 +62,7 @@ impl Default for Config {
             hotkey_enabled: default_hotkey_enabled(),
             hotkey: default_hotkey(),
             auto_paste: default_auto_paste(),
+            recording_mode: default_recording_mode(),
         }
     }
 }
@@ -74,6 +81,13 @@ pub fn models_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("whisper")
+}
+
+pub fn recordings_dir() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("voice-dictation")
+        .join("recordings")
 }
 
 pub fn load_config() -> Result<Config> {

@@ -1,11 +1,14 @@
 mod audio;
 mod config;
+mod conference_recorder;
 mod history;
 mod history_dialog;
 mod hotkeys;
+mod loopback;
 mod model_dialog;
 mod models;
 mod paste;
+mod recordings;
 mod settings_dialog;
 mod tray;
 mod ui;
@@ -59,6 +62,11 @@ fn main() -> Result<()> {
         Config::default()
     });
     let config = Arc::new(Mutex::new(config));
+
+    // Ensure recordings directory exists
+    if let Err(e) = recordings::ensure_recordings_dir() {
+        eprintln!("Помилка створення директорії записів: {}", e);
+    }
 
     // Load and cleanup history
     let history = {

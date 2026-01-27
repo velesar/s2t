@@ -16,7 +16,7 @@ pub fn show_settings_dialog(
         .modal(true)
         .transient_for(parent)
         .default_width(400)
-        .default_height(480)
+        .default_height(520)
         .build();
 
     let main_box = GtkBox::new(Orientation::Vertical, 12);
@@ -80,6 +80,27 @@ pub fn show_settings_dialog(
     }
 
     main_box.append(&language_combo);
+
+    // Recording mode selector
+    let mode_label = Label::new(Some("Режим запису:"));
+    mode_label.set_halign(Align::Start);
+    mode_label.set_margin_top(12);
+    main_box.append(&mode_label);
+
+    let mode_combo = ComboBoxText::new();
+    mode_combo.append_text("Диктовка");
+    mode_combo.append_text("Конференція");
+    let current_mode = {
+        let cfg = config.lock().unwrap();
+        cfg.recording_mode.clone()
+    };
+    if current_mode == "conference" {
+        mode_combo.set_active(Some(1));
+    } else {
+        mode_combo.set_active(Some(0));
+    }
+    mode_combo.set_halign(Align::Start);
+    main_box.append(&mode_combo);
 
     // Auto-copy checkbox
     let auto_copy_check = CheckButton::with_label("Автоматично копіювати результат");
@@ -204,6 +225,7 @@ pub fn show_settings_dialog(
     let languages_clone = languages.clone();
     let auto_copy_check_clone = auto_copy_check.clone();
     let auto_paste_check_clone = auto_paste_check.clone();
+    let mode_combo_clone = mode_combo.clone();
     let hotkey_enabled_check_clone = hotkey_enabled_check.clone();
     let hotkey_entry_clone = hotkey_entry.clone();
     let max_entries_spin_clone = max_entries_spin.clone();
@@ -238,11 +260,19 @@ pub fn show_settings_dialog(
         // Get hotkey
         let hotkey = hotkey_entry_clone.text().to_string();
 
+        // Get recording mode
+        let recording_mode = if mode_combo_clone.active() == Some(1) {
+            "conference".to_string()
+        } else {
+            "dictation".to_string()
+        };
+
         // Update config
         let mut cfg = config_clone.lock().unwrap();
         cfg.language = language;
         cfg.auto_copy = auto_copy_check_clone.is_active();
         cfg.auto_paste = auto_paste_check_clone.is_active();
+        cfg.recording_mode = recording_mode;
         cfg.hotkey_enabled = hotkey_enabled_check_clone.is_active();
         cfg.hotkey = hotkey;
         cfg.history_max_entries = max_entries_spin_clone.value() as usize;

@@ -47,4 +47,45 @@ impl WhisperSTT {
         Ok(text.trim().to_string())
     }
 
+    /// Transcribe with channel-based diarization (MVP approach)
+    /// Transcribes mic and loopback channels separately and merges with speaker labels
+    pub fn transcribe_with_diarization(
+        &self,
+        mic_samples: &[f32],
+        loopback_samples: &[f32],
+        language: Option<&str>,
+    ) -> Result<String> {
+        // Transcribe microphone channel
+        let mic_text = if !mic_samples.is_empty() {
+            self.transcribe(mic_samples, language)?
+        } else {
+            String::new()
+        };
+
+        // Transcribe loopback channel
+        let loopback_text = if !loopback_samples.is_empty() {
+            self.transcribe(loopback_samples, language)?
+        } else {
+            String::new()
+        };
+
+        // Merge with speaker labels
+        let mut result = String::new();
+
+        if !mic_text.is_empty() {
+            result.push_str("[Ви] ");
+            result.push_str(&mic_text);
+        }
+
+        if !loopback_text.is_empty() {
+            if !result.is_empty() {
+                result.push_str(" ");
+            }
+            result.push_str("[Учасник] ");
+            result.push_str(&loopback_text);
+        }
+
+        Ok(result)
+    }
+
 }
