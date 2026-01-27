@@ -5,7 +5,7 @@ use ksni::{
     menu::{StandardItem, SubMenu},
     MenuItem, Tray, TrayService,
 };
-use std::sync::mpsc::Sender;
+use async_channel::Sender;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]

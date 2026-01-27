@@ -18,6 +18,7 @@ ksni = "0.2"
 
 # Audio recording
 cpal = "0.15"
+rubato = "0.16"
 
 # Whisper speech recognition
 whisper-rs = "0.12"

@@ -11,7 +11,6 @@ use config::{load_config, models_dir, Config};
 use gtk4::{glib, prelude::*, Application};
 use models::get_model_path;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use tray::{DictationTray, TrayAction};
 use whisper::WhisperSTT;
@@ -74,7 +73,7 @@ fn main() -> Result<()> {
         }
     };
 
-    let (tray_tx, tray_rx) = std::sync::mpsc::channel();
+    let (tray_tx, tray_rx) = async_channel::unbounded();
     let tray_handle = DictationTray::spawn_service(tray_tx, config.clone(), whisper.clone());
 
     let app = Application::builder().application_id(APP_ID).build();
@@ -88,8 +87,8 @@ fn main() -> Result<()> {
     });
 
     let app_weak = app.downgrade();
-    glib::timeout_add_local(Duration::from_millis(100), move || {
-        if let Ok(action) = tray_rx.try_recv() {
+    glib::spawn_future_local(async move {
+        while let Ok(action) = tray_rx.recv().await {
             match action {
                 TrayAction::OpenWindow => {
                     if let Some(app) = app_weak.upgrade() {
@@ -114,11 +113,10 @@ fn main() -> Result<()> {
                     if let Some(app) = app_weak.upgrade() {
                         app.quit();
                     }
-                    return glib::ControlFlow::Break;
+                    break;
                 }
             }
         }
-        glib::ControlFlow::Continue
     });
 
     app.run();

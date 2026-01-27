@@ -5,7 +5,6 @@ use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, Orientation};
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 const MIN_RECORDING_SAMPLES: usize = 16000; // 1 second at 16kHz
 
@@ -168,7 +167,7 @@ fn handle_stop_recording(
     button.add_css_class("suggested-action");
     status_label.set_text("Обробка...");
 
-    let samples = recorder.stop_recording();
+    let (samples, completion_rx) = recorder.stop_recording();
     let whisper = whisper.clone();
     let status_label = status_label.clone();
     let result_label = result_label.clone();
@@ -177,23 +176,29 @@ fn handle_stop_recording(
         cfg.language.clone()
     };
 
-    let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
-
-    thread::spawn(move || {
-        let result = if samples.len() < MIN_RECORDING_SAMPLES {
-            Err(anyhow::anyhow!("Запис закороткий"))
-        } else {
-            let w = whisper.lock().unwrap();
-            if let Some(ref whisper) = *w {
-                whisper.transcribe(&samples, Some(&language))
-            } else {
-                Err(anyhow::anyhow!("Модель не завантажено"))
-            }
-        };
-        let _ = tx.send_blocking(result);
-    });
-
     glib::spawn_future_local(async move {
+        // Wait for recording thread to finish (non-blocking for GTK)
+        if let Some(rx) = completion_rx {
+            let _ = rx.recv().await;
+        }
+
+        // Now transcribe in a separate thread
+        let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
+
+        std::thread::spawn(move || {
+            let result = if samples.len() < MIN_RECORDING_SAMPLES {
+                Err(anyhow::anyhow!("Запис закороткий"))
+            } else {
+                let w = whisper.lock().unwrap();
+                if let Some(ref whisper) = *w {
+                    whisper.transcribe(&samples, Some(&language))
+                } else {
+                    Err(anyhow::anyhow!("Модель не завантажено"))
+                }
+            };
+            let _ = tx.send_blocking(result);
+        });
+
         if let Ok(result) = rx.recv().await {
             match result {
                 Ok(text) => {
