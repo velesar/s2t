@@ -31,6 +31,7 @@ pub fn build_ui(
     open_history_rx: async_channel::Receiver<()>,
     open_settings_rx: async_channel::Receiver<()>,
     toggle_recording_rx: async_channel::Receiver<()>,
+    reload_hotkeys_tx: async_channel::Sender<()>,
 ) {
     let recorder = Arc::new(AudioRecorder::new());
 
@@ -136,9 +137,10 @@ pub fn build_ui(
     let settings_button = Button::with_label("Налаштування");
     let window_weak = window.downgrade();
     let config_for_settings = config.clone();
+    let reload_hotkeys_tx_for_settings = reload_hotkeys_tx.clone();
     settings_button.connect_clicked(move |_| {
         if let Some(window) = window_weak.upgrade() {
-            show_settings_dialog(&window, config_for_settings.clone());
+            show_settings_dialog(&window, config_for_settings.clone(), reload_hotkeys_tx_for_settings.clone());
         }
     });
 
@@ -189,10 +191,11 @@ pub fn build_ui(
     // Listen for "open settings dialog" signal from tray
     let window_for_settings = window.downgrade();
     let config_for_tray = config.clone();
+    let reload_hotkeys_tx_for_tray = reload_hotkeys_tx.clone();
     glib::spawn_future_local(async move {
         while open_settings_rx.recv().await.is_ok() {
             if let Some(window) = window_for_settings.upgrade() {
-                show_settings_dialog(&window, config_for_tray.clone());
+                show_settings_dialog(&window, config_for_tray.clone(), reload_hotkeys_tx_for_tray.clone());
             }
         }
     });

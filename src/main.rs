@@ -105,21 +105,35 @@ fn main() -> Result<()> {
     let (open_history_tx, open_history_rx) = async_channel::bounded::<()>(1);
     let (open_settings_tx, open_settings_rx) = async_channel::bounded::<()>(1);
     let (toggle_recording_tx, toggle_recording_rx) = async_channel::bounded::<()>(1);
+    let (reload_hotkeys_tx, reload_hotkeys_rx) = async_channel::bounded::<()>(1);
 
     // Initialize hotkey manager
-    let mut hotkey_manager = HotkeyManager::new().unwrap_or_else(|e| {
+    let hotkey_manager = Arc::new(Mutex::new(HotkeyManager::new().unwrap_or_else(|e| {
         eprintln!("Помилка ініціалізації гарячих клавіш: {}", e);
-        // Continue without hotkeys
         std::process::exit(1);
-    });
+    })));
 
     // Register hotkeys from config
     {
         let cfg = config.lock().unwrap();
-        if let Err(e) = hotkey_manager.register_from_config(&cfg) {
+        let mut hk = hotkey_manager.lock().unwrap();
+        if let Err(e) = hk.register_from_config(&cfg) {
             eprintln!("Помилка реєстрації гарячих клавіш: {}", e);
         }
     }
+
+    // Listen for hotkey reload signals (when settings change)
+    let hotkey_manager_for_reload = hotkey_manager.clone();
+    let config_for_reload = config.clone();
+    std::thread::spawn(move || {
+        while reload_hotkeys_rx.recv_blocking().is_ok() {
+            let cfg = config_for_reload.lock().unwrap();
+            let mut hk = hotkey_manager_for_reload.lock().unwrap();
+            if let Err(e) = hk.register_from_config(&cfg) {
+                eprintln!("Помилка перереєстрації гарячих клавіш: {}", e);
+            }
+        }
+    });
 
     // Listen for hotkey events
     let toggle_recording_tx_for_hotkey = toggle_recording_tx.clone();
@@ -137,6 +151,7 @@ fn main() -> Result<()> {
     let whisper_for_app = whisper.clone();
     let config_for_app = config.clone();
     let history_for_app = history.clone();
+    let reload_hotkeys_tx_for_app = reload_hotkeys_tx.clone();
     app.connect_activate(move |app| {
         ui::build_ui(
             app,
@@ -147,6 +162,7 @@ fn main() -> Result<()> {
             open_history_rx.clone(),
             open_settings_rx.clone(),
             toggle_recording_rx.clone(),
+            reload_hotkeys_tx_for_app.clone(),
         );
     });
 

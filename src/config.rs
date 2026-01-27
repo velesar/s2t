@@ -114,6 +114,9 @@ mod tests {
             language: "en".to_string(),
             history_max_entries: 500,
             history_max_age_days: 90,
+            auto_copy: false,
+            hotkey_enabled: false,
+            hotkey: "Control+Shift+Space".to_string(),
         };
 
         let toml_str = toml::to_string(&config).unwrap();

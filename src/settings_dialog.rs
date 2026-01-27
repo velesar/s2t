@@ -6,7 +6,11 @@ use gtk4::{
 };
 use std::sync::{Arc, Mutex};
 
-pub fn show_settings_dialog(parent: &impl IsA<Window>, config: Arc<Mutex<Config>>) {
+pub fn show_settings_dialog(
+    parent: &impl IsA<Window>,
+    config: Arc<Mutex<Config>>,
+    reload_hotkeys_tx: async_channel::Sender<()>,
+) {
     let dialog = Window::builder()
         .title("Налаштування")
         .modal(true)
@@ -193,6 +197,7 @@ pub fn show_settings_dialog(parent: &impl IsA<Window>, config: Arc<Mutex<Config>
     let hotkey_entry_clone = hotkey_entry.clone();
     let max_entries_spin_clone = max_entries_spin.clone();
     let max_age_spin_clone = max_age_spin.clone();
+    let reload_hotkeys_tx_clone = reload_hotkeys_tx.clone();
 
     save_button.connect_clicked(move |_| {
         // Get language from combo
@@ -235,6 +240,9 @@ pub fn show_settings_dialog(parent: &impl IsA<Window>, config: Arc<Mutex<Config>
         if let Err(e) = save_config(&cfg) {
             eprintln!("Помилка збереження конфігу: {}", e);
         } else {
+            // Signal hotkey reload
+            let _ = reload_hotkeys_tx_clone.try_send(());
+
             // Close dialog on success
             if let Some(dialog) = dialog_weak.upgrade() {
                 dialog.close();
