@@ -1,8 +1,9 @@
 use crate::history::{save_history, History};
+use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use gtk4::prelude::*;
 use gtk4::{
-    glib, Align, Box as GtkBox, Button, Entry, Label, ListBox, ListBoxRow, Orientation,
-    ScrolledWindow, SelectionMode, Window,
+    glib, Align, Box as GtkBox, Button, Entry, FileChooserNative, Label, ListBox, ListBoxRow,
+    Orientation, ScrolledWindow, SelectionMode, Window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,16 +20,45 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
 
     let main_box = GtkBox::new(Orientation::Vertical, 0);
 
+    // Filter section
+    let filter_box = GtkBox::new(Orientation::Vertical, 6);
+    filter_box.set_margin_top(12);
+    filter_box.set_margin_bottom(6);
+    filter_box.set_margin_start(12);
+    filter_box.set_margin_end(12);
+
     // Search entry
     let search_entry = Entry::builder()
         .placeholder_text("Пошук...")
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
         .build();
+    filter_box.append(&search_entry);
 
-    main_box.append(&search_entry);
+    // Date filter row
+    let date_filter_row = GtkBox::new(Orientation::Horizontal, 8);
+    date_filter_row.set_margin_top(6);
+
+    let date_from_label = Label::new(Some("Від:"));
+    date_filter_row.append(&date_from_label);
+
+    let date_from_entry = Entry::builder()
+        .placeholder_text("YYYY-MM-DD")
+        .tooltip_text("Дата початку (YYYY-MM-DD) або порожньо")
+        .build();
+    date_filter_row.append(&date_from_entry);
+
+    let date_to_label = Label::new(Some("До:"));
+    date_filter_row.append(&date_to_label);
+
+    let date_to_entry = Entry::builder()
+        .placeholder_text("YYYY-MM-DD")
+        .tooltip_text("Дата кінця (YYYY-MM-DD) або порожньо")
+        .build();
+    date_filter_row.append(&date_to_entry);
+
+    date_filter_row.set_hexpand(true);
+    filter_box.append(&date_filter_row);
+
+    main_box.append(&filter_box);
 
     // Scrolled window with list
     let scrolled = ScrolledWindow::builder()
@@ -47,23 +77,72 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
     placeholder.add_css_class("dim-label");
     list_box.set_placeholder(Some(&placeholder));
 
-    // Shared state for search filtering
+    // Shared state for filtering
     let search_query: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
+    let date_from: Rc<RefCell<Option<DateTime<Utc>>>> = Rc::new(RefCell::new(None));
+    let date_to: Rc<RefCell<Option<DateTime<Utc>>>> = Rc::new(RefCell::new(None));
 
     // Populate list
-    populate_list(&list_box, history.clone(), &search_query);
+    populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
 
     scrolled.set_child(Some(&list_box));
     main_box.append(&scrolled);
 
-    // Search filtering
+    // Search and date filtering
     let list_box_for_search = list_box.clone();
     let history_for_search = history.clone();
     let search_query_for_search = search_query.clone();
-    search_entry.connect_changed(move |entry| {
-        let query = entry.text().to_string();
-        *search_query_for_search.borrow_mut() = query;
-        populate_list(&list_box_for_search, history_for_search.clone(), &search_query_for_search);
+    let date_from_for_search = date_from.clone();
+    let date_to_for_search = date_to.clone();
+    search_entry.connect_changed({
+        let list_box = list_box_for_search.clone();
+        let history = history_for_search.clone();
+        let search_query = search_query_for_search.clone();
+        let date_from = date_from_for_search.clone();
+        let date_to = date_to_for_search.clone();
+        move |entry| {
+            let query = entry.text().to_string();
+            *search_query.borrow_mut() = query;
+            populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+        }
+    });
+
+    // Date filtering - from
+    let list_box_for_from = list_box.clone();
+    let history_for_from = history.clone();
+    let search_query_for_from = search_query.clone();
+    let date_from_for_from = date_from.clone();
+    let date_to_for_from = date_to.clone();
+    date_from_entry.connect_changed({
+        let list_box = list_box_for_from.clone();
+        let history = history_for_from.clone();
+        let search_query = search_query_for_from.clone();
+        let date_from = date_from_for_from.clone();
+        let date_to = date_to_for_from.clone();
+        move |entry| {
+            let text = entry.text().to_string();
+            *date_from.borrow_mut() = parse_date(&text);
+            populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+        }
+    });
+
+    // Date filtering - to
+    let list_box_for_to = list_box.clone();
+    let history_for_to = history.clone();
+    let search_query_for_to = search_query.clone();
+    let date_from_for_to = date_from.clone();
+    let date_to_for_to = date_to.clone();
+    date_to_entry.connect_changed({
+        let list_box = list_box_for_to.clone();
+        let history = history_for_to.clone();
+        let search_query = search_query_for_to.clone();
+        let date_from = date_from_for_to.clone();
+        let date_to = date_to_for_to.clone();
+        move |entry| {
+            let text = entry.text().to_string();
+            *date_to.borrow_mut() = parse_date(&text);
+            populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+        }
     });
 
     // Bottom button box
@@ -73,6 +152,26 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
     button_box.set_margin_bottom(12);
     button_box.set_margin_start(12);
     button_box.set_margin_end(12);
+
+    // Export button
+    let export_button = Button::with_label("Експортувати...");
+    let dialog_weak_for_export = dialog.downgrade();
+    let history_for_export = history.clone();
+    let search_query_for_export = search_query.clone();
+    let date_from_for_export = date_from.clone();
+    let date_to_for_export = date_to.clone();
+    export_button.connect_clicked(move |_| {
+        if let Some(dialog) = dialog_weak_for_export.upgrade() {
+            export_history(
+                &dialog,
+                history_for_export.clone(),
+                &search_query_for_export,
+                &date_from_for_export,
+                &date_to_for_export,
+            );
+        }
+    });
+    button_box.append(&export_button);
 
     let close_button = Button::with_label("Закрити");
     let dialog_weak = dialog.downgrade();
@@ -89,7 +188,34 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
     dialog.present();
 }
 
-fn populate_list(list_box: &ListBox, history: Arc<Mutex<History>>, search_query: &Rc<RefCell<String>>) {
+fn parse_date(date_str: &str) -> Option<DateTime<Utc>> {
+    if date_str.trim().is_empty() {
+        return None;
+    }
+    NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d")
+        .ok()
+        .and_then(|date| {
+            date.and_hms_opt(0, 0, 0)
+                .map(|dt| {
+                    // Convert local naive datetime to UTC
+                    // Use Local.from_local_datetime which returns LocalResult
+                    match Local.from_local_datetime(&dt) {
+                        chrono::LocalResult::Single(dt) => Some(dt.with_timezone(&Utc)),
+                        chrono::LocalResult::Ambiguous(dt, _) => Some(dt.with_timezone(&Utc)),
+                        chrono::LocalResult::None => None,
+                    }
+                })
+                .flatten()
+        })
+}
+
+fn populate_list(
+    list_box: &ListBox,
+    history: Arc<Mutex<History>>,
+    search_query: &Rc<RefCell<String>>,
+    date_from: &Rc<RefCell<Option<DateTime<Utc>>>>,
+    date_to: &Rc<RefCell<Option<DateTime<Utc>>>>,
+) {
     // Remove all existing rows
     while let Some(child) = list_box.first_child() {
         list_box.remove(&child);
@@ -97,11 +223,23 @@ fn populate_list(list_box: &ListBox, history: Arc<Mutex<History>>, search_query:
 
     let history_guard = history.lock().unwrap();
     let query = search_query.borrow();
+    let from_date = date_from.borrow();
+    let to_date = date_to.borrow();
 
+    // First filter by date
+    let date_filtered: Vec<_> = history_guard
+        .filter_by_date_range(*from_date, *to_date)
+        .into_iter()
+        .collect();
+
+    // Then filter by search query
     let entries: Vec<_> = if query.is_empty() {
-        history_guard.entries.iter().collect()
+        date_filtered
     } else {
-        history_guard.search(&query)
+        date_filtered
+            .into_iter()
+            .filter(|e| e.text.to_lowercase().contains(&query.to_lowercase()))
+            .collect()
     };
 
     for entry in entries {
@@ -117,6 +255,69 @@ fn populate_list(list_box: &ListBox, history: Arc<Mutex<History>>, search_query:
         );
         list_box.append(&row);
     }
+}
+
+fn export_history(
+    parent: &Window,
+    history: Arc<Mutex<History>>,
+    search_query: &Rc<RefCell<String>>,
+    date_from: &Rc<RefCell<Option<DateTime<Utc>>>>,
+    date_to: &Rc<RefCell<Option<DateTime<Utc>>>>,
+) {
+    let dialog = FileChooserNative::builder()
+        .title("Експортувати історію")
+        .action(gtk4::FileChooserAction::Save)
+        .modal(true)
+        .transient_for(parent)
+        .build();
+
+    // Set default filename
+    let default_name = format!(
+        "voice-dictation-history-{}.txt",
+        chrono::Local::now().format("%Y-%m-%d")
+    );
+    dialog.set_current_name(&default_name);
+
+    let history_for_export = history.clone();
+    let search_query_for_export = search_query.clone();
+    let date_from_for_export = date_from.clone();
+    let date_to_for_export = date_to.clone();
+
+    dialog.connect_response(move |dialog, response| {
+        if response == gtk4::ResponseType::Accept {
+            if let Some(file) = dialog.file() {
+                if let Some(path) = file.path() {
+                    let history_guard = history_for_export.lock().unwrap();
+                    let query = search_query_for_export.borrow();
+                    let from_date = date_from_for_export.borrow();
+                    let to_date = date_to_for_export.borrow();
+
+                    // Get filtered entries
+                    let date_filtered: Vec<_> = history_guard
+                        .filter_by_date_range(*from_date, *to_date)
+                        .into_iter()
+                        .collect();
+
+                    let entries: Vec<_> = if query.is_empty() {
+                        date_filtered
+                    } else {
+                        date_filtered
+                            .into_iter()
+                            .filter(|e| e.text.to_lowercase().contains(&query.to_lowercase()))
+                            .collect()
+                    };
+
+                    if let Err(e) = history_guard.export_to_text(&entries, &path) {
+                        eprintln!("Помилка експорту: {}", e);
+                        // TODO: Show error dialog
+                    }
+                }
+            }
+        }
+        dialog.destroy();
+    });
+
+    dialog.show();
 }
 
 fn create_history_row(
@@ -199,8 +400,11 @@ fn create_history_row(
             let list_box = list_box_for_delete.clone();
             let history = history_for_delete.clone();
             let search_query = search_query_for_delete.clone();
+            // We need to get date filters from somewhere - for now, use None
+            let date_from: Rc<RefCell<Option<DateTime<Utc>>>> = Rc::new(RefCell::new(None));
+            let date_to: Rc<RefCell<Option<DateTime<Utc>>>> = Rc::new(RefCell::new(None));
             move || {
-                populate_list(&list_box, history, &search_query);
+                populate_list(&list_box, history, &search_query, &date_from, &date_to);
             }
         });
     });

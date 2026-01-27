@@ -3,11 +3,10 @@ use crate::config::Config;
 use crate::history::{save_history, History, HistoryEntry};
 use crate::history_dialog::show_history_dialog;
 use crate::model_dialog::show_model_dialog;
-use crate::paste::paste_from_clipboard;
 use crate::settings_dialog::show_settings_dialog;
 use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
-use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, LevelBar, Orientation, Spinner};
+use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, LevelBar, Orientation, Spinner, TextView};
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -79,11 +78,16 @@ pub fn build_ui(
     level_bar.set_visible(false);
     level_bar.set_size_request(200, -1);
 
-    let result_label = Label::new(Some(""));
-    result_label.set_wrap(true);
-    result_label.set_selectable(true);
-    result_label.set_vexpand(true);
-    result_label.set_valign(gtk4::Align::Start);
+    // Use TextView for editable result display
+    let result_text_view = gtk4::TextView::new();
+    result_text_view.set_wrap_mode(gtk4::WrapMode::Word);
+    result_text_view.set_editable(true);
+    result_text_view.set_cursor_visible(true);
+    result_text_view.set_vexpand(true);
+    
+    let result_scrolled = gtk4::ScrolledWindow::new();
+    result_scrolled.set_min_content_height(100);
+    result_scrolled.set_child(Some(&result_text_view));
 
     let record_button = Button::with_label("Почати запис");
     record_button.add_css_class("suggested-action");
@@ -101,7 +105,7 @@ pub fn build_ui(
     setup_record_button(
         &record_button,
         &status_label,
-        &result_label,
+        &result_text_view,
         &timer_label,
         &level_bar,
         &spinner,
@@ -114,7 +118,7 @@ pub fn build_ui(
     );
 
     let copy_button = Button::with_label("Копіювати");
-    setup_copy_button(&copy_button, &result_label);
+    setup_copy_button(&copy_button, &result_text_view);
 
     let models_button = Button::with_label("Моделі");
     let window_weak = window.downgrade();
@@ -156,7 +160,7 @@ pub fn build_ui(
     main_box.append(&status_box);
     main_box.append(&timer_label);
     main_box.append(&level_bar);
-    main_box.append(&result_label);
+    main_box.append(&result_scrolled);
     main_box.append(&button_box);
 
     window.set_child(Some(&main_box));
@@ -204,7 +208,7 @@ pub fn build_ui(
     // Listen for hotkey toggle recording signal
     let record_button_for_hotkey = record_button.clone();
     let status_label_for_hotkey = status_label.clone();
-    let result_label_for_hotkey = result_label.clone();
+    let result_text_view_for_hotkey = result_text_view.clone();
     let timer_label_for_hotkey = timer_label.clone();
     let level_bar_for_hotkey = level_bar.clone();
     let spinner_for_hotkey = spinner.clone();
@@ -221,7 +225,7 @@ pub fn build_ui(
                     handle_start_recording(
                         &record_button_for_hotkey,
                         &status_label_for_hotkey,
-                        &result_label_for_hotkey,
+                        &result_text_view_for_hotkey,
                         &timer_label_for_hotkey,
                         &level_bar_for_hotkey,
                         &recorder_for_hotkey,
@@ -234,7 +238,7 @@ pub fn build_ui(
                     handle_stop_recording(
                         &record_button_for_hotkey,
                         &status_label_for_hotkey,
-                        &result_label_for_hotkey,
+                        &result_text_view_for_hotkey,
                         &timer_label_for_hotkey,
                         &level_bar_for_hotkey,
                         &spinner_for_hotkey,
@@ -259,7 +263,7 @@ pub fn build_ui(
 fn setup_record_button(
     button: &Button,
     status_label: &Label,
-    result_label: &Label,
+    result_text_view: &TextView,
     timer_label: &Label,
     level_bar: &LevelBar,
     spinner: &Spinner,
@@ -272,7 +276,7 @@ fn setup_record_button(
 ) {
     let recorder_clone = recorder.clone();
     let status_label_clone = status_label.clone();
-    let result_label_clone = result_label.clone();
+    let result_text_view_clone = result_text_view.clone();
     let timer_label_clone = timer_label.clone();
     let level_bar_clone = level_bar.clone();
     let spinner_clone = spinner.clone();
@@ -286,7 +290,7 @@ fn setup_record_button(
                 handle_start_recording(
                     &button_clone,
                     &status_label_clone,
-                    &result_label_clone,
+                    &result_text_view_clone,
                     &timer_label_clone,
                     &level_bar_clone,
                     &recorder_clone,
@@ -299,7 +303,7 @@ fn setup_record_button(
                 handle_stop_recording(
                     &button_clone,
                     &status_label_clone,
-                    &result_label_clone,
+                    &result_text_view_clone,
                     &timer_label_clone,
                     &level_bar_clone,
                     &spinner_clone,
@@ -321,7 +325,7 @@ fn setup_record_button(
 fn handle_start_recording(
     button: &Button,
     status_label: &Label,
-    result_label: &Label,
+    result_text_view: &TextView,
     timer_label: &Label,
     level_bar: &LevelBar,
     recorder: &Arc<AudioRecorder>,
@@ -346,7 +350,8 @@ fn handle_start_recording(
             button.remove_css_class("suggested-action");
             button.add_css_class("destructive-action");
             status_label.set_text("Запис...");
-            result_label.set_text("");
+            let buffer = result_text_view.buffer();
+            buffer.set_text("");
 
             // Show timer and level bar
             timer_label.set_text("00:00");
@@ -393,7 +398,7 @@ fn handle_start_recording(
 fn handle_stop_recording(
     button: &Button,
     status_label: &Label,
-    result_label: &Label,
+    result_text_view: &TextView,
     timer_label: &Label,
     level_bar: &LevelBar,
     spinner: &Spinner,
@@ -434,7 +439,7 @@ fn handle_stop_recording(
     let history = history.clone();
     let config_for_auto_copy = config.clone();
     let status_label = status_label.clone();
-    let result_label = result_label.clone();
+    let result_text_view = result_text_view.clone();
     let button = button.clone();
     let spinner = spinner.clone();
     let app_state = app_state.clone();
@@ -474,9 +479,10 @@ fn handle_stop_recording(
                         status_label.set_text("Не вдалося розпізнати мову");
                     } else {
                         status_label.set_text("Готово!");
-                        result_label.set_text(&text);
+                        let buffer = result_text_view.buffer();
+                        buffer.set_text(&text);
 
-                        // Get config values
+                        // Get config values for auto-copy/auto-paste
                         let (auto_copy_enabled, auto_paste_enabled) = {
                             let cfg = config_for_auto_copy.lock().unwrap();
                             (cfg.auto_copy, cfg.auto_paste)
@@ -484,6 +490,8 @@ fn handle_stop_recording(
 
                         // Copy to clipboard if auto-copy or auto-paste is enabled
                         // (auto-paste requires clipboard to work)
+                        // Note: This copies the original transcription text immediately
+                        // User can edit the text in the TextView and manually copy if needed
                         if auto_copy_enabled || auto_paste_enabled {
                             copy_to_clipboard(&text);
                         }
@@ -492,13 +500,14 @@ fn handle_stop_recording(
                         if auto_paste_enabled {
                             // Small delay to ensure clipboard is ready
                             std::thread::sleep(std::time::Duration::from_millis(100));
-                            if let Err(e) = paste_from_clipboard() {
+                            if let Err(e) = crate::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
                                 status_label.set_text(&format!("Готово! (помилка вставки: {})", e));
                             }
                         }
 
-                        // Save to history
+                        // Save to history - save original transcription text
+                        // User can edit in the UI and copy manually if they want the edited version
                         let entry = HistoryEntry::new(
                             text,
                             duration_secs,
@@ -536,11 +545,14 @@ fn copy_to_clipboard(text: &str) {
     }
 }
 
-fn setup_copy_button(button: &Button, result_label: &Label) {
-    let result_label_clone = result_label.clone();
+fn setup_copy_button(button: &Button, result_text_view: &TextView) {
+    let result_text_view_clone = result_text_view.clone();
 
     button.connect_clicked(move |_| {
-        let text = result_label_clone.text();
+        let buffer = result_text_view_clone.buffer();
+        let start = buffer.start_iter();
+        let end = buffer.end_iter();
+        let text = buffer.text(&start, &end, false).to_string();
         copy_to_clipboard(&text);
     });
 }

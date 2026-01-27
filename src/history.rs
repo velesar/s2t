@@ -85,6 +85,61 @@ impl History {
         let cutoff = Utc::now() - Duration::days(max_age_days);
         self.entries.retain(|e| e.timestamp > cutoff);
     }
+
+    /// Filter entries by date range (inclusive)
+    pub fn filter_by_date_range(&self, start_date: Option<DateTime<Utc>>, end_date: Option<DateTime<Utc>>) -> Vec<&HistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| {
+                if let Some(start) = start_date {
+                    if e.timestamp < start {
+                        return false;
+                    }
+                }
+                if let Some(end) = end_date {
+                    if e.timestamp > end {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect()
+    }
+
+    /// Export filtered entries to text file
+    pub fn export_to_text(&self, entries: &[&HistoryEntry], path: &PathBuf) -> Result<()> {
+        use std::io::Write;
+        
+        let mut file = fs::File::create(path)
+            .with_context(|| format!("Не вдалося створити файл: {}", path.display()))?;
+
+        writeln!(file, "# Історія диктовок")
+            .context("Не вдалося записати заголовок")?;
+        writeln!(file, "# Експортовано: {}", Utc::now().format("%Y-%m-%d %H:%M:%S"))
+            .context("Не вдалося записати дату експорту")?;
+        writeln!(file, "")
+            .context("Не вдалося записати порожній рядок")?;
+
+        for entry in entries {
+            let local_time = entry.timestamp.with_timezone(&chrono::Local);
+            writeln!(file, "---")
+                .context("Не вдалося записати роздільник")?;
+            writeln!(file, "Дата: {}", local_time.format("%Y-%m-%d %H:%M:%S"))
+                .context("Не вдалося записати дату")?;
+            writeln!(file, "Тривалість: {}", entry.formatted_duration())
+                .context("Не вдалося записати тривалість")?;
+            writeln!(file, "Мова: {}", entry.language)
+                .context("Не вдалося записати мову")?;
+            writeln!(file, "")
+                .context("Не вдалося записати порожній рядок")?;
+            writeln!(file, "{}", entry.text)
+                .context("Не вдалося записати текст")?;
+            writeln!(file, "")
+                .context("Не вдалося записати порожній рядок")?;
+        }
+
+        Ok(())
+    }
 }
 
 pub fn history_path() -> PathBuf {
