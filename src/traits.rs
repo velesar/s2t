@@ -113,6 +113,34 @@ pub trait ConfigProvider: Send + Sync {
     fn recording_mode(&self) -> String;
 }
 
+/// UI state update abstraction.
+///
+/// Stable interface for recording handlers to update UI state
+/// without directly accessing widget fields. This decouples handlers
+/// from concrete GTK widgets and enables testing with mock implementations.
+pub trait UIStateUpdater {
+    /// Set the status label text.
+    fn set_status(&self, text: &str);
+
+    /// Transition UI to recording state.
+    fn set_recording_state(&self, status_text: &str);
+
+    /// Transition UI to processing state.
+    fn set_processing_state(&self, status_text: &str);
+
+    /// Transition UI to idle state.
+    fn set_idle_state(&self);
+
+    /// Update the timer display with elapsed seconds.
+    fn update_timer_display(&self, secs: u64);
+
+    /// Get the current result text.
+    fn get_result_text(&self) -> String;
+
+    /// Set the result text content.
+    fn set_result_text(&self, text: &str);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

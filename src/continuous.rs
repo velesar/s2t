@@ -1,5 +1,6 @@
 use crate::audio::AudioRecorder;
 use crate::ring_buffer::RingBuffer;
+use crate::types::AudioSegment;
 use crate::vad::VoiceActivityDetector;
 use anyhow::Result;
 use async_channel::{Receiver, Sender};
@@ -8,17 +9,8 @@ use std::time::{Duration, Instant};
 
 const SAMPLE_RATE: u32 = 16000;
 
-/// Segment of audio ready for transcription
-#[derive(Debug, Clone)]
-pub struct AudioSegment {
-    pub samples: Vec<f32>,
-    pub start_time: Instant,
-    pub end_time: Instant,
-    pub segment_id: usize,
-}
-
 /// Continuous recorder with automatic segmentation
-pub struct ContinuousRecorder {
+pub(crate) struct ContinuousRecorder {
     recorder: Arc<AudioRecorder>,
     ring_buffer: Arc<RingBuffer>,
     segment_tx: Arc<Mutex<Option<Sender<AudioSegment>>>>,

@@ -4,7 +4,7 @@
 //! automatic segmentation, parallel transcription, and ordered results.
 
 use crate::context::AppContext;
-use crate::continuous::AudioSegment;
+use crate::types::AudioSegment;
 use crate::history::{save_history, HistoryEntry};
 use gtk4::prelude::*;
 use gtk4::{glib, Label};
@@ -34,8 +34,7 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuo
     // Check if model is loaded
     if !ctx.is_model_loaded() {
         ui.base
-            .status_label
-            .set_text("Модель не завантажено. Натисніть 'Моделі'.");
+            .set_status("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -132,8 +131,7 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuo
                     // Update status to show segment being processed
                     ui_for_segments
                         .base
-                        .status_label
-                        .set_text(&format!("Сегмент {}...", segment_id));
+                        .set_status(&format!("Сегмент {}...", segment_id));
 
                     // Launch transcription WITHOUT waiting for result (parallel processing)
                     std::thread::spawn(move || {
@@ -194,13 +192,12 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuo
                     // Update status with progress
                     ui_for_results
                         .base
-                        .status_label
-                        .set_text(&format!("Транскрибовано: {} сегментів", completed_count));
+                        .set_status(&format!("Транскрибовано: {} сегментів", completed_count));
                 }
             });
         }
         Err(e) => {
-            ui.base.status_label.set_text(&format!("Помилка: {}", e));
+            ui.base.set_status(&format!("Помилка: {}", e));
         }
     }
 }
@@ -224,8 +221,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuou
     });
 
     ui.base
-        .status_label
-        .set_text("Завершення обробки сегментів...");
+        .set_status("Завершення обробки сегментів...");
     ui.base.timer_label.set_visible(false);
     ui.hide_recording_ui();
     // Keep segment_row visible to show progress during processing
@@ -275,8 +271,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuou
 
             // Update status with progress
             ui.base
-                .status_label
-                .set_text(&format!("Обробка сегментів: {}/{}...", completed, sent));
+                .set_status(&format!("Обробка сегментів: {}/{}...", completed, sent));
 
             glib::timeout_future(poll_interval).await;
         }
@@ -293,10 +288,9 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuou
                 let sent = SEGMENTS_SENT.with(|c| c.get());
                 let completed = SEGMENTS_COMPLETED.with(|c| c.get());
                 ui.base
-                    .status_label
-                    .set_text(&format!("Скасовано (оброблено {}/{})", completed, sent));
+                    .set_status(&format!("Скасовано (оброблено {}/{})", completed, sent));
             } else {
-                ui.base.status_label.set_text("Готово!");
+                ui.base.set_status("Готово!");
             }
 
             // Save to history (even if cancelled - save what we have)
@@ -308,10 +302,9 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuou
             }
         } else if was_cancelled {
             ui.base
-                .status_label
-                .set_text("Скасовано (нічого не оброблено)");
+                .set_status("Скасовано (нічого не оброблено)");
         } else {
-            ui.base.status_label.set_text("Не вдалося розпізнати мову");
+            ui.base.set_status("Не вдалося розпізнати мову");
         }
 
         // Transition back to Idle state

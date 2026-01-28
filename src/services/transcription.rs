@@ -27,9 +27,6 @@ impl TranscriptionService {
     }
 
     /// Load or replace the Whisper model.
-    ///
-    /// Intended for use by the model management dialog (migration pending).
-    #[allow(dead_code)]
     pub fn load_model(&mut self, path: &Path) -> Result<()> {
         let path_str = path.to_string_lossy();
         let whisper = WhisperSTT::new(&path_str)

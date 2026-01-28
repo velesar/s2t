@@ -36,7 +36,6 @@ use services::TranscriptionService;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tray::{DictationTray, TrayAction};
-use whisper::WhisperSTT;
 
 const APP_ID: &str = "ua.voice.dictation";
 
@@ -156,28 +155,9 @@ fn main() -> Result<()> {
         .expect("Failed to create AppContext"),
     );
 
-    // Legacy whisper Arc for tray compatibility (tray still uses the old API)
-    // TODO: Migrate tray to use AppContext directly
-    let whisper_for_tray: Arc<Mutex<Option<WhisperSTT>>> = {
-        let ts = ctx.transcription.lock().unwrap();
-        if ts.is_loaded() {
-            // Re-load model for tray (tray needs its own mutable reference)
-            let cfg = config.lock().unwrap();
-            if let Some(model_path) = find_model_path(&cfg) {
-                match WhisperSTT::new(&model_path) {
-                    Ok(w) => Arc::new(Mutex::new(Some(w))),
-                    Err(_) => Arc::new(Mutex::new(None)),
-                }
-            } else {
-                Arc::new(Mutex::new(None))
-            }
-        } else {
-            Arc::new(Mutex::new(None))
-        }
-    };
-
     let (tray_tx, tray_rx) = async_channel::unbounded();
-    let tray_handle = DictationTray::spawn_service(tray_tx, config.clone(), whisper_for_tray);
+    let tray_handle =
+        DictationTray::spawn_service(tray_tx, config.clone(), ctx.transcription.clone());
 
     let app = Application::builder().application_id(APP_ID).build();
 

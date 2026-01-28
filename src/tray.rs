@@ -1,6 +1,6 @@
 use crate::config::{save_config, Config};
 use crate::models::{get_model_path, list_downloaded_models};
-use crate::whisper::WhisperSTT;
+use crate::services::TranscriptionService;
 use async_channel::Sender;
 use ksni::{
     menu::{StandardItem, SubMenu},
@@ -20,28 +20,28 @@ pub enum TrayAction {
 pub struct DictationTray {
     tx: Sender<TrayAction>,
     config: Arc<Mutex<Config>>,
-    whisper: Arc<Mutex<Option<WhisperSTT>>>,
+    transcription: Arc<Mutex<TranscriptionService>>,
 }
 
 impl DictationTray {
     pub fn new(
         tx: Sender<TrayAction>,
         config: Arc<Mutex<Config>>,
-        whisper: Arc<Mutex<Option<WhisperSTT>>>,
+        transcription: Arc<Mutex<TranscriptionService>>,
     ) -> Self {
         Self {
             tx,
             config,
-            whisper,
+            transcription,
         }
     }
 
     pub fn spawn_service(
         tx: Sender<TrayAction>,
         config: Arc<Mutex<Config>>,
-        whisper: Arc<Mutex<Option<WhisperSTT>>>,
+        transcription: Arc<Mutex<TranscriptionService>>,
     ) -> ksni::Handle<Self> {
-        let tray_service = TrayService::new(Self::new(tx, config, whisper));
+        let tray_service = TrayService::new(Self::new(tx, config, transcription));
         let handle = tray_service.handle();
         tray_service.spawn();
         handle
@@ -58,15 +58,11 @@ impl DictationTray {
         }
 
         let model_path = get_model_path(filename);
-        match WhisperSTT::new(model_path.to_str().unwrap_or_default()) {
-            Ok(new_whisper) => {
-                let mut w = self.whisper.lock().unwrap();
-                *w = Some(new_whisper);
-                println!("Модель завантажено: {}", filename);
-            }
-            Err(e) => {
-                eprintln!("Помилка завантаження моделі: {}", e);
-            }
+        let mut ts = self.transcription.lock().unwrap();
+        if let Err(e) = ts.load_model(&model_path) {
+            eprintln!("Помилка завантаження моделі: {}", e);
+        } else {
+            println!("Модель завантажено: {}", filename);
         }
     }
 }

@@ -1,7 +1,9 @@
 # Architecture Overview and Design Findings
 
 **Project:** Voice Dictation (s2t)
-**Audit Date:** 2026-01-28
+**Initial Audit Date:** 2026-01-28
+**Last Updated:** 2026-01-28 (post-Phase 2-5 refactor)
+**Methodology:** Architecture Fitness Functions (see `docs/architecture-fitness-methodology.md`)
 
 ---
 
@@ -13,21 +15,22 @@
 4. [Data Flow](#data-flow)
 5. [Dependency Analysis](#dependency-analysis)
 6. [Layer Architecture](#layer-architecture)
-7. [Hotspot Analysis](#hotspot-analysis)
-8. [Design Strengths](#design-strengths)
-9. [Design Weaknesses](#design-weaknesses)
-10. [Architectural Recommendations](#architectural-recommendations)
+7. [Architecture Fitness Assessment](#architecture-fitness-assessment)
+8. [Hotspot Analysis](#hotspot-analysis)
+9. [Design Strengths](#design-strengths)
+10. [Design Weaknesses](#design-weaknesses)
+11. [Architectural Recommendations](#architectural-recommendations)
 
 ---
 
 ## System Overview
 
-Voice Dictation is a **desktop GUI application** for offline speech-to-text transcription on Linux. It operates as a system tray application with three recording modes:
+Voice Dictation is a **desktop GUI application** for offline speech-to-text transcription on Linux using Whisper.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Voice Dictation                             │
-│                                                                  │
+│                      Voice Dictation                            │
+│                                                                 │
 │  ┌──────────┐    ┌──────────┐    ┌──────────────────┐          │
 │  │ System   │    │   GTK4   │    │    Whisper.cpp   │          │
 │  │   Tray   │◄──►│   GUI    │◄──►│  Speech Engine   │          │
@@ -38,7 +41,7 @@ Voice Dictation is a **desktop GUI application** for offline speech-to-text tran
 │  │  Global  │    │  Audio   │    │     History      │          │
 │  │ Hotkeys  │    │ Pipeline │    │     Storage      │          │
 │  └──────────┘    └──────────┘    └──────────────────┘          │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -49,120 +52,142 @@ Voice Dictation is a **desktop GUI application** for offline speech-to-text tran
 | **Type** | Desktop GUI Application |
 | **Platform** | Linux (Fedora optimized) |
 | **Connectivity** | Fully offline capable |
-| **State Management** | Shared state via Arc<Mutex<T>> |
+| **State Management** | Shared state via `Arc<Mutex<T>>` |
 | **Concurrency** | Multi-threaded with async channels |
 | **Distribution** | Single binary + Whisper models |
+| **Codebase Size** | 36 files, 7,086 LOC, 788 symbols |
 
 ---
 
 ## Architecture Pattern
 
-### Primary Pattern: Component-Based GUI Application
+### Primary Pattern: Service-Oriented GTK Application with AppContext
 
-The application follows a **component-based architecture** typical of GTK applications, with shared state managed through thread-safe smart pointers.
+The application has evolved from a flat component-based architecture to a **service-oriented** pattern centered on `AppContext` — a dependency injection container that bundles all services and shared state.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         main.rs                                  │
-│                    (Application Orchestrator)                    │
-│                                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │   Config    │  │   History   │  │   Whisper Model         │ │
-│  │ Arc<Mutex>  │  │ Arc<Mutex>  │  │   Arc<Mutex<Option>>    │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
-│         │               │                     │                 │
-│         └───────────────┼─────────────────────┘                 │
-│                         │                                       │
-│                         ▼                                       │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                      UI Layer                                ││
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   ││
-│  │  │ Main UI  │  │ History  │  │  Model   │  │ Settings │   ││
-│  │  │ (ui.rs)  │  │  Dialog  │  │  Dialog  │  │  Dialog  │   ││
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘   ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                           main.rs                                   │
+│                      (Composition Root)                             │
+│                                                                     │
+│  Creates: Config, History, TranscriptionService, DiarizationEngine │
+│                              │                                      │
+│                              ▼                                      │
+│                       ┌─────────────┐                               │
+│                       │ AppContext   │                               │
+│                       │ (DI Container)│                              │
+│                       └──────┬──────┘                               │
+│               ┌──────────────┼──────────────┐                       │
+│               ▼              ▼              ▼                       │
+│  ┌─────────────────┐  ┌──────────┐  ┌──────────────┐              │
+│  │  AudioService   │  │ Transcr. │  │  UIChannels  │              │
+│  │ (Mic/Cont/Conf) │  │ Service  │  │ (async msgs) │              │
+│  └─────────────────┘  └──────────┘  └──────────────┘              │
+│                              │                                      │
+│                              ▼                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    Presentation Layer                         │  │
+│  │  ┌────────┐  ┌─────────┐  ┌─────────┐  ┌──────────┐        │  │
+│  │  │ ui/    │  │dialogs/ │  │ tray.rs │  │hotkeys.rs│        │  │
+│  │  │mod.rs  │  │history  │  │         │  │          │        │  │
+│  │  │state   │  │model    │  │         │  │          │        │  │
+│  │  │record  │  │settings │  │         │  │          │        │  │
+│  │  │contin. │  │         │  │         │  │          │        │  │
+│  │  │confer. │  │         │  │         │  │          │        │  │
+│  │  └────────┘  └─────────┘  └─────────┘  └──────────┘        │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### State Sharing Pattern
+### State Sharing Pattern (Current)
 
 ```rust
-// Shared state initialized in main.rs
-let whisper: Arc<Mutex<Option<WhisperSTT>>> = Arc::new(Mutex::new(None));
-let config: Arc<Mutex<Config>> = Arc::new(Mutex::new(load_config()?));
-let history: Arc<Mutex<History>> = Arc::new(Mutex::new(load_history()?));
+// AppContext bundles all shared state
+let ctx = Arc::new(AppContext::new(config, history, transcription, diarization)?);
 
-// Cloned and passed to UI components
-build_ui(&app, whisper.clone(), config.clone(), history.clone(), ...);
+// Passed as single dependency to UI
+app.connect_activate(move |app| {
+    ui::build_ui(app, ctx.clone());
+});
 ```
 
 ### Async Communication Pattern
 
 ```rust
-// Inter-component communication via async channels
-let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
-let (hotkey_tx, hotkey_rx) = async_channel::unbounded::<HotkeyEvent>();
-let (tray_tx, tray_rx) = async_channel::unbounded::<TrayAction>();
+// Centralized UIChannels for inter-component messaging
+pub struct UIChannels {
+    toggle_recording: (Sender<()>, Receiver<()>),
+    reload_hotkeys: (Sender<()>, Receiver<()>),
+    open_models: (Sender<()>, Receiver<()>),
+    open_history: (Sender<()>, Receiver<()>),
+    open_settings: (Sender<()>, Receiver<()>),
+}
 ```
 
 ---
 
 ## Module Structure
 
-### Module Overview (20 modules, 5,594 LOC)
+### Module Overview (36 files, 7,086 LOC, 788 symbols)
 
 ```
 src/
-├── main.rs              (266 LOC)  Application entry, orchestration
-├── ui.rs              (1,555 LOC)  Main UI, recording handlers [LARGE]
-├── model_dialog.rs      (532 LOC)  Model download/management UI
-├── history_dialog.rs    (418 LOC)  History browser UI
-├── settings_dialog.rs   (375 LOC)  Settings configuration UI
-├── models.rs            (355 LOC)  Model metadata and paths
-├── history.rs           (289 LOC)  History storage/retrieval
-├── continuous.rs        (247 LOC)  Continuous recording mode
-├── config.rs            (222 LOC)  Configuration management
-├── audio.rs             (196 LOC)  Microphone recording
-├── whisper.rs           (188 LOC)  Whisper STT integration
-├── tray.rs              (177 LOC)  System tray service
-├── hotkeys.rs           (153 LOC)  Global hotkey handling
-├── loopback.rs          (139 LOC)  System audio capture
-├── ring_buffer.rs       (113 LOC)  Circular audio buffer
-├── diarization.rs       (111 LOC)  Speaker diarization
-├── vad.rs                (85 LOC)  Voice activity detection
-├── conference_recorder.rs (76 LOC) Conference mode coordinator
-├── recordings.rs         (74 LOC)  Recording file management
-└── paste.rs              (23 LOC)  Auto-paste functionality
-```
-
-### Module Size Distribution
-
-```
-Lines of Code Distribution
-==========================
-
-ui.rs            ████████████████████████████ 1555 (27.8%)
-model_dialog.rs  █████████░░░░░░░░░░░░░░░░░░░  532 (9.5%)
-history_dialog.rs ███████░░░░░░░░░░░░░░░░░░░░  418 (7.5%)
-settings_dialog.rs ██████░░░░░░░░░░░░░░░░░░░░  375 (6.7%)
-models.rs        ██████░░░░░░░░░░░░░░░░░░░░░░  355 (6.3%)
-history.rs       █████░░░░░░░░░░░░░░░░░░░░░░░  289 (5.2%)
-main.rs          ████░░░░░░░░░░░░░░░░░░░░░░░░  266 (4.8%)
-continuous.rs    ████░░░░░░░░░░░░░░░░░░░░░░░░  247 (4.4%)
-config.rs        ███░░░░░░░░░░░░░░░░░░░░░░░░░  222 (4.0%)
-other (11 files) ████████████░░░░░░░░░░░░░░░░ 1335 (23.9%)
+├── main.rs                   (289 LOC,  67 sym)  Composition root
+├── context.rs                (127 LOC,  33 sym)  AppContext DI container
+├── traits.rs                 (179 LOC,  81 sym)  Core domain traits
+├── types.rs                  ( ~50 LOC)          Shared type aliases
+├── channels.rs               ( ~80 LOC)          UIChannels
+│
+├── ui/                       UI layer (split from monolithic ui.rs)
+│   ├── mod.rs                ( 76 sym)           Window setup, build_ui
+│   ├── state.rs              (126 sym)           UIContext, AppState
+│   ├── recording.rs                              Dictation mode handler
+│   ├── continuous.rs         ( 92 sym)           Continuous mode handler
+│   └── conference.rs                             Conference mode handler
+│
+├── dialogs/                  Dialog windows
+│   ├── history.rs            (152 sym)           History browser
+│   ├── model.rs              (156 sym)           Model download/management
+│   └── settings.rs           ( 95 sym)           Settings configuration
+│
+├── services/                 Service layer
+│   ├── mod.rs                                    Re-exports
+│   ├── audio.rs              ( 69 sym)           AudioService facade
+│   └── transcription.rs      ( 47 sym)           TranscriptionService facade
+│
+├── test_support/             Test infrastructure
+│   ├── mod.rs
+│   └── mocks.rs                                  Mock implementations
+│
+├── config.rs                 ( 59 sym)           TOML configuration
+├── history.rs                (148 sym)           History storage/retrieval
+├── audio.rs                  ( 82 sym)           Microphone recording (CPAL)
+├── whisper.rs                ( 55 sym)           Whisper STT integration
+├── continuous.rs             ( 80 sym)           Continuous recording mode
+├── conference_recorder.rs                        Conference mode coordinator
+├── diarization.rs                                Speaker diarization
+├── vad.rs                    ( 30 sym)           Voice activity detection
+├── loopback.rs                                   System audio capture (parec)
+├── ring_buffer.rs                                Circular audio buffer
+├── recordings.rs                                 Recording file management
+├── models.rs                                     Model metadata and paths
+├── tray.rs                   ( 58 sym)           System tray service (ksni)
+├── hotkeys.rs                ( 28 sym)           Global hotkey handling
+└── paste.rs                                      Auto-paste (xdotool)
 ```
 
 ### Module Categories
 
-| Category | Modules | Purpose |
-|----------|---------|---------|
-| **Core** | main.rs, config.rs | Application lifecycle, configuration |
-| **UI** | ui.rs, *_dialog.rs | User interface components |
-| **Audio** | audio.rs, continuous.rs, ring_buffer.rs, vad.rs, loopback.rs, conference_recorder.rs, recordings.rs | Audio capture and processing |
-| **Speech** | whisper.rs, diarization.rs | Speech recognition and analysis |
-| **System** | tray.rs, hotkeys.rs, paste.rs | OS integration |
-| **Data** | history.rs, models.rs | Persistence and model management |
+| Category | Modules | Symbols | Purpose |
+|----------|---------|---------|---------|
+| **Core / DI** | main.rs, context.rs, traits.rs, types.rs, channels.rs | 181 | Application lifecycle, DI, contracts |
+| **UI** | ui/*, dialogs/* | 697 | User interface, event handling |
+| **Services** | services/* | 116 | Service facades (audio, transcription) |
+| **Audio** | audio.rs, continuous.rs, conference_recorder.rs, ring_buffer.rs, vad.rs, loopback.rs, recordings.rs | ~250 | Audio capture and processing |
+| **Speech** | whisper.rs, diarization.rs | ~85 | Speech recognition |
+| **System** | tray.rs, hotkeys.rs, paste.rs | ~86 | OS integration |
+| **Data** | history.rs, config.rs, models.rs | ~260 | Persistence, model management |
+| **Test** | test_support/* | ~30 | Mock implementations |
 
 ---
 
@@ -185,29 +210,42 @@ other (11 files) ████████████░░░░░░░░░
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
+### Service Layer Data Flow (Current)
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    AppContext                          │
+│                                                       │
+│  UI Handler ──► AudioService ──► AudioRecorder        │
+│       │              │               │                │
+│       │              ▼               ▼                │
+│       │         stop_dictation()  (samples)           │
+│       │              │                                │
+│       ▼              ▼                                │
+│  TranscriptionService ──► WhisperSTT.transcribe()     │
+│       │                                               │
+│       ▼                                               │
+│  History.add(entry)                                   │
+└──────────────────────────────────────────────────────┘
+```
+
 ### Continuous Mode Data Flow
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                        Continuous Recording Mode                          │
-│                                                                           │
+│                        Continuous Recording Mode                         │
+│                                                                          │
 │  ┌─────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐  │
 │  │  Mic    │───►│ Ring Buffer │───►│     VAD     │───►│   Segment    │  │
 │  │ Input   │    │  (30 sec)   │    │ (Detection) │    │   Channel    │  │
 │  └─────────┘    └─────────────┘    └─────────────┘    └──────────────┘  │
-│                                                              │            │
-│                                          ┌───────────────────┘            │
-│                                          ▼                                │
-│                                   ┌─────────────┐                         │
-│                                   │  Whisper    │                         │
-│                                   │ (per segment)│                        │
-│                                   └─────────────┘                         │
-│                                          │                                │
-│                                          ▼                                │
-│                                   ┌─────────────┐                         │
-│                                   │   Append    │                         │
-│                                   │  to Output  │                         │
-│                                   └─────────────┘                         │
+│                                                              │           │
+│                                          ┌───────────────────┘           │
+│                                          ▼                               │
+│                                   ┌─────────────┐                        │
+│                                   │  Whisper    │                        │
+│                                   │ (per segment)│                       │
+│                                   └─────────────┘                        │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -215,18 +253,18 @@ other (11 files) ████████████░░░░░░░░░
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                        Conference Recording Mode                          │
-│                                                                           │
-│  ┌─────────┐                                      ┌──────────────────┐   │
-│  │   Mic   │─────────────────────────────────────►│                  │   │
-│  │ (User)  │                                      │   Transcription  │   │
-│  └─────────┘                                      │   + Diarization  │   │
-│                                                   │                  │   │
-│  ┌─────────┐    ┌─────────────┐                  │   Speaker 1: ... │   │
-│  │Loopback │───►│   parec     │─────────────────►│   Speaker 2: ... │   │
-│  │(System) │    │  (Capture)  │                  │                  │   │
-│  └─────────┘    └─────────────┘                  └──────────────────┘   │
-│                                                                           │
+│                        Conference Recording Mode                         │
+│                                                                          │
+│  ┌─────────┐                                      ┌──────────────────┐  │
+│  │   Mic   │─────────────────────────────────────►│                  │  │
+│  │ (User)  │                                      │   Transcription  │  │
+│  └─────────┘                                      │   + Diarization  │  │
+│                                                   │                  │  │
+│  ┌─────────┐    ┌─────────────┐                  │   Speaker 1: ... │  │
+│  │Loopback │───►│   parec     │─────────────────►│   Speaker 2: ... │  │
+│  │(System) │    │  (Capture)  │                  │                  │  │
+│  └─────────┘    └─────────────┘                  └──────────────────┘  │
+│                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -234,338 +272,432 @@ other (11 files) ████████████░░░░░░░░░
 
 ## Dependency Analysis
 
-### Module Dependency Graph
+### Module Dependency Overview (from codegraph)
+
+Due to Rust's flat crate structure (all modules are siblings in the same crate), codegraph reports 31-32 bidirectional connections per module. This is a structural artifact of the single-crate layout, not true coupling. The meaningful dependencies are the **import-level** dependencies analyzed below.
+
+### Effective Dependency Graph
 
 ```
                               main.rs
-                                 │
-        ┌────────────────────────┼────────────────────────┐
-        │                        │                        │
-        ▼                        ▼                        ▼
-    ┌───────┐              ┌─────────┐              ┌─────────┐
-    │config │◄─────────────│  ui.rs  │─────────────►│ tray.rs │
-    └───────┘              └─────────┘              └─────────┘
-        │                        │                        │
-        │    ┌───────────────────┼───────────────────┐    │
-        │    │                   │                   │    │
-        ▼    ▼                   ▼                   ▼    ▼
-    ┌───────────┐         ┌───────────┐         ┌───────────┐
-    │  audio    │         │  whisper  │         │  history  │
-    │continuous │         │diarization│         │  models   │
-    │ loopback  │         └───────────┘         └───────────┘
-    │   vad     │
-    └───────────┘
+                         (Composition Root)
+                                │
+        ┌───────────────────────┼───────────────────────────┐
+        │                       │                           │
+        ▼                       ▼                           ▼
+   ┌─────────┐           ┌───────────┐              ┌───────────┐
+   │ context  │◄──────────│  ui/mod   │              │  tray.rs  │
+   │ (DI)     │           │ (build_ui)│              │ (ksni)    │
+   └────┬─────┘           └─────┬─────┘              └─────┬─────┘
+        │                       │                          │
+   ┌────┼──────────────────────┼──────────────────────────┤
+   │    │    ┌─────────────────┼───────────────────┐      │
+   │    ▼    ▼                 ▼                   ▼      ▼
+   │  ┌───────────┐     ┌───────────┐         ┌───────────┐
+   │  │ services/ │     │ dialogs/  │         │ whisper   │
+   │  │ audio     │     │ hist/mod/ │         │ (direct!) │
+   │  │ transcr.  │     │ settings  │         └───────────┘
+   │  └─────┬─────┘     └─────┬─────┘
+   │        │                  │
+   │        ▼                  ▼
+   │  ┌───────────┐     ┌───────────┐     ┌───────────┐
+   │  │  audio    │     │  config   │◄────│  history  │
+   │  │continuous │     │           │     │           │
+   │  │ loopback  │     └───────────┘     └───────────┘
+   │  │   vad     │
+   │  └───────────┘
+   │
+   │  ┌───────────┐
+   └─►│  traits   │  (defined but not fully wired)
+      └───────────┘
 ```
 
-### High Coupling Modules
+### Instability Metrics (I = Ce / (Ca + Ce))
 
-| Module | Dependencies | Dependents | Coupling Score |
-|--------|--------------|------------|----------------|
-| main.rs | 19 | 0 | High (orchestrator) |
-| ui.rs | 19 | 1 | High (god object risk) |
-| config.rs | 0 | 16 | Low (leaf dependency) |
-| history.rs | 1 | 8 | Medium |
-| whisper.rs | 0 | 6 | Low |
+| Module | Ce (out) | Ca (in) | I | Classification |
+|--------|----------|---------|---|----------------|
+| config.rs | 0 | 16 | 0.00 | **Maximally Stable** |
+| traits.rs | 1 | 2 | 0.33 | Stable |
+| history.rs | 2 | 8 | 0.20 | Stable |
+| whisper.rs | 2 | 6 | 0.25 | Stable |
+| audio.rs | 3 | 5 | 0.38 | Moderate |
+| context.rs | 6 | 8 | 0.43 | Moderate |
+| services/audio.rs | 5 | 3 | 0.63 | Unstable |
+| services/transcription.rs | 3 | 2 | 0.60 | Unstable |
+| ui/state.rs | 5 | 7 | 0.42 | **Violation** (see below) |
+| ui/mod.rs | 12 | 1 | 0.92 | Unstable (expected) |
+| dialogs/model.rs | 8 | 1 | 0.89 | Unstable (expected) |
+| dialogs/history.rs | 7 | 1 | 0.88 | Unstable (expected) |
+| dialogs/settings.rs | 6 | 1 | 0.86 | Unstable (expected) |
+| main.rs | 14 | 0 | 1.00 | Maximally Unstable (expected) |
 
-### Dependency Matrix (Simplified)
-
-```
-             main  ui  audio whis hist conf tray hotk dial
-main.rs       -    X    X     X    X    X    X    X    X
-ui.rs         X    -    X     X    X    X    -    X    X
-audio.rs      -    -    -     -    -    X    -    -    -
-whisper.rs    -    -    -     -    -    -    -    -    -
-history.rs    -    -    -     -    -    X    -    -    -
-config.rs     -    -    -     -    -    -    -    -    -
-tray.rs       -    -    -     -    -    -    -    -    -
-hotkeys.rs    -    -    -     -    -    X    -    -    -
-*_dialog.rs   -    -    -     X    X    X    -    -    -
-```
+**Stable Dependencies Principle Violation:** `ui/state.rs` (I=0.42, 126 symbols) is depended upon by 7 modules but is itself an unstable module containing UI-specific state (`UIContext`, `AppState`). This creates fragility — changes to UI state structures ripple across the entire UI layer.
 
 ---
 
 ## Layer Architecture
 
-### Current Layer Structure
+### Current Layer Structure (Post-Refactoring)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         PRESENTATION LAYER                               │
-│                                                                          │
-│  ui.rs (1555)  history_dialog.rs (418)  model_dialog.rs (532)          │
-│  settings_dialog.rs (375)  tray.rs (177)                                │
-│                                                                          │
-│  Responsibility: User interface, event handling, display                 │
+│                         PRESENTATION LAYER                              │
+│                                                                         │
+│  ui/mod.rs (76)  ui/state.rs (126)  ui/recording.rs                    │
+│  ui/continuous.rs (92)  ui/conference.rs                                │
+│  dialogs/history.rs (152)  dialogs/model.rs (156)                      │
+│  dialogs/settings.rs (95)  tray.rs (58)                                │
+│                                                                         │
+│  Depends on: AppContext (services, config, history — concrete types)    │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                         APPLICATION LAYER                                │
-│                                                                          │
-│  main.rs (266)  config.rs (222)  hotkeys.rs (153)                       │
-│                                                                          │
-│  Responsibility: Application lifecycle, configuration, orchestration    │
+│                         APPLICATION LAYER                               │
+│                                                                         │
+│  context.rs (33)  channels.rs  services/audio.rs (69)                  │
+│  services/transcription.rs (47)  hotkeys.rs (28)                       │
+│                                                                         │
+│  Depends on: Domain concrete types (not traits)                        │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                           DOMAIN LAYER                                   │
-│                                                                          │
-│  audio.rs (196)  whisper.rs (188)  history.rs (289)                     │
-│  continuous.rs (247)  diarization.rs (111)  vad.rs (85)                 │
-│                                                                          │
-│  Responsibility: Core business logic, audio processing, transcription   │
+│                      DOMAIN / CONTRACT LAYER                            │
+│                                                                         │
+│  traits.rs (81) — AudioRecording, Transcription, VoiceDetection,       │
+│                   HistoryRepository, ConfigProvider                      │
+│  types.rs — shared type aliases                                         │
+│                                                                         │
+│  Status: DEFINED but NOT WIRED (traits exist, impls missing)           │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                       INFRASTRUCTURE LAYER                               │
-│                                                                          │
-│  models.rs (355)  loopback.rs (139)  recordings.rs (74)                 │
-│  paste.rs (23)  ring_buffer.rs (113)  conference_recorder.rs (76)       │
-│                                                                          │
-│  Responsibility: External systems, file I/O, OS integration             │
+│                       INFRASTRUCTURE LAYER                              │
+│                                                                         │
+│  audio.rs (82)  whisper.rs (55)  history.rs (148)  config.rs (59)      │
+│  continuous.rs (80)  vad.rs (30)  loopback.rs  diarization.rs          │
+│  conference_recorder.rs  ring_buffer.rs  recordings.rs                 │
+│  models.rs  paste.rs                                                    │
+│                                                                         │
+│  Status: Does NOT implement domain traits                              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Layer Violations Identified
 
-| Violation | Source | Target | Description |
-|-----------|--------|--------|-------------|
-| V1 | ui.rs | models.rs | Presentation directly accesses infrastructure |
-| V2 | ui.rs | recordings.rs | Presentation directly manages file storage |
-| V3 | main.rs | all layers | Orchestrator bypasses application layer |
+| ID | Violation | Source → Target | Severity |
+|----|-----------|-----------------|----------|
+| V1 | Traits defined but not implemented | traits.rs → (nothing) | **HIGH** |
+| V2 | Tray bypasses AppContext | main.rs:161 → WhisperSTT (duplicate) | HIGH |
+| V3 | AppContext leaks internals | context.rs `config_arc()`, `history_arc()` | MEDIUM |
+| V4 | Dialogs use concrete types | dialogs/* → Config, History directly | MEDIUM |
+| V5 | Services use concrete types | services/* → AudioRecorder directly | MEDIUM |
+| V6 | No layer enforcement | Flat `mod` in main.rs, no crate boundaries | LOW |
 
-### Ideal Layer Flow
+### Target Layer Flow
 
 ```
-Presentation → Application → Domain → Infrastructure
-     ↓              ↓           ↓            ↓
-   Events      Use Cases    Entities     External
+Presentation → Application → Domain ← Infrastructure
+     │              │           ↑           │
+     │              │           │           │
+     └──────────────┴───────────┴───────────┘
+                    All depend on Domain traits
 ```
+
+---
+
+## Architecture Fitness Assessment
+
+### Overall Score: 2.6 / 5.0
+
+| Fitness Function | Score | Status | Details |
+|-----------------|-------|--------|---------|
+| **FF-1:** Dependency Direction | 2/5 | **FAIL** | Traits defined but not implemented by concrete types |
+| **FF-2:** Component Instability | 3/5 | MIXED | ui/state.rs violates Stable Dependencies Principle |
+| **FF-3:** Hotspot Risk | 3/5 | WARNING | 241 symbols with ≥5 callers; UI state unprotected |
+| **FF-4:** Module Size / Cohesion | 3/5 | WARNING | 3 modules approaching 200-symbol limit |
+| **FF-5:** Cyclic Dependencies | 2/5 | INCONCLUSIVE | Flat crate prevents enforcement |
+
+### FF-1: Dependency Direction — FAIL
+
+**Principle:** Dependencies must point inward, toward higher-level policies.
+
+**Finding:** `src/traits.rs` defines 5 trait abstractions:
+- `AudioRecording` — ✅ `TestRecorder` in tests only
+- `Transcription` — ❌ `WhisperSTT` does not implement it
+- `VoiceDetection` — ❌ `VoiceActivityDetector` does not implement it
+- `HistoryRepository` — ❌ `History` does not implement it
+- `ConfigProvider` — ❌ `Config` does not implement it
+
+The traits are **aspirational architecture** — they document intent but don't enforce it. The codebase still depends on concrete types throughout.
+
+### FF-2: Component Instability — MIXED
+
+**Principle:** Stable components should be depended upon. Unstable components should not be heavily depended upon.
+
+**Violation:** `ui/state.rs` (I=0.42, 126 symbols) is depended on by 7 modules but contains presentation-specific structures (`UIContext`, `AppState`, status labels, button references). Any change to UI state structures forces changes in all dependent UI handlers.
+
+**Healthy pattern:** `config.rs` (I=0.00, 59 symbols) — maximally stable, depended on by 16 modules, zero outgoing deps.
+
+### FF-3: Hotspot Risk — WARNING
+
+**Top hotspot symbols (callers ≥ 20):**
+
+| Symbol | Module | Callers | Risk |
+|--------|--------|---------|------|
+| `History#entries` | history.rs | 33 | Medium |
+| `History` (struct) | history.rs | 31 | Medium |
+| `HistoryEntry` | history.rs | 31 | Medium |
+| `History::add` | history.rs | 30 | Medium |
+| `Config` (struct) | config.rs | 27 | Medium |
+| `UIContext#status_label` | ui/state.rs | 27 | **HIGH** (unstable module) |
+| `ContinuousUI#base` | ui/continuous.rs | 26 | Medium |
+| `ModelInfo#filename` | models.rs | 23 | Low |
+| `WhisperSTT` | whisper.rs | 21 | Low |
+| `AppContext` | context.rs | 21 | Low |
+| `AudioRecorder` | audio.rs | 20 | Medium |
+| `TranscriptionService` | services/transcription.rs | 20 | Low |
+| `UIContext#button` | ui/state.rs | 20 | **HIGH** (unstable module) |
+
+**Critical concern:** `audio.rs` contains local variables with 40-95 internal callers, indicating extremely long functions that need decomposition.
+
+### FF-4: Module Size / Cohesion — WARNING
+
+| Module | Symbols | Status |
+|--------|---------|--------|
+| dialogs/model.rs | 156 | ⚠️ Approaching 200 limit |
+| dialogs/history.rs | 152 | ⚠️ Approaching 200 limit |
+| history.rs | 148 | ⚠️ Approaching 200 limit |
+| ui/state.rs | 126 | OK |
+| ui/continuous.rs | 92 | OK |
+| dialogs/settings.rs | 95 | OK |
+| traits.rs | 81 | OK |
+
+No module exceeds 200, but three are within 25% of the threshold.
+
+### FF-5: Cyclic Dependencies — INCONCLUSIVE
+
+The flat `mod` structure (22 `mod` declarations in `main.rs`) means all modules exist as siblings in the same crate. Rust's module system prevents true circular imports, but semantic dependencies may still form cycles. Without crate-level boundaries, this fitness function cannot be meaningfully evaluated.
 
 ---
 
 ## Hotspot Analysis
 
-### Code Hotspots (Symbols with 5+ References)
+### Structural Hotspots (Codegraph, ≥10 callers)
 
-| Symbol | File | References | Type |
-|--------|------|------------|------|
-| `Config` | config.rs | 28 | Struct |
-| `AppState` | ui.rs | 30 | Enum |
-| `WhisperSTT` | whisper.rs | 23 | Struct |
-| `History` | history.rs | 22 | Struct |
-| `HistoryEntry` | history.rs | 20 | Struct |
-| `ModelInfo` | models.rs | 15 | Struct |
-| `AudioRecorder` | audio.rs | 15 | Struct |
-| `TrayAction` | tray.rs | 15 | Enum |
+| Symbol | File | Callers | Risk Level |
+|--------|------|---------|------------|
+| `History#entries` | history.rs | 33 | Medium |
+| `HistoryEntry` | history.rs | 31 | Medium |
+| `History::add` | history.rs | 30 | Medium |
+| `Config` | config.rs | 27 | Low (stable) |
+| `UIContext#status_label` | ui/state.rs | 27 | **High** |
+| `ContinuousUI#base` | ui/continuous.rs | 26 | Medium |
+| `ModelInfo#filename` | models.rs | 23 | Low |
+| `WhisperSTT` | whisper.rs | 21 | Low |
+| `AppContext` | context.rs | 21 | Low |
+| `UIContext#button` | ui/state.rs | 20 | **High** |
+| `TranscriptionService` | services/transcription.rs | 20 | Low |
+| `AudioRecorder` | audio.rs | 20 | Medium |
 
 ### Complexity Hotspots
 
-| File | Cyclomatic Complexity | Reason |
-|------|----------------------|--------|
-| ui.rs | High | Multiple recording modes, state transitions |
-| model_dialog.rs | Medium | Download state management |
-| history_dialog.rs | Medium | Search and filtering logic |
-| continuous.rs | Medium | VAD-based segmentation |
+| File | Issue | Evidence |
+|------|-------|----------|
+| audio.rs | Extremely long functions | Local variables with 40-95 internal callers |
+| dialogs/model.rs | High symbol density | 156 symbols, multi-concern (download, listing, UI) |
+| dialogs/history.rs | High symbol density | 152 symbols, search + display + management |
+| ui/state.rs | Unstable hotspot | 126 symbols, depended on by 7 modules |
 
 ---
 
 ## Design Strengths
 
-### 1. Clean Error Handling
+### 1. AppContext Dependency Injection
+
+The introduction of `AppContext` as a central DI container is a significant improvement over the previous pattern of passing 5-8 `Arc<Mutex<T>>` parameters.
 
 ```rust
-// Consistent use of anyhow for error propagation
-pub fn load_config() -> Result<Config> {
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read config: {}", path.display()))?;
-    toml::from_str(&content).with_context(|| "Failed to parse config")
+pub struct AppContext {
+    pub audio: Arc<AudioService>,
+    pub transcription: Arc<Mutex<TranscriptionService>>,
+    pub config: Arc<Mutex<Config>>,
+    pub history: Arc<Mutex<History>>,
+    pub diarization: Arc<Mutex<DiarizationEngine>>,
+    pub channels: Arc<UIChannels>,
 }
 ```
 
-### 2. Thread-Safe State Management
+### 2. Trait Abstractions (Defined)
 
-```rust
-// Proper use of Arc<Mutex<T>> for shared state
-let whisper: Arc<Mutex<Option<WhisperSTT>>> = Arc::new(Mutex::new(None));
-```
+`traits.rs` defines clean, well-documented contracts for all core concerns:
+- `AudioRecording` — audio capture abstraction
+- `Transcription` — STT abstraction
+- `VoiceDetection` — VAD abstraction
+- `HistoryRepository` — persistence abstraction
+- `ConfigProvider` — configuration abstraction
 
-### 3. Async Communication
+### 3. UI Module Split
 
-```rust
-// Non-blocking communication between components
-let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
-```
+The monolithic `ui.rs` (1,555 LOC) has been split into focused modules:
+- `ui/mod.rs` — window setup
+- `ui/state.rs` — shared UI state
+- `ui/recording.rs` — dictation handler
+- `ui/continuous.rs` — continuous handler
+- `ui/conference.rs` — conference handler
 
-### 4. Configuration Flexibility
+### 4. Service Layer
 
-```rust
-// Serde-based configuration with sensible defaults
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    #[serde(default = "default_language")]
-    pub language: String,
-    // ...
-}
-```
+`services/audio.rs` and `services/transcription.rs` provide facade patterns over lower-level implementations, reducing direct coupling.
 
-### 5. Modular Audio Pipeline
+### 5. Centralized Channel Management
 
-```rust
-// Separation of concerns in audio processing
-AudioRecorder (capture) → Rubato (resample) → WhisperSTT (transcribe)
-```
+`UIChannels` consolidates all async communication channels, replacing scattered channel creation in `main.rs`.
 
-### 6. Good Test Coverage for Core Logic
+### 6. Clean Error Handling
 
-```rust
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_config_serialization() { ... }
-    #[test]
-    fn test_history_cleanup() { ... }
-}
-```
+Consistent use of `anyhow::Result` with `.context()` for error propagation.
+
+### 7. Test Infrastructure
+
+`test_support/mocks.rs` provides mock implementations, and `traits.rs` includes its own test module with `TestRecorder`.
 
 ---
 
 ## Design Weaknesses
 
-### 1. God Object: ui.rs (1555 lines)
+### 1. Incomplete Trait Adoption (CRITICAL)
 
-**Problem:** ui.rs handles all three recording modes, state management, and UI updates in a single file.
-
-**Impact:**
-- Difficult to navigate
-- High merge conflict risk
-- Hard to test in isolation
-
-**Recommendation:** Split into focused modules.
-
-### 2. High Coupling in Orchestration
-
-**Problem:** Both main.rs and ui.rs depend on all 19 other modules.
+**Problem:** Five domain traits are defined in `traits.rs` but only `AudioRecording` has a test implementation. No production types implement these traits. The codebase still depends on concrete types everywhere.
 
 **Impact:**
-- Changes ripple across the codebase
-- Difficult to reason about dependencies
-- Tight coupling limits reusability
+- Dependency Inversion Principle not enforced
+- Services cannot be swapped or mocked in production code
+- Architecture fitness FF-1 fails
 
-**Recommendation:** Introduce service facades.
+**Evidence:** `AppContext.transcription` is `Arc<Mutex<TranscriptionService>>`, not `Arc<Mutex<dyn Transcription>>`.
 
-### 3. Thin Application Layer
+### 2. Tray Duplication (main.rs:161-177)
 
-**Problem:** main.rs directly wires all components without intermediate services.
+**Problem:** `main.rs` creates a duplicate `WhisperSTT` instance for the tray, bypassing `AppContext` entirely.
 
-**Impact:**
-- Business logic mixed with wiring
-- No clear use case boundaries
-- Hard to add cross-cutting concerns
+```rust
+// main.rs:159-177 — loads the Whisper model TWICE
+let whisper_for_tray: Arc<Mutex<Option<WhisperSTT>>> = {
+    // Re-load model for tray (tray needs its own mutable reference)
+    let cfg = config.lock().unwrap();
+    if let Some(model_path) = find_model_path(&cfg) {
+        match WhisperSTT::new(&model_path) { ... }
+    }
+};
+```
 
-**Recommendation:** Create service layer.
+**Impact:** Doubles memory usage for the Whisper model (~75-500MB depending on model size). Creates inconsistency if models are reloaded.
 
-### 4. Inconsistent Concurrency Primitives
+### 3. AppContext Leaks Internal State
 
-**Problem:** Mix of `Arc<Mutex<T>>`, `Rc<RefCell<T>>`, and `Arc<Atomic*>` without clear rationale.
+**Problem:** `AppContext` provides `config_arc()` and `history_arc()` methods that return raw `Arc<Mutex<T>>` handles, allowing callers to bypass the service layer.
 
-**Impact:**
-- Cognitive overhead
-- Risk of misuse (Arc with non-Send types)
+**Impact:** Defeats the purpose of the DI container. Any caller can lock and mutate config/history directly.
 
-**Recommendation:** Document concurrency strategy, standardize patterns.
+### 4. ui/state.rs as Unstable Hotspot
 
-### 5. CLI Tool Dependencies
+**Problem:** `ui/state.rs` (I=0.42, 126 symbols) is depended upon by 7 modules. It contains presentation-specific structs (`UIContext` with GTK widget references). Changes to widget layout force cascading changes.
 
-**Problem:** Uses `xdotool`, `pactl`, `parec` via Command::new.
+**Impact:** High coupling in the UI layer. Widget-level details leak across module boundaries.
 
-**Impact:**
-- Runtime dependencies not in Cargo.toml
-- Subprocess overhead
-- Error handling complexity
+### 5. Oversized Dialog Modules
 
-**Recommendation:** Native API integration where possible.
+**Problem:** `dialogs/model.rs` (156 symbols) and `dialogs/history.rs` (152 symbols) are approaching the 200-symbol cohesion threshold. Each handles multiple responsibilities (UI, data loading, user interaction, file management).
+
+### 6. Long Functions in audio.rs
+
+**Problem:** `audio.rs` contains functions with local variables referenced 40-95 times internally, indicating functions that are hundreds of lines long.
+
+**Impact:** Hard to test, hard to reason about, high cyclomatic complexity.
+
+### 7. Flat Module Hierarchy (No Layer Enforcement)
+
+**Problem:** All 22 modules are declared as flat siblings in `main.rs`:
+
+```rust
+mod audio;
+mod channels;
+mod conference_recorder;
+mod config;
+mod context;
+// ... 17 more flat mods
+```
+
+**Impact:** Any module can import any other module. Layer boundaries exist only by convention, not by the type system or module visibility.
 
 ---
 
 ## Architectural Recommendations
 
-### Short-Term (1-2 Sprints)
+### Priority 0: Complete Trait Adoption
 
-#### R1: Split ui.rs into Focused Modules
+**Goal:** Wire the existing traits to concrete implementations.
 
-```
-src/ui/
-├── mod.rs           # Re-exports
-├── state.rs         # AppState enum
-├── context.rs       # Context structs
-├── recording.rs     # Dictation mode
-├── continuous.rs    # Continuous mode
-├── conference.rs    # Conference mode
-└── widgets.rs       # Shared widgets
-```
+**Steps:**
+1. Implement `Transcription` for `WhisperSTT`
+2. Implement `HistoryRepository` for `History`
+3. Implement `ConfigProvider` for `Config`
+4. Implement `VoiceDetection` for `VoiceActivityDetector`
+5. Update `AppContext` to use `dyn Trait` bounds
+6. Update services to accept trait objects
 
-#### R2: Create Context Structs
+**Verification:** `AppContext.transcription` becomes `Arc<Mutex<dyn Transcription>>`.
 
-```rust
-pub struct RecordingContext<'a> {
-    pub ui: &'a UiWidgets,
-    pub state: &'a SharedState,
-    pub audio: &'a AudioService,
-}
-```
+### Priority 1: Tame UI State Hotspot
 
-### Medium-Term (3-4 Sprints)
+**Goal:** Reduce coupling on `ui/state.rs` by extracting stable interfaces.
 
-#### R3: Introduce Service Layer
+**Steps:**
+1. Extract a `UIActions` trait from `UIContext` (set_status, enable_button, etc.)
+2. Have UI handlers depend on the trait, not the struct
+3. Move `AppState` enum to `types.rs` (it's domain-level, not UI-level)
 
-```rust
-// src/services/mod.rs
-pub struct AudioService { ... }
-pub struct TranscriptionService { ... }
-pub struct HistoryService { ... }
+### Priority 2: Fix Tray Duplication
 
-// Reduces main.rs to:
-let audio = AudioService::new()?;
-let transcription = TranscriptionService::new()?;
-let history = HistoryService::new()?;
+**Goal:** Eliminate the duplicate Whisper model load in `main.rs:161-177`.
 
-build_ui(&app, &audio, &transcription, &history);
-```
+**Steps:**
+1. Migrate tray to use `AppContext` (the TODO at line 160 acknowledges this)
+2. Share the `TranscriptionService` via `Arc` instead of creating a separate `WhisperSTT`
+3. Remove `whisper_for_tray` entirely
 
-#### R4: Document Concurrency Strategy
+### Priority 3: Decompose Oversized Modules
 
-```rust
-// doc/CONCURRENCY.md
-// 1. Arc<Mutex<T>> for cross-thread shared state
-// 2. Rc<RefCell<T>> for single-thread shared state
-// 3. async_channel for message passing
-// 4. AtomicBool/AtomicU32 for simple flags
-```
+**Goal:** Keep all modules under 200 symbols.
 
-### Long-Term (Future)
+**Steps:**
+1. Split `dialogs/model.rs` into `model_list.rs` + `model_download.rs`
+2. Split `dialogs/history.rs` into `history_list.rs` + `history_detail.rs`
+3. Extract search/filter logic from `history.rs` into a separate module
 
-#### R5: Consider Event-Driven Architecture
+### Priority 4: Enforce Layer Boundaries
 
-```rust
-enum AppEvent {
-    RecordingStarted,
-    RecordingStopped(Vec<f32>),
-    TranscriptionComplete(String),
-    ConfigChanged(Config),
-}
+**Goal:** Make layer violations compile-time errors.
 
-// Central event bus
-let (event_tx, event_rx) = async_channel::unbounded::<AppEvent>();
-```
-
-#### R6: Native PipeWire Integration
-
-Replace CLI tools with native `pipewire` crate APIs for system audio capture.
+**Steps (long-term):**
+1. Consider workspace crates: `s2t-domain`, `s2t-services`, `s2t-ui`, `s2t-infra`
+2. Or use Rust module visibility (`pub(crate)`, `pub(super)`) to restrict access
+3. Add architecture fitness checks to CI
 
 ---
 
 ## Conclusion
 
-The Voice Dictation application demonstrates **solid Rust engineering practices** with appropriate use of the type system, error handling, and concurrency primitives. The main architectural concerns are:
+The Voice Dictation application has undergone significant architectural improvement since the initial audit. The introduction of `AppContext`, `traits.rs`, `services/`, UI module split, and `UIChannels` demonstrates clear architectural intent toward Clean Architecture.
 
-1. **Code concentration** in ui.rs (28% of codebase)
-2. **High coupling** between orchestration and all modules
-3. **Thin application layer** missing service abstractions
+However, the refactoring is **incomplete**. The most critical gap is that domain traits exist but are not wired to concrete implementations — the architecture is aspirational rather than enforced. The codebase sits in a transitional state where new structures coexist with legacy patterns.
 
-These issues can be addressed incrementally without major architectural rewrites. The current design is suitable for an MVP/early-stage application, but should be refactored as the feature set grows.
+### Current State Summary
 
-**Overall Architecture Rating:** 7/10 (Good foundation, needs modularization)
+| Aspect | Status |
+|--------|--------|
+| AppContext DI container | ✅ Implemented |
+| UI module split | ✅ Implemented |
+| Service layer | ✅ Implemented |
+| UIChannels | ✅ Implemented |
+| Domain traits defined | ✅ Implemented |
+| Domain traits wired | ❌ Not done |
+| Tray uses AppContext | ❌ Not done (duplicate model) |
+| Layer enforcement | ❌ Not done (flat hierarchy) |
+| Legacy accessors removed | ❌ Not done (config_arc, history_arc) |
+
+**Overall Architecture Rating:** 5/10 (Good intent, incomplete execution — up from 7/10 initial rating adjusted to account for the hybrid state penalty)

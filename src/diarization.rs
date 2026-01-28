@@ -18,7 +18,7 @@ pub struct DiarizationSegment {
 }
 
 /// Diarization engine using NVIDIA Sortformer
-pub struct DiarizationEngine {
+pub(crate) struct DiarizationEngine {
     #[cfg(feature = "sortformer")]
     sortformer: Option<Sortformer>,
     #[cfg_attr(not(feature = "sortformer"), allow(dead_code))]

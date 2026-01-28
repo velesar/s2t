@@ -9,7 +9,7 @@ struct RingBufferState {
 
 /// Ring buffer for audio streaming
 /// Maintains a fixed-size buffer that overwrites oldest data when full
-pub struct RingBuffer {
+pub(crate) struct RingBuffer {
     state: Arc<Mutex<RingBufferState>>,
     capacity: usize,
 }

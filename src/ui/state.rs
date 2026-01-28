@@ -4,6 +4,7 @@
 //! recording mode selection logic.
 
 use crate::context::AppContext;
+use crate::traits::UIStateUpdater;
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Button, Label, LevelBar, Spinner, TextView};
 use std::cell::Cell;
@@ -11,13 +12,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-/// Application state for recording modes
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum AppState {
-    Idle,
-    Recording,
-    Processing,
-}
+// Re-export AppState from types module (domain type, not UI-specific)
+pub use crate::types::AppState;
 
 /// Recording mode selection.
 ///
@@ -130,6 +126,11 @@ impl UIContext {
         }
     }
 
+    /// Set the status label text
+    pub fn set_status(&self, text: &str) {
+        self.status_label.set_text(text);
+    }
+
     /// Update UI to recording state
     pub fn set_recording(&self, status_text: &str) {
         self.button.set_label("Зупинити запис");
@@ -182,6 +183,36 @@ impl UIContext {
     /// Set result text
     pub fn set_result_text(&self, text: &str) {
         self.result_text_view.buffer().set_text(text);
+    }
+}
+
+impl UIStateUpdater for UIContext {
+    fn set_status(&self, text: &str) {
+        self.set_status(text);
+    }
+
+    fn set_recording_state(&self, status_text: &str) {
+        self.set_recording(status_text);
+    }
+
+    fn set_processing_state(&self, status_text: &str) {
+        self.set_processing(status_text);
+    }
+
+    fn set_idle_state(&self) {
+        self.set_idle();
+    }
+
+    fn update_timer_display(&self, secs: u64) {
+        self.update_timer(secs);
+    }
+
+    fn get_result_text(&self) -> String {
+        UIContext::get_result_text(self)
+    }
+
+    fn set_result_text(&self, text: &str) {
+        UIContext::set_result_text(self, text);
     }
 }
 

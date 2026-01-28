@@ -11,7 +11,49 @@ use std::time::Duration;
 
 const WHISPER_SAMPLE_RATE: u32 = 16000;
 
-pub struct AudioRecorder {
+/// Convert multi-channel audio to mono by averaging channels.
+fn to_mono(data: &[f32], channels: usize) -> Vec<f32> {
+    if channels > 1 {
+        data.chunks(channels)
+            .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
+            .collect()
+    } else {
+        data.to_vec()
+    }
+}
+
+/// Calculate normalized RMS amplitude for visualization (0.0 - 1.0).
+fn calculate_rms(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum_squares: f32 = samples.iter().map(|s| s * s).sum();
+    let rms = (sum_squares / samples.len() as f32).sqrt();
+    // Normalize: typical speech is ~0.05-0.15 RMS, scale so it reaches ~50%
+    (rms * 6.0).min(1.0)
+}
+
+/// Create a high-quality sinc resampler for converting to 16kHz.
+fn create_resampler(sample_rate: u32) -> Result<SincFixedIn<f32>> {
+    let resample_ratio = WHISPER_SAMPLE_RATE as f64 / sample_rate as f64;
+    let params = SincInterpolationParameters {
+        sinc_len: 256,
+        f_cutoff: 0.95,
+        interpolation: SincInterpolationType::Linear,
+        oversampling_factor: 256,
+        window: WindowFunction::BlackmanHarris2,
+    };
+    SincFixedIn::<f32>::new(
+        resample_ratio,
+        2.0, // max relative ratio (safety margin)
+        params,
+        1024, // chunk size
+        1,    // mono channel
+    )
+    .context("Не вдалося створити ресемплер")
+}
+
+pub(crate) struct AudioRecorder {
     pub(crate) samples: Arc<Mutex<Vec<f32>>>,
     is_recording: Arc<AtomicBool>,
     completion_rx: Arc<Mutex<Option<Receiver<()>>>>,
@@ -56,25 +98,7 @@ impl AudioRecorder {
         let is_recording_for_loop = self.is_recording.clone();
         let current_amplitude = self.current_amplitude.clone();
 
-        let resample_ratio = WHISPER_SAMPLE_RATE as f64 / sample_rate as f64;
-
-        // Create high-quality sinc resampler with anti-aliasing
-        let params = SincInterpolationParameters {
-            sinc_len: 256,
-            f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 256,
-            window: WindowFunction::BlackmanHarris2,
-        };
-        let resampler = SincFixedIn::<f32>::new(
-            resample_ratio,
-            2.0, // max relative ratio (safety margin)
-            params,
-            1024, // chunk size
-            1,    // mono channel
-        )
-        .context("Не вдалося створити ресемплер")?;
-        let resampler = Arc::new(Mutex::new(resampler));
+        let resampler = Arc::new(Mutex::new(create_resampler(sample_rate)?));
 
         thread::spawn(move || {
             let resampler = resampler.clone();
@@ -88,24 +112,10 @@ impl AudioRecorder {
                             return;
                         }
 
-                        // Convert to mono if stereo
-                        let mono: Vec<f32> = if channels > 1 {
-                            data.chunks(channels)
-                                .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
-                                .collect()
-                        } else {
-                            data.to_vec()
-                        };
+                        let mono = to_mono(data, channels);
 
-                        // Calculate RMS amplitude for visualization
-                        if !mono.is_empty() {
-                            let sum_squares: f32 = mono.iter().map(|s| s * s).sum();
-                            let rms = (sum_squares / mono.len() as f32).sqrt();
-                            // Normalize to 0-1 range (typical speech is ~0.05-0.15 RMS)
-                            // Use 6.0 multiplier so typical speech reaches ~50% of scale
-                            let normalized = (rms * 6.0).min(1.0);
-                            current_amplitude.store(normalized.to_bits(), Ordering::Relaxed);
-                        }
+                        let amplitude = calculate_rms(&mono);
+                        current_amplitude.store(amplitude.to_bits(), Ordering::Relaxed);
 
                         // Resample to 16kHz using high-quality sinc interpolation
                         let mut resampler = resampler.lock().unwrap();

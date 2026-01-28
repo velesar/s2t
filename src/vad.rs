@@ -13,7 +13,7 @@ const FRAME_SIZE_SAMPLES: usize = (SAMPLE_RATE_HZ as usize * FRAME_SIZE_MS as us
 /// This type is intentionally `!Send` and `!Sync` because the underlying
 /// `webrtc_vad::Vad` type is not thread-safe. Create a new instance for
 /// each thread that needs VAD functionality.
-pub struct VoiceActivityDetector {
+pub(crate) struct VoiceActivityDetector {
     vad: RefCell<Vad>,
     silence_threshold_ms: u32,
 }
@@ -82,6 +82,29 @@ impl VoiceActivityDetector {
         }
 
         Ok(had_speech && consecutive_silence >= silence_needed)
+    }
+}
+
+// === Trait Implementation ===
+
+use crate::traits::VoiceDetection;
+
+impl VoiceDetection for VoiceActivityDetector {
+    fn is_speech(&mut self, samples: &[f32]) -> Result<bool> {
+        VoiceActivityDetector::is_speech(self, samples)
+    }
+
+    fn detect_speech_end(&mut self, samples: &[f32]) -> Result<bool> {
+        VoiceActivityDetector::detect_speech_end(self, samples)
+    }
+
+    fn reset(&mut self) {
+        // Re-create VAD for a clean state
+        use webrtc_vad::SampleRate;
+        self.vad = RefCell::new(Vad::new_with_rate_and_mode(
+            SampleRate::Rate16kHz,
+            VadMode::Aggressive,
+        ));
     }
 }
 

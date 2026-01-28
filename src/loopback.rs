@@ -6,7 +6,7 @@ use std::thread;
 
 const WHISPER_SAMPLE_RATE: u32 = 16000;
 
-pub struct LoopbackRecorder {
+pub(crate) struct LoopbackRecorder {
     samples: Arc<Mutex<Vec<f32>>>,
     is_recording: Arc<AtomicBool>,
     completion_rx: Arc<Mutex<Option<Receiver<()>>>>,

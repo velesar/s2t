@@ -11,41 +11,20 @@ use widgets::build_main_widgets;
 
 use crate::context::AppContext;
 use crate::dialogs::{show_history_dialog, show_model_dialog, show_settings_dialog};
-use crate::whisper::WhisperSTT;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Button, TextView};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
-    let config = ctx.config_arc();
-    let history = ctx.history_arc();
+    let config = ctx.config.clone();
+    let history = ctx.history.clone();
+    let transcription = ctx.transcription.clone();
 
     let open_models_rx = ctx.channels.open_models_rx().clone();
     let open_history_rx = ctx.channels.open_history_rx().clone();
     let open_settings_rx = ctx.channels.open_settings_rx().clone();
     let toggle_recording_rx = ctx.channels.toggle_recording_rx().clone();
     let reload_hotkeys_tx = ctx.channels.reload_hotkeys_tx().clone();
-
-    // Legacy whisper Arc for model dialog
-    // TODO: Migrate model_dialog to use ctx.transcription directly
-    let whisper: Arc<Mutex<Option<WhisperSTT>>> = {
-        let ts = ctx.transcription.lock().unwrap();
-        if ts.is_loaded() {
-            let cfg = config.lock().unwrap();
-            let model_path = crate::models::get_model_path(&cfg.default_model);
-            drop(cfg);
-            if model_path.exists() {
-                match WhisperSTT::new(model_path.to_str().unwrap_or_default()) {
-                    Ok(w) => Arc::new(Mutex::new(Some(w))),
-                    Err(_) => Arc::new(Mutex::new(None)),
-                }
-            } else {
-                Arc::new(Mutex::new(None))
-            }
-        } else {
-            Arc::new(Mutex::new(None))
-        }
-    };
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -118,13 +97,13 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     // Models button
     let window_weak = window.downgrade();
     let config_for_models = config.clone();
-    let whisper_for_models = whisper.clone();
+    let transcription_for_models = transcription.clone();
     w.models_button.connect_clicked(move |_| {
         if let Some(window) = window_weak.upgrade() {
             show_model_dialog(
                 &window,
                 config_for_models.clone(),
-                whisper_for_models.clone(),
+                transcription_for_models.clone(),
             );
         }
     });
@@ -162,11 +141,15 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     // Listen for "open models dialog" signal from tray
     let window_for_models = window.downgrade();
     let config_for_tray = config.clone();
-    let whisper_for_tray = whisper.clone();
+    let transcription_for_tray = transcription.clone();
     glib::spawn_future_local(async move {
         while open_models_rx.recv().await.is_ok() {
             if let Some(window) = window_for_models.upgrade() {
-                show_model_dialog(&window, config_for_tray.clone(), whisper_for_tray.clone());
+                show_model_dialog(
+                    &window,
+                    config_for_tray.clone(),
+                    transcription_for_tray.clone(),
+                );
             }
         }
     });

@@ -169,6 +169,36 @@ pub fn save_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
+// === Trait Implementation ===
+
+use crate::traits::ConfigProvider;
+
+impl ConfigProvider for Config {
+    fn language(&self) -> String {
+        self.language.clone()
+    }
+
+    fn default_model(&self) -> String {
+        self.default_model.clone()
+    }
+
+    fn auto_copy(&self) -> bool {
+        self.auto_copy
+    }
+
+    fn auto_paste(&self) -> bool {
+        self.auto_paste
+    }
+
+    fn continuous_mode(&self) -> bool {
+        self.continuous_mode
+    }
+
+    fn recording_mode(&self) -> String {
+        self.recording_mode.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,5 +248,35 @@ mod tests {
     fn test_config_path_is_toml() {
         let path = config_path();
         assert!(path.to_string_lossy().ends_with("config.toml"));
+    }
+
+    // === Trait Implementation Tests ===
+
+    #[test]
+    fn test_trait_language_matches_field() {
+        use crate::traits::ConfigProvider;
+        let config = Config::default();
+        assert_eq!(ConfigProvider::language(&config), config.language);
+    }
+
+    #[test]
+    fn test_trait_default_model_matches_field() {
+        use crate::traits::ConfigProvider;
+        let config = Config::default();
+        assert_eq!(ConfigProvider::default_model(&config), config.default_model);
+    }
+
+    #[test]
+    fn test_trait_auto_copy_matches_field() {
+        use crate::traits::ConfigProvider;
+        let config = Config::default();
+        assert_eq!(ConfigProvider::auto_copy(&config), config.auto_copy);
+    }
+
+    #[test]
+    fn test_trait_recording_mode_matches_field() {
+        use crate::traits::ConfigProvider;
+        let config = Config::default();
+        assert_eq!(ConfigProvider::recording_mode(&config), config.recording_mode);
     }
 }

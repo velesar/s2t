@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-pub struct ConferenceRecorder {
+pub(crate) struct ConferenceRecorder {
     mic_recorder: Arc<AudioRecorder>,
     loopback_recorder: Arc<LoopbackRecorder>,
     start_time: Arc<Mutex<Option<Instant>>>,

@@ -78,19 +78,6 @@ impl AppContext {
         })
     }
 
-    // === Legacy accessors for dialog compatibility ===
-    // TODO: Migrate dialogs to use AppContext directly, then remove these
-
-    /// Get a clone of the config Arc (for dialogs not yet migrated)
-    pub fn config_arc(&self) -> Arc<Mutex<Config>> {
-        Arc::clone(&self.config)
-    }
-
-    /// Get a clone of the history Arc (for dialogs not yet migrated)
-    pub fn history_arc(&self) -> Arc<Mutex<History>> {
-        Arc::clone(&self.history)
-    }
-
     // === Config convenience methods ===
 
     /// Get current language setting

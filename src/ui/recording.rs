@@ -17,8 +17,7 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictatio
     // Check if model is loaded
     if !ctx.is_model_loaded() {
         ui.base
-            .status_label
-            .set_text("Модель не завантажено. Натисніть 'Моделі'.");
+            .set_status("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -56,7 +55,7 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictatio
             });
         }
         Err(e) => {
-            ui.base.status_label.set_text(&format!("Помилка: {}", e));
+            ui.base.set_status(&format!("Помилка: {}", e));
         }
     }
 }
@@ -75,7 +74,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictation
     let duration_secs = samples.len() as f32 / WHISPER_SAMPLE_RATE as f32;
     let duration_mins = (duration_secs / 60.0).floor() as u32;
     let duration_remaining_secs = (duration_secs % 60.0).floor() as u32;
-    ui.base.status_label.set_text(&format!(
+    ui.base.set_status(&format!(
         "Обробка запису {:02}:{:02}...",
         duration_mins, duration_remaining_secs
     ));
@@ -111,9 +110,9 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictation
             match result {
                 Ok(text) => {
                     if text.is_empty() {
-                        ui.base.status_label.set_text("Не вдалося розпізнати мову");
+                        ui.base.set_status("Не вдалося розпізнати мову");
                     } else {
-                        ui.base.status_label.set_text("Готово!");
+                        ui.base.set_status("Готово!");
                         ui.base.set_result_text(&text);
 
                         // Get config values for auto-copy/auto-paste
@@ -132,8 +131,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictation
                             if let Err(e) = crate::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
                                 ui.base
-                                    .status_label
-                                    .set_text(&format!("Готово! (помилка вставки: {})", e));
+                                    .set_status(&format!("Готово! (помилка вставки: {})", e));
                             }
                         }
 
@@ -147,7 +145,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictation
                     }
                 }
                 Err(e) => {
-                    ui.base.status_label.set_text(&format!("Помилка: {}", e));
+                    ui.base.set_status(&format!("Помилка: {}", e));
                 }
             }
         }

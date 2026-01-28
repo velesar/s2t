@@ -4,6 +4,18 @@
 //! parts of the application to avoid duplication and circular dependencies.
 
 use async_channel::Receiver;
+use std::time::Instant;
+
+/// Application state for recording modes.
+///
+/// Tracks the current phase of the recording lifecycle.
+/// Used by both UI and recording handlers.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum AppState {
+    Idle,
+    Recording,
+    Processing,
+}
 
 /// Result from stopping conference recording.
 ///
@@ -47,4 +59,16 @@ impl ConferenceRecording {
     pub fn duration_secs(&self) -> f32 {
         self.mic_samples.len().max(self.loopback_samples.len()) as f32 / 16000.0
     }
+}
+
+/// Segment of audio ready for transcription.
+///
+/// Produced by `ContinuousRecorder` during automatic segmentation
+/// and consumed by the UI layer for parallel transcription.
+#[derive(Debug, Clone)]
+pub struct AudioSegment {
+    pub samples: Vec<f32>,
+    pub start_time: Instant,
+    pub end_time: Instant,
+    pub segment_id: usize,
 }

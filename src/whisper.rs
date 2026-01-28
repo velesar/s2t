@@ -2,9 +2,8 @@ use crate::diarization::DiarizationEngine;
 use anyhow::{Context, Result};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-pub struct WhisperSTT {
+pub(crate) struct WhisperSTT {
     ctx: WhisperContext,
-    #[allow(dead_code)] // Used by Transcription trait implementation
     model_path: String,
 }
 
@@ -185,9 +184,26 @@ impl WhisperSTT {
         self.transcribe_with_diarization(mic_samples, loopback_samples, language)
     }
 
-    /// Get the model path (used by Transcription trait implementation)
-    #[allow(dead_code)]
+    /// Get the model path
     pub fn model_path(&self) -> &str {
         &self.model_path
+    }
+}
+
+// === Trait Implementation ===
+
+use crate::traits::Transcription;
+
+impl Transcription for WhisperSTT {
+    fn transcribe(&self, samples: &[f32], language: &str) -> anyhow::Result<String> {
+        WhisperSTT::transcribe(self, samples, Some(language))
+    }
+
+    fn is_loaded(&self) -> bool {
+        true // WhisperSTT only exists when model is loaded
+    }
+
+    fn model_name(&self) -> Option<String> {
+        Some(self.model_path.clone())
     }
 }

@@ -2,8 +2,9 @@
 
 **Project:** Voice Dictation (s2t)
 **Created:** 2026-01-28
-**Methodology:** Clean Architecture (Robert C. Martin)
-**Status:** Planning
+**Last Updated:** 2026-01-28 (post-fitness assessment)
+**Methodology:** Clean Architecture (Robert C. Martin) + Architecture Fitness Functions
+**Status:** Phases 0-5 partially complete; reassessed and restructured
 
 ---
 
@@ -11,15 +12,15 @@
 
 1. [Executive Summary](#executive-summary)
 2. [Current State Assessment](#current-state-assessment)
-3. [Architecture Vision](#architecture-vision)
-4. [Refactoring Phases](#refactoring-phases)
-   - [Phase 0: Quick Wins](#phase-0-quick-wins-1-2-days)
-   - [Phase 1: Complete Services Migration](#phase-1-complete-services-migration-1-week)
-   - [Phase 2: Dependency Inversion](#phase-2-dependency-inversion-1-2-weeks)
-   - [Phase 3: Recording Mode Polymorphism](#phase-3-recording-mode-polymorphism-1-week)
-   - [Phase 4: Domain Layer Extraction](#phase-4-domain-layer-extraction-2-weeks)
-   - [Phase 5: Testing Infrastructure](#phase-5-testing-infrastructure-ongoing)
-5. [Detailed Task Breakdown](#detailed-task-breakdown)
+3. [What Has Been Completed](#what-has-been-completed)
+4. [Architecture Vision](#architecture-vision)
+5. [Refactoring Phases (Revised)](#refactoring-phases-revised)
+   - [Phase A: Wire Domain Traits](#phase-a-wire-domain-traits)
+   - [Phase B: Eliminate Tray Duplication](#phase-b-eliminate-tray-duplication)
+   - [Phase C: Tame UI State Hotspot](#phase-c-tame-ui-state-hotspot)
+   - [Phase D: Decompose Oversized Modules](#phase-d-decompose-oversized-modules)
+   - [Phase E: Layer Enforcement](#phase-e-layer-enforcement)
+   - [Phase F: Testing & CI](#phase-f-testing--ci)
 6. [Risk Assessment](#risk-assessment)
 7. [Success Metrics](#success-metrics)
 8. [Appendices](#appendices)
@@ -28,513 +29,210 @@
 
 ## Executive Summary
 
+### Background
+
+The original refactoring plan (Phases 0-5) has been **partially executed**. Significant structural improvements have been made — `AppContext`, `traits.rs`, `services/`, UI module split, `UIChannels`, `types.rs`, and `test_support/` all exist. However, an Architecture Fitness Assessment reveals the refactoring is incomplete, leaving the codebase in a **hybrid state** where new architectural structures coexist with legacy patterns.
+
 ### Problem Statement
 
-The codebase has undergone partial refactoring, resulting in a **hybrid state** where:
-- New architectural structures exist (services, context, UI modules)
-- Legacy code paths remain active
-- Services layer is defined but largely unused
-- `#[allow(dead_code)]` masks incomplete migration
+The architecture scores **2.6/5.0** on fitness functions:
+- **FF-1 FAIL (2/5):** Domain traits defined but not implemented by concrete types
+- **FF-2 MIXED (3/5):** `ui/state.rs` violates the Stable Dependencies Principle
+- **FF-3 WARNING (3/5):** 241 hotspot symbols; UI state fields have ≥27 callers in unstable module
+- **FF-4 WARNING (3/5):** 3 modules approaching the 200-symbol cohesion limit
+- **FF-5 INCONCLUSIVE (2/5):** Flat module hierarchy prevents layer enforcement
 
 ### Goal
 
-Transform the codebase into a **Clean Architecture** compliant system with:
-- Clear layer boundaries (Presentation → Application → Domain → Infrastructure)
-- Dependency Inversion through traits
-- Single Responsibility modules
-- Zero clippy warnings
-- Comprehensive test coverage
+Complete the transition to Clean Architecture by:
+1. **Wiring** the existing traits to concrete implementations (the #1 gap)
+2. **Eliminating** the tray duplication that bypasses AppContext
+3. **Stabilizing** the UI state hotspot
+4. **Decomposing** oversized modules before they cross thresholds
+5. **Enforcing** layer boundaries structurally
 
-### Scope
+### Target Fitness Scores
 
-| In Scope | Out of Scope |
-|----------|--------------|
-| Complete services migration | New features |
-| Fix all identified violations | Performance optimization |
-| Introduce trait abstractions | UI redesign |
-| Thread safety fixes | New recording modes |
-| Code cleanup and documentation | Database migration |
+| Fitness Function | Current | Target |
+|-----------------|---------|--------|
+| FF-1: Dependency Direction | 2/5 | 5/5 |
+| FF-2: Component Instability | 3/5 | 4/5 |
+| FF-3: Hotspot Risk | 3/5 | 4/5 |
+| FF-4: Module Cohesion | 3/5 | 5/5 |
+| FF-5: Cyclic Dependencies | 2/5 | 4/5 |
+| **Overall** | **2.6** | **4.4** |
 
 ---
 
 ## Current State Assessment
 
-### Architecture Fitness Scores
+### Codebase Metrics
 
-| Fitness Function | Score | Target | Gap |
-|-----------------|-------|--------|-----|
-| FF-1: Dependency Direction | 60% | 95% | -35% |
-| FF-2: Component Instability | 70% | 90% | -20% |
-| FF-3: Hotspot Coverage | 50% | 80% | -30% |
-| FF-4: Module Cohesion | 85% | 95% | -10% |
-| FF-5: Acyclic Dependencies | 70% | 100% | -30% |
+| Metric | Value |
+|--------|-------|
+| Files | 36 |
+| Lines of Code | 7,086 |
+| Symbols | 788 |
+| Max symbols/module | 156 (dialogs/model.rs) |
+| Trait abstractions defined | 5 |
+| Trait abstractions wired | 0 (production) |
+| `#[allow(dead_code)]` annotations | ~5-10 |
+| Hotspot symbols (≥20 callers) | 13 |
 
-### Key Metrics
+### Architecture Fitness Scorecard
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Max file LOC | 532 | < 400 |
-| `#[allow(dead_code)]` count | ~10 | 0 |
-| Clippy warnings | 8 | 0 |
-| Direct recorder access points | 15+ | 0 |
-| Trait abstractions | 0 | 5+ |
-| Test coverage | ~10% | > 60% |
+| Fitness Function | Score | Status | Key Issue |
+|-----------------|-------|--------|-----------|
+| FF-1: Dependency Direction | 2/5 | **FAIL** | Traits defined, not implemented |
+| FF-2: Component Instability | 3/5 | MIXED | ui/state.rs (I=0.42) has 7 dependents |
+| FF-3: Hotspot Risk | 3/5 | WARNING | UIContext#status_label (27 callers) in unstable module |
+| FF-4: Module Cohesion | 3/5 | WARNING | dialogs/model.rs (156 sym) nearing 200 limit |
+| FF-5: Cyclic Dependencies | 2/5 | INCONCLUSIVE | Flat crate, no enforceable boundaries |
 
-### Identified Issues
+### Key Violations
 
-| ID | Issue | Severity | Phase |
-|----|-------|----------|-------|
-| I-01 | Hybrid migration state | High | 1 |
-| I-02 | `Arc<Mutex<Vad>>` thread safety | Medium | 0 |
-| I-03 | Complex tuple return type | Low | 0 |
-| I-04 | 8 clippy warnings | Low | 0 |
-| I-05 | `context.rs` violates SRP | High | 2 |
-| I-06 | No trait abstractions (DIP) | High | 2 |
-| I-07 | Conditional recording mode logic | Medium | 3 |
-| I-08 | Mixed domain/infrastructure | Medium | 4 |
-| I-09 | Implicit cyclic dependencies | Medium | 1-2 |
-| I-10 | Low test coverage | High | 5 |
+| ID | Violation | Location | Phase |
+|----|-----------|----------|-------|
+| V1 | Traits not implemented by concrete types | traits.rs → (nothing) | A |
+| V2 | Duplicate WhisperSTT for tray | main.rs:161-177 | B |
+| V3 | AppContext leaks `config_arc()`, `history_arc()` | context.rs:85-92 | A |
+| V4 | ui/state.rs is unstable hotspot (I=0.42, 7 deps) | ui/state.rs | C |
+| V5 | Dialogs use concrete types, not traits | dialogs/* | A |
+| V6 | audio.rs has 40-95 caller local vars (long functions) | audio.rs | D |
+| V7 | No compile-time layer enforcement | main.rs (22 flat mods) | E |
+
+---
+
+## What Has Been Completed
+
+### From Original Phase 0 (Quick Wins)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P0.1 Fix clippy warnings | ✅ Mostly done | Some may remain; verify with `cargo clippy` |
+| P0.2 Fix `Arc<Mutex<Vad>>` | ⚠️ Partially | vad.rs still uses `Arc<Mutex<Vad>>` |
+| P0.3 ConferenceRecording struct | ✅ Done | `types.rs` created with shared types |
+| P0.4 Fix parameter count | ⚠️ Unknown | Needs verification |
+
+### From Original Phase 1 (Services Migration)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P1.1 Service layer created | ✅ Done | `services/audio.rs`, `services/transcription.rs` exist |
+| P1.2 Migrate recording handler | ✅ Done | `ui/recording.rs` uses AppContext |
+| P1.3 Migrate continuous handler | ✅ Done | `ui/continuous.rs` uses AppContext |
+| P1.4 Migrate conference handler | ✅ Done | `ui/conference.rs` uses AppContext |
+| P1.5 Remove legacy accessors | ❌ Not done | `config_arc()`, `history_arc()` still exist |
+| P1.6 Remove dead_code annotations | ❌ Not done | Still present |
+| P1.7 Simplify AppContext | ❌ Not done | Legacy methods remain |
+
+### From Original Phase 2 (Dependency Inversion)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P2.1 Create domain traits | ✅ Done | `traits.rs` with 5 traits |
+| P2.2 Implement traits for existing types | ❌ **Not done** | **Critical gap** |
+| P2.3 Update services to use traits | ❌ Not done | Services use concrete types |
+| P2.4 Create mock implementations | ✅ Partial | `test_support/mocks.rs` exists |
+| P2.5 Update AppContext to use traits | ❌ Not done | Uses concrete types |
+
+### From Original Phase 3 (Recording Mode Polymorphism)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P3.1 UI module split | ✅ Done | `ui/` directory with 5 files |
+| P3.2 Recording mode handlers | ✅ Done | Separate files per mode |
+| P3.3 Mode factory / polymorphism | ❌ Not done | Still conditional logic |
+
+### From Original Phase 4 (Domain Layer Extraction)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P4.1 Domain module structure | ❌ Not done | No `domain/` directory |
+| P4.2 Extract entities | ❌ Not done | |
+| P4.3 Infrastructure adapters | ❌ Not done | |
+
+### From Original Phase 5 (Testing Infrastructure)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| P5.1 Test support module | ✅ Done | `test_support/` exists |
+| P5.2 Trait tests | ✅ Partial | `traits.rs` has test module |
+| P5.3 CI/CD pipeline | ❌ Not done | |
+
+### Summary
+
+**Completed:** AppContext, UI split, services layer, traits definition, channels, types, test support structure.
+
+**Not completed (critical):** Trait implementations, AppContext using trait objects, legacy accessor removal, tray migration, layer enforcement.
 
 ---
 
 ## Architecture Vision
 
-### Target Layer Structure
+### Target State
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         PRESENTATION LAYER                               │
-│                                                                          │
-│  src/ui/                                                                 │
-│  ├── mod.rs           Window setup, widget creation                     │
-│  ├── state.rs         UI state structs (UIContext, etc.)                │
-│  ├── recording.rs     Dictation mode UI handler                         │
-│  ├── continuous.rs    Continuous mode UI handler                        │
-│  └── conference.rs    Conference mode UI handler                        │
-│                                                                          │
-│  src/dialogs/                                                            │
-│  ├── history.rs       History browser                                   │
-│  ├── model.rs         Model management                                  │
-│  └── settings.rs      Settings configuration                            │
-│                                                                          │
-│  Depends on: Application Layer (via traits)                             │
+│                         PRESENTATION LAYER                              │
+│                                                                         │
+│  ui/ — Window, widgets, event handlers                                 │
+│  dialogs/ — Modal dialog windows                                       │
+│  tray.rs — System tray (uses AppContext, not raw WhisperSTT)           │
+│                                                                         │
+│  Depends on: Application Layer via AppContext                          │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                         APPLICATION LAYER                                │
-│                                                                          │
-│  src/app/                                                                │
-│  ├── context.rs       AppContext (thin DI container)                    │
-│  ├── commands.rs      Application commands/use cases                    │
-│  └── events.rs        Application events                                │
-│                                                                          │
-│  src/services/                                                           │
-│  ├── audio.rs         AudioService (recording orchestration)            │
-│  └── transcription.rs TranscriptionService (STT orchestration)          │
-│                                                                          │
-│  Depends on: Domain Layer (via traits)                                  │
+│                         APPLICATION LAYER                               │
+│                                                                         │
+│  context.rs — AppContext (DI container using trait objects)             │
+│  services/ — AudioService, TranscriptionService                        │
+│  channels.rs — UIChannels                                              │
+│  hotkeys.rs — Global hotkey management                                 │
+│                                                                         │
+│  Depends on: Domain traits (not concrete types)                        │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                           DOMAIN LAYER                                   │
-│                                                                          │
-│  src/domain/                                                             │
-│  ├── traits.rs        Core abstractions (Recording, Transcription)      │
-│  ├── audio.rs         Audio processing logic                            │
-│  ├── transcription.rs STT domain logic                                  │
-│  ├── history.rs       History entity and repository trait               │
-│  └── config.rs        Configuration entity                              │
-│                                                                          │
-│  Depends on: Nothing (pure domain logic)                                │
+│                           DOMAIN LAYER                                  │
+│                                                                         │
+│  traits.rs — AudioRecording, Transcription, VoiceDetection,            │
+│              HistoryRepository, ConfigProvider                          │
+│  types.rs — Shared types (ConferenceRecording, etc.)                   │
+│                                                                         │
+│  Depends on: Nothing                                                   │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                       INFRASTRUCTURE LAYER                               │
-│                                                                          │
-│  src/infra/                                                              │
-│  ├── audio/                                                              │
-│  │   ├── cpal.rs      CPAL microphone implementation                    │
-│  │   ├── loopback.rs  System audio capture                              │
-│  │   └── vad.rs       Voice activity detection                          │
-│  ├── stt/                                                                │
-│  │   ├── whisper.rs   Whisper.cpp integration                           │
-│  │   └── diarization.rs Speaker diarization                             │
-│  ├── storage/                                                            │
-│  │   ├── config.rs    TOML config persistence                           │
-│  │   ├── history.rs   JSON history persistence                          │
-│  │   └── models.rs    Model file management                             │
-│  └── system/                                                             │
-│      ├── tray.rs      System tray integration                           │
-│      ├── hotkeys.rs   Global hotkey handling                            │
-│      └── clipboard.rs Clipboard/paste integration                       │
-│                                                                          │
-│  Depends on: Domain Layer (implements traits)                           │
+│                       INFRASTRUCTURE LAYER                              │
+│                                                                         │
+│  audio.rs — impl AudioRecording for AudioRecorder                      │
+│  whisper.rs — impl Transcription for WhisperSTT                        │
+│  history.rs — impl HistoryRepository for History                       │
+│  config.rs — impl ConfigProvider for Config                            │
+│  vad.rs — impl VoiceDetection for VoiceActivityDetector                │
+│  continuous.rs, loopback.rs, diarization.rs, etc.                      │
+│                                                                         │
+│  Depends on: Domain traits (implements them)                           │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Dependency Flow
+### Dependency Rule
 
 ```
 Presentation → Application → Domain ← Infrastructure
-     │              │           ↑           │
-     │              │           │           │
-     └──────────────┴───────────┴───────────┘
-                    All depend on Domain traits
+                                ↑           │
+                                └───────────┘
+                          Infrastructure implements Domain traits
 ```
 
 ---
 
-## Refactoring Phases
+## Refactoring Phases (Revised)
 
-### Phase 0: Quick Wins (1-2 days)
+The original 6-phase plan (0-5) is replaced by 6 focused phases (A-F) based on the fitness assessment findings. Each phase targets a specific fitness function improvement.
 
-**Goal:** Fix low-hanging fruit without architectural changes.
+### Phase A: Wire Domain Traits
 
-#### P0.1: Fix Clippy Warnings
+**Targets:** FF-1 (Dependency Direction), Violations V1, V3, V5
+**Priority:** P0 — CRITICAL (the #1 architectural gap)
 
-| Warning | File | Fix |
-|---------|------|-----|
-| `empty_line_after_outer_attr` | services/audio.rs:51 | Remove empty line |
-| `type_complexity` | conference_recorder.rs:42 | Use `ConferenceRecording` struct |
-| `redundant_closure` | continuous.rs:153 | Replace with `Instant::now` |
-| `writeln_empty_string` | history.rs:135,148,152 | Use `writeln!(file)` |
-| `map_flatten` | history_dialog.rs:199 | Use `and_then()` |
-| `too_many_arguments` | history_dialog.rs:323 | Create parameter struct |
-
-```bash
-# Verification
-cargo clippy -- -D warnings
-```
-
-#### P0.2: Fix Thread Safety Issue
-
-**File:** `src/vad.rs`
-
-**Current:**
-```rust
-pub struct VoiceActivityDetector {
-    vad: Arc<Mutex<Vad>>,  // Vad is !Send
-}
-```
-
-**Solution A (Preferred - Single Thread):**
-```rust
-use std::cell::RefCell;
-use std::rc::Rc;
-
-pub struct VoiceActivityDetector {
-    vad: Rc<RefCell<Vad>>,
-    silence_threshold_ms: u32,
-}
-```
-
-**Solution B (If cross-thread needed):**
-```rust
-/// # Thread Safety
-/// VoiceActivityDetector is designed for single-threaded use.
-/// Create separate instances for each thread if needed.
-#[allow(clippy::arc_with_non_send_sync)]
-pub struct VoiceActivityDetector {
-    vad: Arc<Mutex<Vad>>,
-}
-```
-
-#### P0.3: Apply ConferenceRecording Struct
-
-**File:** `src/conference_recorder.rs`
-
-**Current:**
-```rust
-pub fn stop_conference(&self) -> (
-    Vec<f32>, Vec<f32>, Option<Receiver<()>>, Option<Receiver<()>>
-)
-```
-
-**Refactored:**
-```rust
-use crate::services::audio::ConferenceRecording;
-
-pub fn stop_conference(&self) -> ConferenceRecording {
-    let (mic, loopback, mic_rx, loopback_rx) = self.stop_internal();
-    ConferenceRecording {
-        mic_samples: mic,
-        loopback_samples: loopback,
-        mic_completion: mic_rx,
-        loopback_completion: loopback_rx,
-    }
-}
-```
-
-**Move struct to shared location:**
-```rust
-// src/types.rs (new file)
-pub struct ConferenceRecording {
-    pub mic_samples: Vec<f32>,
-    pub loopback_samples: Vec<f32>,
-    pub mic_completion: Option<Receiver<()>>,
-    pub loopback_completion: Option<Receiver<()>>,
-}
-```
-
-#### P0.4: Fix Parameter Count
-
-**File:** `src/history_dialog.rs:323`
-
-**Current:**
-```rust
-fn create_history_row(
-    entry: &HistoryEntry,
-    list_box: &ListBox,
-    history: Arc<Mutex<History>>,
-    result_text_view: &TextView,
-    // ... 8 parameters total
-) -> ListBoxRow
-```
-
-**Refactored:**
-```rust
-struct HistoryRowContext<'a> {
-    entry: &'a HistoryEntry,
-    list_box: &'a ListBox,
-    history: Arc<Mutex<History>>,
-    result_text_view: &'a TextView,
-    // ... remaining fields
-}
-
-fn create_history_row(ctx: &HistoryRowContext) -> ListBoxRow
-```
-
----
-
-### Phase 1: Complete Services Migration (1 week)
-
-**Goal:** Make services layer the only path to recorders. Remove hybrid state.
-
-#### P1.1: Audit Current Service Usage
-
-**Files to migrate:**
-
-| File | Current Pattern | Target Pattern |
-|------|-----------------|----------------|
-| ui/recording.rs | Direct `AudioRecorder` access | `ctx.audio.start_dictation()` |
-| ui/continuous.rs | Direct `ContinuousRecorder` access | `ctx.audio.start_continuous()` |
-| ui/conference.rs | Direct `ConferenceRecorder` access | `ctx.audio.start_conference()` |
-| main.rs | Creates recorders directly | Use `AppContext` only |
-
-#### P1.2: Migrate Recording Handler
-
-**File:** `src/ui/recording.rs`
-
-**Before:**
-```rust
-pub fn handle_start(ctx: &AppContext, rec_ctx: &RecordingContext, ui: &DictationUI) {
-    let recorder = ctx.audio.mic_recorder();  // Legacy accessor
-    if let Err(e) = recorder.start_recording() {
-        // ...
-    }
-}
-```
-
-**After:**
-```rust
-pub fn handle_start(ctx: &AppContext, rec_ctx: &RecordingContext, ui: &DictationUI) {
-    if let Err(e) = ctx.audio.start_dictation() {
-        // ...
-    }
-}
-
-pub fn handle_stop(ctx: &AppContext, rec_ctx: &RecordingContext, ui: &DictationUI) {
-    let (samples, completion) = ctx.audio.stop_dictation();
-    // Process samples...
-}
-```
-
-#### P1.3: Migrate Continuous Handler
-
-**File:** `src/ui/continuous.rs`
-
-**Key changes:**
-```rust
-// Before
-let continuous_recorder = ctx.audio.continuous_recorder();
-continuous_recorder.start_continuous(segment_tx)?;
-
-// After
-ctx.audio.start_continuous(segment_tx)?;
-```
-
-#### P1.4: Migrate Conference Handler
-
-**File:** `src/ui/conference.rs`
-
-**Key changes:**
-```rust
-// Before
-let conference_recorder = ctx.audio.conference_recorder();
-conference_recorder.start_conference()?;
-let (mic, loopback, _, _) = conference_recorder.stop_conference();
-
-// After
-ctx.audio.start_conference()?;
-let result = ctx.audio.stop_conference();
-// Use result.mic_samples, result.loopback_samples
-```
-
-#### P1.5: Remove Legacy Accessors
-
-**File:** `src/services/audio.rs`
-
-**Delete these methods:**
-```rust
-// DELETE these legacy accessors
-pub fn mic_recorder(&self) -> &Arc<AudioRecorder> { ... }
-pub fn conference_recorder(&self) -> &Arc<ConferenceRecorder> { ... }
-pub fn continuous_recorder(&self) -> &Arc<ContinuousRecorder> { ... }
-```
-
-#### P1.6: Remove Dead Code Annotations
-
-After migration, remove all `#[allow(dead_code)]` from:
-- `src/services/audio.rs`
-- `src/services/transcription.rs`
-- `src/context.rs`
-- `src/ui/state.rs`
-
-**Verification:**
-```bash
-# Should compile without dead_code warnings
-cargo build 2>&1 | grep -c "dead_code"
-# Expected: 0
-```
-
-#### P1.7: Simplify AppContext
-
-**File:** `src/context.rs`
-
-**Remove convenience methods that bypass services:**
-```rust
-// DELETE - these bypass the service layer
-pub fn config_arc(&self) -> Arc<Mutex<Config>> { ... }
-pub fn history_arc(&self) -> Arc<Mutex<History>> { ... }
-pub fn diarization_arc(&self) -> Arc<Mutex<DiarizationEngine>> { ... }
-```
-
-**Keep only essential accessors:**
-```rust
-impl AppContext {
-    // Services (primary interface)
-    pub fn audio(&self) -> &AudioService { &self.audio }
-    pub fn transcription(&self) -> &TranscriptionService { ... }
-
-    // Configuration (read-only convenience)
-    pub fn language(&self) -> String { ... }
-    pub fn recording_mode(&self) -> String { ... }
-    pub fn continuous_mode(&self) -> bool { ... }
-}
-```
-
----
-
-### Phase 2: Dependency Inversion (1-2 weeks)
-
-**Goal:** Introduce traits for core abstractions, enabling testability and flexibility.
-
-#### P2.1: Create Domain Traits Module
-
-**New file:** `src/traits.rs`
-
-```rust
-//! Core domain traits for dependency inversion.
-//!
-//! These traits define the contracts between layers without
-//! depending on concrete implementations.
-
-use anyhow::Result;
-
-/// Audio recording abstraction
-pub trait AudioRecording: Send + Sync {
-    /// Start recording audio
-    fn start(&self) -> Result<()>;
-
-    /// Stop recording and return samples
-    fn stop(&self) -> (Vec<f32>, Option<async_channel::Receiver<()>>);
-
-    /// Get current amplitude (0.0 - 1.0)
-    fn amplitude(&self) -> f32;
-
-    /// Check if currently recording
-    fn is_recording(&self) -> bool;
-}
-
-/// Speech-to-text transcription abstraction
-pub trait Transcription: Send + Sync {
-    /// Transcribe audio samples to text
-    fn transcribe(&self, samples: &[f32], language: &str) -> Result<String>;
-
-    /// Check if a model is loaded
-    fn is_loaded(&self) -> bool;
-
-    /// Get the name of the loaded model
-    fn model_name(&self) -> Option<String>;
-}
-
-/// Voice activity detection abstraction
-pub trait VoiceDetection {
-    /// Check if audio frame contains speech
-    fn is_speech(&self, samples: &[f32]) -> Result<bool>;
-
-    /// Detect end of speech (silence after speech)
-    fn detect_speech_end(&self, samples: &[f32]) -> Result<bool>;
-}
-
-/// History storage abstraction
-pub trait HistoryRepository: Send + Sync {
-    /// Add a new entry
-    fn add(&mut self, entry: HistoryEntry) -> Result<()>;
-
-    /// Get all entries
-    fn entries(&self) -> &[HistoryEntry];
-
-    /// Search entries by text
-    fn search(&self, query: &str) -> Vec<&HistoryEntry>;
-
-    /// Remove old entries
-    fn cleanup(&mut self, max_age_days: u32);
-
-    /// Persist to storage
-    fn save(&self) -> Result<()>;
-}
-
-/// Configuration abstraction
-pub trait ConfigProvider: Send + Sync {
-    fn language(&self) -> String;
-    fn default_model(&self) -> String;
-    fn auto_copy(&self) -> bool;
-    fn auto_paste(&self) -> bool;
-    fn continuous_mode(&self) -> bool;
-    fn recording_mode(&self) -> String;
-}
-```
-
-#### P2.2: Implement Traits for Existing Types
-
-**File:** `src/audio.rs`
-
-```rust
-use crate::traits::AudioRecording;
-
-impl AudioRecording for AudioRecorder {
-    fn start(&self) -> Result<()> {
-        self.start_recording()
-    }
-
-    fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
-        self.stop_recording()
-    }
-
-    fn amplitude(&self) -> f32 {
-        self.get_amplitude()
-    }
-
-    fn is_recording(&self) -> bool {
-        self.is_recording.load(Ordering::SeqCst)
-    }
-}
-```
+#### A.1: Implement `Transcription` for `WhisperSTT`
 
 **File:** `src/whisper.rs`
 
@@ -543,11 +241,11 @@ use crate::traits::Transcription;
 
 impl Transcription for WhisperSTT {
     fn transcribe(&self, samples: &[f32], language: &str) -> Result<String> {
-        self.transcribe(samples, language)
+        self.transcribe(samples, language)  // delegate to existing method
     }
 
     fn is_loaded(&self) -> bool {
-        true // WhisperSTT is only created when model loads
+        true  // WhisperSTT only exists when model is loaded
     }
 
     fn model_name(&self) -> Option<String> {
@@ -556,807 +254,372 @@ impl Transcription for WhisperSTT {
 }
 ```
 
-#### P2.3: Update Services to Use Traits
+#### A.2: Implement `HistoryRepository` for `History`
 
-**File:** `src/services/audio.rs`
+**File:** `src/history.rs`
 
 ```rust
-use crate::traits::AudioRecording;
+use crate::traits::HistoryRepository;
 
-pub struct AudioService {
-    mic: Arc<dyn AudioRecording>,
-    continuous: Arc<ContinuousRecorder>,
-    conference: Arc<ConferenceRecorder>,
-}
+impl HistoryRepository for History {
+    type Entry = HistoryEntry;
 
-impl AudioService {
-    pub fn new(mic: Arc<dyn AudioRecording>, ...) -> Self { ... }
+    fn add(&mut self, entry: HistoryEntry) {
+        self.entries.insert(0, entry);
+    }
 
-    // For production
-    pub fn with_default_recorders(config: ContinuousConfig) -> Result<Self> {
-        Self::new(
-            Arc::new(AudioRecorder::new()),
-            // ...
-        )
+    fn entries(&self) -> &[HistoryEntry] {
+        &self.entries
+    }
+
+    fn search(&self, query: &str) -> Vec<&HistoryEntry> {
+        self.entries.iter()
+            .filter(|e| e.text.to_lowercase().contains(&query.to_lowercase()))
+            .collect()
+    }
+
+    fn cleanup_old(&mut self, max_age_days: u32) -> usize {
+        self.cleanup_old_entries(max_age_days)
+    }
+
+    fn trim_to_limit(&mut self, max_entries: usize) -> usize {
+        self.trim_to_limit(max_entries)
+    }
+
+    fn save(&self) -> Result<()> {
+        crate::history::save_history(self)
     }
 }
 ```
 
-#### P2.4: Create Mock Implementations for Testing
+#### A.3: Implement `ConfigProvider` for `Config`
 
-**New file:** `src/test_support/mocks.rs`
+**File:** `src/config.rs`
 
 ```rust
-use crate::traits::*;
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::traits::ConfigProvider;
 
-pub struct MockAudioRecorder {
-    is_recording: AtomicBool,
-    samples_to_return: Vec<f32>,
-}
-
-impl MockAudioRecorder {
-    pub fn new() -> Self {
-        Self {
-            is_recording: AtomicBool::new(false),
-            samples_to_return: vec![0.0; 16000], // 1 second of silence
-        }
-    }
-
-    pub fn with_samples(samples: Vec<f32>) -> Self {
-        Self {
-            is_recording: AtomicBool::new(false),
-            samples_to_return: samples,
-        }
-    }
-}
-
-impl AudioRecording for MockAudioRecorder {
-    fn start(&self) -> Result<()> {
-        self.is_recording.store(true, Ordering::SeqCst);
-        Ok(())
-    }
-
-    fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
-        self.is_recording.store(false, Ordering::SeqCst);
-        (self.samples_to_return.clone(), None)
-    }
-
-    fn amplitude(&self) -> f32 { 0.5 }
-    fn is_recording(&self) -> bool {
-        self.is_recording.load(Ordering::SeqCst)
-    }
-}
-
-pub struct MockTranscription {
-    result: String,
-}
-
-impl MockTranscription {
-    pub fn returning(text: &str) -> Self {
-        Self { result: text.to_string() }
-    }
-}
-
-impl Transcription for MockTranscription {
-    fn transcribe(&self, _: &[f32], _: &str) -> Result<String> {
-        Ok(self.result.clone())
-    }
-
-    fn is_loaded(&self) -> bool { true }
-    fn model_name(&self) -> Option<String> { Some("mock".to_string()) }
+impl ConfigProvider for Config {
+    fn language(&self) -> String { self.language.clone() }
+    fn default_model(&self) -> String { self.default_model.clone() }
+    fn auto_copy(&self) -> bool { self.auto_copy }
+    fn auto_paste(&self) -> bool { self.auto_paste }
+    fn continuous_mode(&self) -> bool { self.continuous_mode }
+    fn recording_mode(&self) -> String { self.recording_mode.clone() }
 }
 ```
 
-#### P2.5: Update AppContext to Use Traits
+#### A.4: Implement `VoiceDetection` for `VoiceActivityDetector`
+
+**File:** `src/vad.rs`
+
+```rust
+use crate::traits::VoiceDetection;
+
+impl VoiceDetection for VoiceActivityDetector {
+    fn is_speech(&mut self, samples: &[f32]) -> Result<bool> {
+        self.is_speech(samples)
+    }
+
+    fn detect_speech_end(&mut self, samples: &[f32]) -> Result<bool> {
+        self.detect_speech_end(samples)
+    }
+
+    fn reset(&mut self) {
+        self.reset()
+    }
+}
+```
+
+#### A.5: Update `TranscriptionService` to Use Trait
+
+**File:** `src/services/transcription.rs`
+
+Change internal storage from `Option<WhisperSTT>` to `Option<Box<dyn Transcription>>` or keep `WhisperSTT` but expose via trait interface. The key change is that `AppContext.transcription` uses the `Transcription` trait bound.
+
+#### A.6: Remove Legacy Accessors from AppContext
 
 **File:** `src/context.rs`
 
+Remove:
 ```rust
-use crate::traits::{AudioRecording, Transcription, HistoryRepository};
-
-pub struct AppContext {
-    audio: Arc<AudioService>,
-    transcription: Arc<dyn Transcription>,
-    history: Arc<Mutex<dyn HistoryRepository>>,
-    config: Arc<Mutex<Config>>,
-    channels: Arc<UIChannels>,
-}
+// DELETE these
+pub fn config_arc(&self) -> Arc<Mutex<Config>> { ... }
+pub fn history_arc(&self) -> Arc<Mutex<History>> { ... }
 ```
+
+Update callers (dialogs) to receive what they need via parameters or through `AppContext` service methods.
+
+#### A.7: Verification
+
+```bash
+# All trait implementations compile
+cargo build
+
+# Tests pass
+cargo test
+
+# No more dead_code warnings for trait methods
+cargo build 2>&1 | grep -c "dead_code"
+```
+
+**Success criteria:** Every trait in `traits.rs` has at least one production `impl`. `AppContext` no longer exposes raw `Arc<Mutex<T>>` handles for config/history.
 
 ---
 
-### Phase 3: Recording Mode Polymorphism (1 week)
+### Phase B: Eliminate Tray Duplication
 
-**Goal:** Replace conditional logic with trait-based polymorphism.
+**Targets:** FF-3 (Hotspot Risk), Violation V2
+**Priority:** P1 — HIGH (memory waste, architectural bypass)
 
-#### P3.1: Define Recording Mode Trait
+#### B.1: Audit Tray's WhisperSTT Usage
 
-**New file:** `src/modes/mod.rs`
+Understand exactly what `DictationTray` does with `WhisperSTT`. The tray likely needs:
+- Check if model is loaded (for status display)
+- Possibly trigger transcription from tray
+
+#### B.2: Migrate Tray to Use AppContext
+
+**File:** `src/main.rs`
+
+Replace:
+```rust
+// DELETE: Lines 159-177 (duplicate model loading)
+let whisper_for_tray: Arc<Mutex<Option<WhisperSTT>>> = { ... };
+```
+
+With:
+```rust
+// Tray uses shared TranscriptionService via AppContext
+let tray_handle = DictationTray::spawn_service(tray_tx, ctx.clone());
+```
+
+#### B.3: Update DictationTray API
+
+**File:** `src/tray.rs`
+
+Change `spawn_service` signature to accept `Arc<AppContext>` instead of separate `config` + `whisper` parameters:
 
 ```rust
-pub mod dictation;
-pub mod continuous;
-pub mod conference;
-
-use crate::context::AppContext;
-use crate::ui::state::RecordingContext;
-use anyhow::Result;
-
-/// Recording mode abstraction
-pub trait RecordingMode {
-    /// Human-readable name
-    fn name(&self) -> &'static str;
-
-    /// Start recording
-    fn start(&self, ctx: &AppContext, rec_ctx: &RecordingContext) -> Result<()>;
-
-    /// Stop recording and return transcription
-    fn stop(&self, ctx: &AppContext, rec_ctx: &RecordingContext) -> Result<String>;
-
-    /// Get current amplitude for UI
-    fn amplitude(&self, ctx: &AppContext) -> f32;
-
-    /// Check if this mode supports continuous operation
-    fn is_continuous(&self) -> bool { false }
+pub fn spawn_service(
+    tx: Sender<TrayAction>,
+    ctx: Arc<AppContext>,
+) -> TrayHandle {
+    // Use ctx.transcription for model status
+    // Use ctx.config for configuration
 }
 ```
 
-#### P3.2: Implement Mode Structs
+#### B.4: Verification
 
-**File:** `src/modes/dictation.rs`
+```bash
+# Build succeeds without whisper_for_tray
+cargo build
+
+# Memory usage reduced (no duplicate model)
+# Tray correctly shows model status
+cargo run --release
+```
+
+**Success criteria:** `whisper_for_tray` eliminated from `main.rs`. Only one `WhisperSTT` instance exists at runtime.
+
+---
+
+### Phase C: Tame UI State Hotspot
+
+**Targets:** FF-2 (Component Instability), FF-3 (Hotspot Risk), Violation V4
+**Priority:** P2 — MEDIUM
+
+#### C.1: Extract Stable Interface from UIContext
+
+`UIContext` has fields like `status_label` (27 callers) and `button` (20 callers) that are implementation details (GTK widgets) leaking across 7 modules.
+
+**New trait in `ui/state.rs`:**
 
 ```rust
-use super::RecordingMode;
-
-pub struct DictationMode;
-
-impl RecordingMode for DictationMode {
-    fn name(&self) -> &'static str { "dictation" }
-
-    fn start(&self, ctx: &AppContext, rec_ctx: &RecordingContext) -> Result<()> {
-        ctx.audio.start_dictation()?;
-        rec_ctx.start_recording();
-        Ok(())
-    }
-
-    fn stop(&self, ctx: &AppContext, rec_ctx: &RecordingContext) -> Result<String> {
-        let (samples, _) = ctx.audio.stop_dictation();
-        rec_ctx.start_processing();
-
-        let language = ctx.language();
-        let text = ctx.transcription.lock().unwrap()
-            .transcribe(&samples, &language)?;
-
-        rec_ctx.finish();
-        Ok(text)
-    }
-
-    fn amplitude(&self, ctx: &AppContext) -> f32 {
-        ctx.audio.get_dictation_amplitude()
-    }
+/// Stable interface for UI state updates.
+/// Handlers depend on this trait, not on UIContext's widget fields.
+pub trait UIStateUpdater {
+    fn set_status(&self, text: &str);
+    fn set_button_label(&self, text: &str);
+    fn set_button_sensitive(&self, sensitive: bool);
+    fn set_result_text(&self, text: &str);
+    fn show_error(&self, message: &str);
 }
 ```
 
-**File:** `src/modes/continuous.rs`
+#### C.2: Implement UIStateUpdater for UIContext
 
 ```rust
-pub struct ContinuousMode {
-    segment_tx: Sender<AudioSegment>,
-}
-
-impl ContinuousMode {
-    pub fn new(segment_tx: Sender<AudioSegment>) -> Self {
-        Self { segment_tx }
+impl UIStateUpdater for UIContext {
+    fn set_status(&self, text: &str) {
+        self.status_label.set_text(text);
     }
-}
-
-impl RecordingMode for ContinuousMode {
-    fn name(&self) -> &'static str { "continuous" }
-
-    fn is_continuous(&self) -> bool { true }
-
-    fn start(&self, ctx: &AppContext, rec_ctx: &RecordingContext) -> Result<()> {
-        ctx.audio.start_continuous(self.segment_tx.clone())?;
-        rec_ctx.start_recording();
-        Ok(())
+    fn set_button_label(&self, text: &str) {
+        self.button.set_label(text);
     }
-
     // ... etc
 }
 ```
 
-#### P3.3: Create Mode Factory
+#### C.3: Migrate UI Handlers to Use Trait
 
-**File:** `src/modes/factory.rs`
+Update `ui/recording.rs`, `ui/continuous.rs`, `ui/conference.rs` to accept `&dyn UIStateUpdater` instead of `&UIContext` where possible. This decouples handlers from specific GTK widget types.
 
-```rust
-use super::*;
+#### C.4: Move `AppState` to `types.rs`
 
-pub fn create_mode(
-    mode_name: &str,
-    continuous_enabled: bool,
-    segment_tx: Option<Sender<AudioSegment>>,
-) -> Box<dyn RecordingMode> {
-    match mode_name {
-        "conference" => Box::new(ConferenceMode),
-        "dictation" if continuous_enabled => {
-            Box::new(ContinuousMode::new(segment_tx.unwrap()))
-        }
-        _ => Box::new(DictationMode),
-    }
-}
-```
+`AppState` (Idle, Recording, Processing) is a domain concept, not a UI concept. Move it to `types.rs` to reduce `ui/state.rs` symbol count and coupling.
 
-#### P3.4: Simplify UI Handler
-
-**File:** `src/ui/mod.rs`
-
-**Before (conditional logic):**
-```rust
-match rec_ctx.state.get() {
-    AppState::Idle => {
-        if is_conference {
-            conference::handle_start(&ctx, &rec_ctx, &conference_ui);
-        } else if is_continuous {
-            continuous::handle_start(&ctx, &rec_ctx, &continuous_ui);
-        } else {
-            recording::handle_start(&ctx, &rec_ctx, &dictation_ui);
-        }
-    }
-    // ...
-}
-```
-
-**After (polymorphic dispatch):**
-```rust
-let mode = modes::create_mode(
-    &ctx.recording_mode(),
-    ctx.continuous_mode(),
-    Some(segment_tx.clone()),
-);
-
-match rec_ctx.state.get() {
-    AppState::Idle => {
-        if let Err(e) = mode.start(&ctx, &rec_ctx) {
-            show_error(&ui, &e);
-        }
-    }
-    AppState::Recording => {
-        match mode.stop(&ctx, &rec_ctx) {
-            Ok(text) => ui.set_result_text(&text),
-            Err(e) => show_error(&ui, &e),
-        }
-    }
-    // ...
-}
-```
+**Success criteria:** UI handlers depend on `UIStateUpdater` trait. Direct field access to `status_label`, `button` is confined to `UIContext` impl. `AppState` is in `types.rs`.
 
 ---
 
-### Phase 4: Domain Layer Extraction (2 weeks)
+### Phase D: Decompose Oversized Modules
 
-**Goal:** Separate pure domain logic from infrastructure concerns.
+**Targets:** FF-4 (Module Cohesion), Violation V6
+**Priority:** P3 — MEDIUM
 
-#### P4.1: Create Domain Module Structure
+#### D.1: Split `dialogs/model.rs` (156 symbols)
+
+Current responsibilities:
+- Model listing/display
+- Model downloading
+- Model file management
+
+Split into:
+```
+dialogs/
+├── model/
+│   ├── mod.rs          # Re-exports, show_dialog()
+│   ├── list.rs         # Model listing and display
+│   └── download.rs     # Download progress and management
+```
+
+#### D.2: Split `dialogs/history.rs` (152 symbols)
+
+Current responsibilities:
+- History listing
+- Search/filter
+- Entry detail display
+- Entry management (delete, export)
+
+Split into:
+```
+dialogs/
+├── history/
+│   ├── mod.rs          # Re-exports, show_dialog()
+│   ├── list.rs         # History listing and search
+│   └── detail.rs       # Entry detail view and actions
+```
+
+#### D.3: Decompose Long Functions in `audio.rs`
+
+`audio.rs` has local variables with 40-95 internal callers, indicating monolithic functions. Extract:
+- `setup_audio_stream()` — device selection and stream configuration
+- `process_audio_buffer()` — sample processing and resampling
+- `manage_recording_state()` — start/stop state transitions
+
+#### D.4: Verification
 
 ```bash
-mkdir -p src/domain
-touch src/domain/mod.rs
-touch src/domain/audio.rs
-touch src/domain/transcription.rs
-touch src/domain/history.rs
-touch src/domain/config.rs
+# Check no module exceeds 150 symbols after split
+# (use codegraph get_file_symbols for each)
 ```
 
-#### P4.2: Extract History Domain Entity
-
-**File:** `src/domain/history.rs`
-
-```rust
-//! History domain entity and business rules.
-//!
-//! This module contains pure domain logic with no external dependencies.
-
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-
-/// A transcription history entry (domain entity)
-#[derive(Debug, Clone)]
-pub struct HistoryEntry {
-    id: Uuid,
-    text: String,
-    timestamp: DateTime<Utc>,
-    duration_secs: f32,
-    mode: RecordingMode,
-    word_count: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RecordingMode {
-    Dictation,
-    Continuous,
-    Conference,
-}
-
-impl HistoryEntry {
-    pub fn new(text: String, duration_secs: f32, mode: RecordingMode) -> Self {
-        let word_count = text.split_whitespace().count();
-        Self {
-            id: Uuid::new_v4(),
-            text,
-            timestamp: Utc::now(),
-            duration_secs,
-            mode,
-            word_count,
-        }
-    }
-
-    pub fn id(&self) -> Uuid { self.id }
-    pub fn text(&self) -> &str { &self.text }
-    pub fn timestamp(&self) -> DateTime<Utc> { self.timestamp }
-    pub fn duration_secs(&self) -> f32 { self.duration_secs }
-    pub fn mode(&self) -> RecordingMode { self.mode }
-    pub fn word_count(&self) -> usize { self.word_count }
-
-    /// Preview of text (first N characters)
-    pub fn preview(&self, max_chars: usize) -> &str {
-        if self.text.len() <= max_chars {
-            &self.text
-        } else {
-            &self.text[..max_chars]
-        }
-    }
-
-    /// Check if entry matches search query
-    pub fn matches(&self, query: &str) -> bool {
-        self.text.to_lowercase().contains(&query.to_lowercase())
-    }
-
-    /// Check if entry is older than given days
-    pub fn is_older_than(&self, days: u32) -> bool {
-        let age = Utc::now() - self.timestamp;
-        age.num_days() > days as i64
-    }
-}
-
-/// History collection with business rules
-pub struct History {
-    entries: Vec<HistoryEntry>,
-}
-
-impl History {
-    pub fn new() -> Self {
-        Self { entries: Vec::new() }
-    }
-
-    pub fn add(&mut self, entry: HistoryEntry) {
-        self.entries.insert(0, entry); // Most recent first
-    }
-
-    pub fn entries(&self) -> &[HistoryEntry] {
-        &self.entries
-    }
-
-    pub fn search(&self, query: &str) -> Vec<&HistoryEntry> {
-        self.entries.iter()
-            .filter(|e| e.matches(query))
-            .collect()
-    }
-
-    /// Remove entries older than max_age_days
-    pub fn cleanup_old(&mut self, max_age_days: u32) -> usize {
-        let before = self.entries.len();
-        self.entries.retain(|e| !e.is_older_than(max_age_days));
-        before - self.entries.len()
-    }
-
-    /// Trim to maximum entries
-    pub fn trim_to_limit(&mut self, max_entries: usize) -> usize {
-        if self.entries.len() <= max_entries {
-            return 0;
-        }
-        let removed = self.entries.len() - max_entries;
-        self.entries.truncate(max_entries);
-        removed
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-}
-
-impl Default for History {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_entry_word_count() {
-        let entry = HistoryEntry::new(
-            "Hello world test".to_string(),
-            1.5,
-            RecordingMode::Dictation,
-        );
-        assert_eq!(entry.word_count(), 3);
-    }
-
-    #[test]
-    fn test_entry_matches_case_insensitive() {
-        let entry = HistoryEntry::new(
-            "Hello World".to_string(),
-            1.0,
-            RecordingMode::Dictation,
-        );
-        assert!(entry.matches("hello"));
-        assert!(entry.matches("WORLD"));
-    }
-
-    #[test]
-    fn test_history_search() {
-        let mut history = History::new();
-        history.add(HistoryEntry::new("apple".to_string(), 1.0, RecordingMode::Dictation));
-        history.add(HistoryEntry::new("banana".to_string(), 1.0, RecordingMode::Dictation));
-        history.add(HistoryEntry::new("apple pie".to_string(), 1.0, RecordingMode::Dictation));
-
-        let results = history.search("apple");
-        assert_eq!(results.len(), 2);
-    }
-
-    #[test]
-    fn test_history_trim() {
-        let mut history = History::new();
-        for i in 0..10 {
-            history.add(HistoryEntry::new(
-                format!("entry {}", i),
-                1.0,
-                RecordingMode::Dictation,
-            ));
-        }
-
-        let removed = history.trim_to_limit(5);
-        assert_eq!(removed, 5);
-        assert_eq!(history.len(), 5);
-    }
-}
-```
-
-#### P4.3: Create Infrastructure Adapter
-
-**File:** `src/infra/storage/history.rs`
-
-```rust
-//! JSON-based history persistence.
-
-use crate::domain::history::{History, HistoryEntry, RecordingMode};
-use crate::traits::HistoryRepository;
-use anyhow::{Context, Result};
-use std::fs;
-use std::path::PathBuf;
-
-pub struct JsonHistoryRepository {
-    history: History,
-    path: PathBuf,
-}
-
-impl JsonHistoryRepository {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            history: History::new(),
-            path,
-        }
-    }
-
-    pub fn load(path: PathBuf) -> Result<Self> {
-        let content = fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read history from {:?}", path))?;
-
-        let history: History = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse history JSON")?;
-
-        Ok(Self { history, path })
-    }
-}
-
-impl HistoryRepository for JsonHistoryRepository {
-    fn add(&mut self, entry: HistoryEntry) -> Result<()> {
-        self.history.add(entry);
-        self.save()
-    }
-
-    fn entries(&self) -> &[HistoryEntry] {
-        self.history.entries()
-    }
-
-    fn search(&self, query: &str) -> Vec<&HistoryEntry> {
-        self.history.search(query)
-    }
-
-    fn cleanup(&mut self, max_age_days: u32) {
-        self.history.cleanup_old(max_age_days);
-    }
-
-    fn save(&self) -> Result<()> {
-        let json = serde_json::to_string_pretty(self.history.entries())
-            .context("Failed to serialize history")?;
-
-        fs::write(&self.path, json)
-            .with_context(|| format!("Failed to write history to {:?}", self.path))?;
-
-        Ok(())
-    }
-}
-```
-
-#### P4.4: Reorganize Module Structure
-
-**Final structure after Phase 4:**
-
-```
-src/
-├── main.rs                 # Entry point only
-├── traits.rs               # Core abstractions
-├── types.rs                # Shared types
-│
-├── domain/                 # Pure business logic (no deps)
-│   ├── mod.rs
-│   ├── history.rs          # History entity
-│   ├── audio.rs            # Audio processing rules
-│   └── config.rs           # Config entity
-│
-├── app/                    # Application layer
-│   ├── mod.rs
-│   ├── context.rs          # AppContext (DI)
-│   └── services/
-│       ├── audio.rs        # AudioService
-│       └── transcription.rs
-│
-├── ui/                     # Presentation layer
-│   ├── mod.rs
-│   ├── state.rs
-│   ├── recording.rs
-│   ├── continuous.rs
-│   ├── conference.rs
-│   └── dialogs/
-│       ├── history.rs
-│       ├── model.rs
-│       └── settings.rs
-│
-├── modes/                  # Recording mode strategies
-│   ├── mod.rs
-│   ├── dictation.rs
-│   ├── continuous.rs
-│   └── conference.rs
-│
-└── infra/                  # Infrastructure implementations
-    ├── mod.rs
-    ├── audio/
-    │   ├── cpal.rs         # Microphone (impl AudioRecording)
-    │   ├── continuous.rs
-    │   ├── loopback.rs
-    │   └── vad.rs
-    ├── stt/
-    │   ├── whisper.rs      # impl Transcription
-    │   └── diarization.rs
-    ├── storage/
-    │   ├── config.rs       # TOML persistence
-    │   ├── history.rs      # JSON persistence
-    │   └── models.rs       # Model file management
-    └── system/
-        ├── tray.rs
-        ├── hotkeys.rs
-        └── clipboard.rs
-```
+**Success criteria:** All modules under 150 symbols. No function in `audio.rs` with more than 30 internal variable references.
 
 ---
 
-### Phase 5: Testing Infrastructure (Ongoing)
+### Phase E: Layer Enforcement
 
-**Goal:** Achieve >60% test coverage with meaningful tests.
+**Targets:** FF-5 (Cyclic Dependencies), Violation V7
+**Priority:** P4 — LOW (long-term)
 
-#### P5.1: Unit Tests for Domain Layer
+#### E.1: Module Visibility Restrictions
+
+Use `pub(crate)` and `pub(super)` to restrict cross-layer access:
 
 ```rust
-// src/domain/history.rs - tests already included above
+// Infrastructure modules should not be directly accessible from UI
+// audio.rs
+pub(crate) struct AudioRecorder { ... }  // Only services/ can use this
 
-// src/domain/audio.rs
-#[cfg(test)]
-mod tests {
-    use super::*;
+// UI should only access through AppContext
+// context.rs
+pub struct AppContext { ... }  // Public interface
+```
 
-    #[test]
-    fn test_amplitude_calculation() {
-        let samples = vec![0.5, -0.5, 0.3, -0.3];
-        let amplitude = calculate_amplitude(&samples);
-        assert!((amplitude - 0.4).abs() < 0.01);
-    }
+#### E.2: Consider Workspace Crates (Future)
 
-    #[test]
-    fn test_resample_preserves_duration() {
-        let input = vec![0.0; 44100]; // 1 second at 44.1kHz
-        let output = resample_to_16khz(&input, 44100);
-        assert_eq!(output.len(), 16000); // 1 second at 16kHz
-    }
+For strict enforcement, split into workspace crates:
+```
+s2t/
+├── Cargo.toml              # Workspace root
+├── crates/
+│   ├── s2t-domain/         # traits.rs, types.rs (zero deps)
+│   ├── s2t-infra/          # audio, whisper, history, config impls
+│   ├── s2t-services/       # AudioService, TranscriptionService
+│   └── s2t-app/            # main.rs, ui/, dialogs/, tray
+```
+
+This makes layer violations into **compile errors**. However, this is a major restructuring and should only be done when the trait-based architecture is fully wired.
+
+#### E.3: Architecture Fitness CI Check
+
+Add a CI step that runs codegraph analysis and fails if:
+- Any module exceeds 200 symbols
+- Any new trait is defined without at least one impl
+- Any domain module imports from UI
+
+---
+
+### Phase F: Testing & CI
+
+**Targets:** All fitness functions (validation)
+**Priority:** P5 — ONGOING
+
+#### F.1: Unit Tests for Trait Implementations
+
+After Phase A, add tests that exercise concrete types through trait interfaces:
+
+```rust
+#[test]
+fn test_whisper_implements_transcription_trait() {
+    // This test verifies the trait contract, not WhisperSTT internals
+    let stt: Box<dyn Transcription> = Box::new(WhisperSTT::new("model.bin")?);
+    assert!(stt.is_loaded());
 }
 ```
 
-#### P5.2: Integration Tests
-
-**File:** `tests/integration_tests.rs`
+#### F.2: Integration Tests with Mocks
 
 ```rust
-use voice_dictation::*;
-use voice_dictation::test_support::mocks::*;
-
 #[test]
-fn test_dictation_workflow() {
-    // Setup
-    let recorder = Arc::new(MockAudioRecorder::with_samples(
-        generate_sine_wave(16000, 1.0) // 1 second
-    ));
-    let transcriber = Arc::new(MockTranscription::returning("hello world"));
-
-    let service = AudioService::new(recorder, ...);
-
-    // Execute
-    service.start_dictation().unwrap();
-    let (samples, _) = service.stop_dictation();
-    let text = transcriber.transcribe(&samples, "en").unwrap();
-
-    // Verify
-    assert_eq!(text, "hello world");
-    assert_eq!(samples.len(), 16000);
-}
-
-#[test]
-fn test_history_persistence() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().join("history.json");
-
-    // Create and save
-    let mut repo = JsonHistoryRepository::new(path.clone());
-    repo.add(HistoryEntry::new("test".to_string(), 1.0, RecordingMode::Dictation)).unwrap();
-
-    // Load and verify
-    let loaded = JsonHistoryRepository::load(path).unwrap();
-    assert_eq!(loaded.entries().len(), 1);
-    assert_eq!(loaded.entries()[0].text(), "test");
+fn test_dictation_workflow_with_mocks() {
+    let mock_recorder = MockAudioRecorder::with_samples(sine_wave(16000));
+    let mock_transcriber = MockTranscription::returning("hello world");
+    // ... exercise full workflow through AppContext
 }
 ```
 
-#### P5.3: CI/CD Pipeline
-
-**File:** `.github/workflows/ci.yml`
+#### F.3: CI Pipeline
 
 ```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-env:
-  CARGO_TERM_COLOR: always
-
+# .github/workflows/ci.yml
 jobs:
   check:
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - cargo fmt --check
+      - cargo clippy -- -D warnings
+      - cargo build --release
+      - cargo test --all-features
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libasound2-dev
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Clippy (strict)
-        run: cargo clippy -- -D warnings
-
-      - name: Build
-        run: cargo build --release
-
-      - name: Run tests
-        run: cargo test --all-features
-
-      - name: Generate coverage
-        run: |
-          cargo install cargo-tarpaulin --locked || true
-          cargo tarpaulin --out Xml
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: cobertura.xml
-
-  architecture-fitness:
-    runs-on: ubuntu-latest
-    needs: check
+  architecture:
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install rust-analyzer
-        run: |
-          curl -L https://github.com/rust-lang/rust-analyzer/releases/latest/download/rust-analyzer-x86_64-unknown-linux-gnu.gz | gunzip -c - > ~/.cargo/bin/rust-analyzer
-          chmod +x ~/.cargo/bin/rust-analyzer
-
-      - name: Build SCIP index
-        run: |
-          cargo install scip-rust || true
-          scip-rust index
-
-      - name: Check architecture fitness
-        run: |
-          # Custom script to verify architecture rules
-          ./scripts/check-architecture.sh
+      - # Run architecture fitness checks
+      - # Verify all traits have implementations
+      - # Check module sizes
 ```
-
----
-
-## Detailed Task Breakdown
-
-### Phase 0 Tasks
-
-| Task ID | Description | Est. Hours | Dependencies |
-|---------|-------------|------------|--------------|
-| P0.1.1 | Fix empty_line_after_outer_attr in services/audio.rs | 0.25 | - |
-| P0.1.2 | Fix type_complexity in conference_recorder.rs | 0.5 | - |
-| P0.1.3 | Fix redundant_closure in continuous.rs | 0.25 | - |
-| P0.1.4 | Fix writeln_empty_string in history.rs (3 places) | 0.25 | - |
-| P0.1.5 | Fix map_flatten in history_dialog.rs | 0.25 | - |
-| P0.1.6 | Fix too_many_arguments in history_dialog.rs | 1.0 | - |
-| P0.2.1 | Analyze VAD threading requirements | 0.5 | - |
-| P0.2.2 | Refactor VoiceActivityDetector to Rc<RefCell> | 1.0 | P0.2.1 |
-| P0.3.1 | Move ConferenceRecording to types.rs | 0.5 | - |
-| P0.3.2 | Update conference_recorder.rs to return struct | 0.5 | P0.3.1 |
-| P0.4.1 | Verify all clippy warnings resolved | 0.5 | P0.1.* |
-
-### Phase 1 Tasks
-
-| Task ID | Description | Est. Hours | Dependencies |
-|---------|-------------|------------|--------------|
-| P1.1.1 | Audit service usage in ui/recording.rs | 1.0 | P0.* |
-| P1.1.2 | Audit service usage in ui/continuous.rs | 1.0 | P0.* |
-| P1.1.3 | Audit service usage in ui/conference.rs | 1.0 | P0.* |
-| P1.2.1 | Migrate recording.rs to AudioService | 2.0 | P1.1.1 |
-| P1.3.1 | Migrate continuous.rs to AudioService | 3.0 | P1.1.2 |
-| P1.4.1 | Migrate conference.rs to AudioService | 3.0 | P1.1.3 |
-| P1.5.1 | Remove legacy accessors from AudioService | 1.0 | P1.2-4 |
-| P1.6.1 | Remove all #[allow(dead_code)] | 1.0 | P1.5.1 |
-| P1.7.1 | Simplify AppContext, remove legacy methods | 2.0 | P1.6.1 |
-| P1.8.1 | Integration testing of migrated code | 4.0 | P1.7.1 |
-
-### Phase 2-5 Tasks
-
-*(Detailed breakdown to be refined after Phase 1 completion)*
 
 ---
 
@@ -1364,114 +627,140 @@ jobs:
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| Breaking changes during migration | High | Medium | Incremental changes, comprehensive testing |
-| Hidden dependencies not in codegraph | Medium | High | Manual code review before changes |
-| GTK threading issues | Medium | High | Document threading model, review async patterns |
-| Performance regression | Low | Medium | Benchmark critical paths before/after |
-| Incomplete migration | Medium | High | Clear milestones, regular checkpoints |
+| Trait implementation breaks existing API | Medium | High | Add `impl` blocks without changing existing method signatures |
+| Tray migration breaks system tray | Medium | Medium | Test tray independently before integration |
+| UI state refactoring breaks handlers | Medium | Medium | Incremental migration, one handler at a time |
+| Dialog split changes public API | Low | Low | Re-export from `mod.rs` for backwards compat |
+| Workspace split is too disruptive | High | High | Defer to Phase E; use visibility restrictions first |
+
+### Migration Safety Rules
+
+1. **One phase at a time.** Complete Phase A before starting Phase B.
+2. **Green builds between steps.** Every step within a phase must leave `cargo build` and `cargo test` passing.
+3. **No feature changes.** These are purely structural refactorings — zero behavioral changes.
+4. **Trait impls are additive.** Adding `impl Transcription for WhisperSTT` does not change any existing code. It only adds a new capability.
+5. **Measure before and after.** Run architecture fitness assessment at the start and end of each phase.
 
 ---
 
 ## Success Metrics
 
-### After Phase 0
+### After Phase A (Wire Domain Traits)
 
+- [ ] `impl Transcription for WhisperSTT` compiles
+- [ ] `impl HistoryRepository for History` compiles
+- [ ] `impl ConfigProvider for Config` compiles
+- [ ] `impl VoiceDetection for VoiceActivityDetector` compiles
+- [ ] `AppContext` no longer exposes `config_arc()` / `history_arc()`
+- [ ] FF-1 score: 4/5 or higher
 - [ ] `cargo clippy -- -D warnings` passes
-- [ ] No `Arc<Mutex<T>>` with non-Send types
-- [ ] All complex return types use named structs
 
-### After Phase 1
+### After Phase B (Tray Fix)
 
-- [ ] Zero `#[allow(dead_code)]` in services layer
-- [ ] All recording operations go through `AudioService`
-- [ ] `AppContext` has no `_arc()` legacy accessors
-- [ ] All tests pass
+- [ ] `whisper_for_tray` removed from `main.rs`
+- [ ] `DictationTray::spawn_service` accepts `Arc<AppContext>`
+- [ ] Only one `WhisperSTT` instance at runtime
+- [ ] System tray still shows correct model status
 
-### After Phase 2
+### After Phase C (UI State)
 
-- [ ] Core traits defined in `src/traits.rs`
-- [ ] All services use trait bounds
-- [ ] Mock implementations available for testing
+- [ ] `UIStateUpdater` trait defined and implemented
+- [ ] UI handlers use trait, not widget fields directly
+- [ ] `AppState` moved to `types.rs`
+- [ ] `ui/state.rs` callers reduced from 7 to ≤3
+- [ ] FF-2 score: 4/5
+
+### After Phase D (Module Decomposition)
+
+- [ ] All modules under 150 symbols
+- [ ] `dialogs/model/` directory with ≥2 files
+- [ ] `dialogs/history/` directory with ≥2 files
+- [ ] `audio.rs` functions all under 100 lines
+- [ ] FF-4 score: 5/5
+
+### After Phase E (Layer Enforcement)
+
+- [ ] `pub(crate)` visibility on infrastructure types
+- [ ] No direct UI → Infrastructure imports
+- [ ] FF-5 score: 4/5
+
+### After Phase F (Testing & CI)
+
+- [ ] CI pipeline running on GitHub Actions
 - [ ] Test coverage > 40%
-
-### After Phase 3
-
-- [ ] Recording mode selection is polymorphic
-- [ ] No conditional mode logic in UI handlers
-- [ ] Easy to add new recording modes
-
-### After Phase 4
-
-- [ ] Clear layer separation in directory structure
-- [ ] Domain layer has zero external dependencies
-- [ ] Test coverage > 60%
-
-### After Phase 5
-
-- [ ] CI/CD pipeline running
 - [ ] Architecture fitness checks automated
-- [ ] All fitness functions passing
+- [ ] All fitness functions ≥ 4/5
+
+### Overall Target
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Architecture Fitness | 2.6/5.0 | 4.4/5.0 |
+| Trait implementations | 0 (production) | 5 |
+| Max module symbols | 156 | < 150 |
+| WhisperSTT instances | 2 | 1 |
+| Legacy accessors | 2 | 0 |
+| Test coverage | ~10% | > 40% |
 
 ---
 
 ## Appendices
 
-### Appendix A: File Change Summary
+### Appendix A: Phase-File Impact Matrix
 
-| File | Phase | Change Type |
-|------|-------|-------------|
-| src/services/audio.rs | 0, 1 | Modify |
-| src/conference_recorder.rs | 0 | Modify |
-| src/continuous.rs | 0 | Modify |
-| src/history.rs | 0 | Modify |
-| src/history_dialog.rs | 0 | Modify |
-| src/vad.rs | 0 | Modify |
-| src/types.rs | 0 | Create |
-| src/ui/recording.rs | 1 | Modify |
-| src/ui/continuous.rs | 1 | Modify |
-| src/ui/conference.rs | 1 | Modify |
-| src/context.rs | 1, 2 | Modify |
-| src/traits.rs | 2 | Create |
-| src/test_support/mocks.rs | 2 | Create |
-| src/audio.rs | 2 | Modify |
-| src/whisper.rs | 2 | Modify |
-| src/modes/ | 3 | Create |
-| src/domain/ | 4 | Create |
-| src/infra/ | 4 | Create |
-| tests/ | 5 | Create |
-| .github/workflows/ci.yml | 5 | Create |
+| File | Phase A | Phase B | Phase C | Phase D | Phase E |
+|------|---------|---------|---------|---------|---------|
+| src/whisper.rs | Modify | | | | |
+| src/history.rs | Modify | | | | |
+| src/config.rs | Modify | | | | |
+| src/vad.rs | Modify | | | | |
+| src/services/transcription.rs | Modify | | | | |
+| src/context.rs | Modify | | | | Modify |
+| src/main.rs | | Modify | | | |
+| src/tray.rs | | Modify | | | |
+| src/ui/state.rs | | | Modify | | |
+| src/ui/recording.rs | | | Modify | | |
+| src/ui/continuous.rs | | | Modify | | |
+| src/ui/conference.rs | | | Modify | | |
+| src/types.rs | | | Modify | | |
+| src/dialogs/model.rs | | | | Split | |
+| src/dialogs/history.rs | | | | Split | |
+| src/audio.rs | | | | Modify | Modify |
+| src/traits.rs | Verify | | Modify | | |
 
-### Appendix B: Commands Reference
+### Appendix B: Verification Commands
 
 ```bash
-# Check all clippy warnings
+# Full verification after each phase
+cargo fmt --check
 cargo clippy -- -D warnings
-
-# Run all tests
+cargo build --release
 cargo test --all-features
 
-# Check for dead code
+# Check for remaining dead_code
 cargo build 2>&1 | grep "dead_code"
 
-# Generate documentation
-cargo doc --no-deps --open
+# Check for remaining legacy accessors
+grep -r "config_arc\|history_arc" src/
 
-# Count lines by file
-find src -name "*.rs" -exec wc -l {} \; | sort -n
+# Check for duplicate WhisperSTT creation
+grep -rn "WhisperSTT::new" src/
 
-# Check for #[allow(dead_code)]
-grep -r "allow(dead_code)" src/
+# Architecture fitness (manual via codegraph)
+# Run find_hotspot_symbols(min_callers=10)
+# Run get_file_symbols for largest modules
+# Run get_module_deps for all key modules
 ```
 
 ### Appendix C: References
 
 - Martin, R. C. (2017). *Clean Architecture: A Craftsman's Guide to Software Structure and Design*
-- Martin, R. C. (2008). *Clean Code: A Handbook of Agile Software Craftsmanship*
-- docs/architecture-fitness-methodology.md
-- docs/audit/RECOMMENDATIONS.md
-- docs/audit/architecture-overview-and-design-findings.md
+- Martin, R. C. (2002). *Agile Software Development: Principles, Patterns, and Practices*
+- `docs/architecture-fitness-methodology.md` — Fitness function definitions
+- `docs/audit/architecture-overview-and-design-findings.md` — Current state assessment
+- `docs/audit/RECOMMENDATIONS.md` — Previous audit recommendations
 
 ---
 
-*Document Version: 1.0*
+*Document Version: 2.0*
 *Last Updated: 2026-01-28*

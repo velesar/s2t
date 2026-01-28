@@ -7,7 +7,8 @@
 
 use crate::audio::AudioRecorder;
 use crate::conference_recorder::ConferenceRecorder;
-use crate::continuous::{AudioSegment, ContinuousRecorder};
+use crate::continuous::ContinuousRecorder;
+use crate::types::AudioSegment;
 use crate::traits::AudioRecording;
 use crate::types::ConferenceRecording;
 use anyhow::Result;

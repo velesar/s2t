@@ -201,6 +201,49 @@ pub fn save_history(history: &History) -> Result<()> {
     Ok(())
 }
 
+// === Trait Implementation ===
+
+use crate::traits::HistoryRepository;
+
+impl HistoryRepository for History {
+    type Entry = HistoryEntry;
+
+    fn add(&mut self, entry: HistoryEntry) {
+        self.entries.insert(0, entry);
+    }
+
+    fn entries(&self) -> &[HistoryEntry] {
+        &self.entries
+    }
+
+    fn search(&self, query: &str) -> Vec<&HistoryEntry> {
+        let query_lower = query.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|e| e.text.to_lowercase().contains(&query_lower))
+            .collect()
+    }
+
+    fn cleanup_old(&mut self, max_age_days: u32) -> usize {
+        let before = self.entries.len();
+        self.cleanup_old_entries(max_age_days as i64);
+        before - self.entries.len()
+    }
+
+    fn trim_to_limit(&mut self, max_entries: usize) -> usize {
+        if self.entries.len() <= max_entries {
+            return 0;
+        }
+        let removed = self.entries.len() - max_entries;
+        self.entries.truncate(max_entries);
+        removed
+    }
+
+    fn save(&self) -> Result<()> {
+        save_history(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,6 +585,82 @@ mod tests {
         // Cleanup
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir(&dir);
+    }
+
+    // === Trait Implementation Tests ===
+
+    #[test]
+    fn test_trait_search_finds_matching_entries() {
+        use crate::traits::HistoryRepository;
+
+        let mut history = History::default();
+        history.add(HistoryEntry::new("apple pie".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("banana split".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("Apple sauce".to_string(), 5.0, "uk".to_string()));
+
+        let results = HistoryRepository::search(&history, "apple");
+        assert_eq!(results.len(), 2); // case-insensitive
+    }
+
+    #[test]
+    fn test_trait_search_returns_empty_on_no_match() {
+        use crate::traits::HistoryRepository;
+
+        let mut history = History::default();
+        history.add(HistoryEntry::new("hello world".to_string(), 5.0, "uk".to_string()));
+
+        let results = HistoryRepository::search(&history, "xyz");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_trait_cleanup_old_returns_removed_count() {
+        use crate::traits::HistoryRepository;
+
+        let mut history = History::default();
+        history.add(entry_at("old", Utc::now() - Duration::days(100)));
+        history.add(entry_at("recent", Utc::now() - Duration::days(1)));
+
+        let removed = HistoryRepository::cleanup_old(&mut history, 30);
+        assert_eq!(removed, 1);
+        assert_eq!(history.entries.len(), 1);
+    }
+
+    #[test]
+    fn test_trait_trim_to_limit_returns_removed_count() {
+        use crate::traits::HistoryRepository;
+
+        let mut history = History::default();
+        for i in 0..10 {
+            history.add(HistoryEntry::new(format!("entry {}", i), 5.0, "uk".to_string()));
+        }
+
+        let removed = HistoryRepository::trim_to_limit(&mut history, 5);
+        assert_eq!(removed, 5);
+        assert_eq!(history.entries.len(), 5);
+    }
+
+    #[test]
+    fn test_trait_trim_to_limit_returns_zero_when_under() {
+        use crate::traits::HistoryRepository;
+
+        let mut history = History::default();
+        history.add(HistoryEntry::new("one".to_string(), 5.0, "uk".to_string()));
+
+        let removed = HistoryRepository::trim_to_limit(&mut history, 10);
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn test_trait_entries_matches_field() {
+        use crate::traits::HistoryRepository;
+
+        let mut history = History::default();
+        history.add(HistoryEntry::new("test".to_string(), 5.0, "uk".to_string()));
+
+        let trait_entries = HistoryRepository::entries(&history);
+        assert_eq!(trait_entries.len(), history.entries.len());
+        assert_eq!(trait_entries[0].text, history.entries[0].text);
     }
 
     /// Integration test: history operations chain (add → filter → cleanup → trim).
