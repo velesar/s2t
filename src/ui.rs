@@ -14,13 +14,18 @@ mod ui_continuous {
     use crate::continuous::{AudioSegment, ContinuousRecorder};
     use crate::whisper::WhisperSTT;
     use gtk4::prelude::*;
-    use gtk4::{glib, Button, Label, LevelBar, TextView, Spinner};
-    use std::cell::Cell;
+    use gtk4::{glib, Box as GtkBox, Button, Label, LevelBar, TextView, Spinner};
+    use std::cell::{Cell, RefCell};
+    use std::collections::{BTreeMap, HashMap};
     use std::rc::Rc;
     use std::sync::{Arc, Mutex};
     use std::time::Instant;
 
     use super::AppState;
+
+    /// Segment indicator symbols
+    const SEGMENT_PROCESSING: &str = "◐";  // U+25D0 Half circle - processing
+    const SEGMENT_COMPLETED: &str = "●";   // U+25CF Black circle - completed
 
     /// Start continuous recording with automatic segmentation
     pub fn handle_start_continuous(
@@ -29,6 +34,9 @@ mod ui_continuous {
         result_text_view: &TextView,
         timer_label: &Label,
         level_bar: &LevelBar,
+        vad_indicator: &Label,
+        segment_indicators_box: &GtkBox,
+        segment_row: &GtkBox,
         continuous_recorder: &Arc<ContinuousRecorder>,
         whisper: &Arc<Mutex<Option<WhisperSTT>>>,
         config: &Arc<Mutex<crate::config::Config>>,
@@ -42,12 +50,6 @@ mod ui_continuous {
                 return;
             }
         }
-
-        // Get segment interval from config
-        let segment_interval = {
-            let cfg = config.lock().unwrap();
-            cfg.segment_interval_secs
-        };
 
         // Create channel for segments
         let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
@@ -64,11 +66,19 @@ mod ui_continuous {
                 let buffer = result_text_view.buffer();
                 buffer.set_text("");
 
-                // Show timer and level bar
+                // Show timer, level bar, VAD indicator, and segment indicators
                 timer_label.set_text("00:00");
                 timer_label.set_visible(true);
                 level_bar.set_value(0.0);
                 level_bar.set_visible(true);
+                vad_indicator.set_text("🔇 Тиша");
+                vad_indicator.set_visible(true);
+
+                // Clear and show segment indicators
+                while let Some(child) = segment_indicators_box.first_child() {
+                    segment_indicators_box.remove(&child);
+                }
+                segment_row.set_visible(true);
 
                 // Start timer update loop
                 let timer_label_clone = timer_label.clone();
@@ -87,8 +97,9 @@ mod ui_continuous {
                     glib::ControlFlow::Continue
                 });
 
-                // Start level bar update loop
+                // Start level bar and VAD indicator update loop
                 let level_bar_clone = level_bar.clone();
+                let vad_indicator_clone = vad_indicator.clone();
                 let continuous_recorder_clone = continuous_recorder.clone();
                 let app_state_clone = app_state.clone();
                 glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
@@ -97,54 +108,113 @@ mod ui_continuous {
                     }
                     let amplitude = continuous_recorder_clone.get_amplitude();
                     level_bar_clone.set_value(amplitude as f64);
+
+                    // Update VAD indicator
+                    let is_speech = continuous_recorder_clone.is_speech_detected();
+                    if is_speech {
+                        vad_indicator_clone.set_text("🔊 Говорить");
+                    } else {
+                        vad_indicator_clone.set_text("🔇 Тиша");
+                    }
+
                     glib::ControlFlow::Continue
                 });
 
-                // Start segment processing loop
+                // Start parallel segment processing with ordered results
                 let result_text_view_clone = result_text_view.clone();
+                let status_label_clone = status_label.clone();
                 let whisper_clone = whisper.clone();
                 let language = {
                     let cfg = config.lock().unwrap();
                     cfg.language.clone()
                 };
 
+                // Channel for transcription results: (segment_id, text)
+                let (result_tx, result_rx) = async_channel::unbounded::<(usize, String)>();
+
+                // Shared storage for segment indicator labels (keyed by segment_id)
+                let segment_labels: Rc<RefCell<HashMap<usize, Label>>> = Rc::new(RefCell::new(HashMap::new()));
+
+                // Spawn segment receiver that launches parallel transcriptions
+                let whisper_for_segments = whisper_clone.clone();
+                let language_for_segments = language.clone();
+                let result_tx_for_segments = result_tx.clone();
+                let status_label_for_segments = status_label_clone.clone();
+                let segment_indicators_box_clone = segment_indicators_box.clone();
+                let segment_labels_for_receiver = segment_labels.clone();
+
                 glib::spawn_future_local(async move {
-                    let mut accumulated_text = String::new();
-
                     while let Ok(segment) = segment_rx.recv().await {
-                        // Transcribe segment in background thread
-                        let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
+                        let segment_id = segment.segment_id;
                         let segment_samples = segment.samples.clone();
-                        let language_clone = language.clone();
-                        let whisper_for_segment = whisper_clone.clone();
+                        let whisper = whisper_for_segments.clone();
+                        let lang = language_for_segments.clone();
+                        let tx = result_tx_for_segments.clone();
 
+                        // Create indicator label for this segment (starts as processing)
+                        let indicator = Label::new(Some(SEGMENT_PROCESSING));
+                        indicator.add_css_class("segment-processing");
+                        segment_indicators_box_clone.append(&indicator);
+                        segment_labels_for_receiver.borrow_mut().insert(segment_id, indicator);
+
+                        // Update status to show segment being processed
+                        status_label_for_segments.set_text(&format!("Сегмент {}...", segment_id));
+
+                        // Launch transcription WITHOUT waiting for result (parallel processing)
                         std::thread::spawn(move || {
-                            let w = whisper_for_segment.lock().unwrap();
+                            let w = whisper.lock().unwrap();
                             if let Some(ref whisper) = *w {
-                                let result = whisper.transcribe(&segment_samples, Some(&language_clone));
-                                let _ = tx.send_blocking(result);
+                                let result = whisper.transcribe(&segment_samples, Some(&lang));
+                                let text = result.unwrap_or_default();
+                                if text.is_empty() {
+                                    eprintln!("Сегмент {} повернув порожній результат ({} семплів)",
+                                        segment_id, segment_samples.len());
+                                }
+                                let _ = tx.send_blocking((segment_id, text));
                             } else {
-                                let _ = tx.send_blocking(Err(anyhow::anyhow!("Модель не завантажено")));
+                                eprintln!("Модель не завантажено для сегменту {}", segment_id);
+                                let _ = tx.send_blocking((segment_id, String::new()));
                             }
                         });
+                    }
+                });
 
-                        if let Ok(result) = rx.recv().await {
-                            match result {
-                                Ok(text) => {
-                                    if !text.is_empty() {
-                                        accumulated_text.push_str(&text);
-                                        accumulated_text.push_str(" ");
+                // Process results in order using BTreeMap for ordering
+                let segment_labels_for_results = segment_labels.clone();
+                glib::spawn_future_local(async move {
+                    let mut accumulated_text = String::new();
+                    let mut next_segment_id: usize = 1;
+                    let mut pending_results: BTreeMap<usize, String> = BTreeMap::new();
+                    let mut completed_count: usize = 0;
 
-                                        // Update UI with accumulated text
-                                        let buffer = result_text_view_clone.buffer();
-                                        buffer.set_text(&accumulated_text);
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("Помилка транскрипції сегменту {}: {}", segment.segment_id, e);
-                                }
-                            }
+                    while let Ok((segment_id, text)) = result_rx.recv().await {
+                        completed_count += 1;
+
+                        // Mark segment indicator as completed
+                        if let Some(label) = segment_labels_for_results.borrow().get(&segment_id) {
+                            label.set_label(SEGMENT_COMPLETED);
+                            label.remove_css_class("segment-processing");
+                            label.add_css_class("segment-completed");
                         }
+
+                        // Store result in pending map
+                        pending_results.insert(segment_id, text);
+
+                        // Flush all consecutive ready results in order
+                        while let Some(text) = pending_results.remove(&next_segment_id) {
+                            if !text.is_empty() {
+                                accumulated_text.push_str(&text);
+                                accumulated_text.push(' ');
+
+                                // Update UI immediately with accumulated text
+                                let buffer = result_text_view_clone.buffer();
+                                buffer.set_text(&accumulated_text);
+                            }
+                            next_segment_id += 1;
+                        }
+
+                        // Update status with progress
+                        status_label_clone.set_text(&format!("Транскрибовано: {} сегментів", completed_count));
                     }
                 });
             }
@@ -161,9 +231,12 @@ mod ui_continuous {
         result_text_view: &TextView,
         timer_label: &Label,
         level_bar: &LevelBar,
+        vad_indicator: &Label,
+        segment_indicators_box: &GtkBox,
+        segment_row: &GtkBox,
         spinner: &Spinner,
         continuous_recorder: &Arc<ContinuousRecorder>,
-        whisper: &Arc<Mutex<Option<WhisperSTT>>>,
+        _whisper: &Arc<Mutex<Option<WhisperSTT>>>,
         config: &Arc<Mutex<crate::config::Config>>,
         history: &Arc<Mutex<crate::history::History>>,
         app_state: &Rc<Cell<AppState>>,
@@ -176,9 +249,11 @@ mod ui_continuous {
         button.remove_css_class("destructive-action");
         button.remove_css_class("suggested-action");
         button.set_sensitive(false);
-        status_label.set_text("Обробка...");
+        status_label.set_text("Завершення обробки сегментів...");
         timer_label.set_visible(false);
         level_bar.set_visible(false);
+        vad_indicator.set_visible(false);
+        // Keep segment_row visible to show progress during processing
         spinner.set_visible(true);
         spinner.start();
 
@@ -187,12 +262,13 @@ mod ui_continuous {
         // Calculate duration
         let duration_secs = final_samples.len() as f32 / 16000.0;
 
-        let whisper = whisper.clone();
         let history = history.clone();
         let status_label = status_label.clone();
         let result_text_view = result_text_view.clone();
         let button = button.clone();
         let spinner = spinner.clone();
+        let segment_row = segment_row.clone();
+        let segment_indicators_box = segment_indicators_box.clone();
         let app_state = app_state.clone();
         let language = {
             let cfg = config.lock().unwrap();
@@ -205,14 +281,26 @@ mod ui_continuous {
                 let _ = rx.recv().await;
             }
 
-            // Get final text from result_text_view
+            // Wait for in-flight transcriptions to complete
+            // The result processor is still running and updating the buffer
+            // Give it time to finish processing all segments
+            glib::timeout_future(std::time::Duration::from_millis(500)).await;
+
+            // NOW get the final accumulated text from result_text_view
+            // (after all segments have been processed)
             let buffer = result_text_view.buffer();
             let start = buffer.start_iter();
             let end = buffer.end_iter();
             let final_text = buffer.text(&start, &end, false).to_string();
 
+            // Note: We no longer do fallback transcription of final_samples
+            // because with Fix 1, remaining audio is sent as a final segment
+            // before the channel is closed. The result processor handles it.
+
             if !final_text.is_empty() {
                 status_label.set_text("Готово!");
+                // Don't overwrite buffer - it already has the correct content
+                // from the result processor
 
                 // Save to history
                 let entry = crate::history::HistoryEntry::new(
@@ -233,6 +321,13 @@ mod ui_continuous {
             app_state.set(AppState::Idle);
             spinner.stop();
             spinner.set_visible(false);
+
+            // Hide and clear segment indicators
+            segment_row.set_visible(false);
+            while let Some(child) = segment_indicators_box.first_child() {
+                segment_indicators_box.remove(&child);
+            }
+
             button.set_label("Почати запис");
             button.add_css_class("suggested-action");
             button.set_sensitive(true);
@@ -273,13 +368,21 @@ pub fn build_ui(
     let recorder = Arc::new(AudioRecorder::new());
     let conference_recorder = Arc::new(ConferenceRecorder::new());
     
-    // Create continuous recorder (will be initialized if continuous mode is enabled)
-    let continuous_recorder = Arc::new(
-        ContinuousRecorder::new(false, 10).unwrap_or_else(|_| {
-            // Fallback if VAD fails - will use fixed intervals only
-            ContinuousRecorder::new(false, 10).unwrap()
-        })
-    );
+    // Create continuous recorder with config values
+    let continuous_recorder = {
+        let cfg = config.lock().unwrap();
+        Arc::new(
+            ContinuousRecorder::new(
+                cfg.use_vad,
+                cfg.segment_interval_secs,
+                cfg.vad_silence_threshold_ms,
+                cfg.vad_min_speech_ms,
+            ).unwrap_or_else(|_| {
+                // Fallback if VAD fails - will use fixed intervals only
+                ContinuousRecorder::new(false, 10, 1000, 500).unwrap()
+            })
+        )
+    };
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -339,6 +442,49 @@ pub fn build_ui(
     level_bar.set_value(0.0);
     level_bar.set_visible(false);
     level_bar.set_size_request(200, -1);
+
+    // VAD indicator for continuous mode
+    let vad_indicator = Label::new(Some(""));
+    vad_indicator.set_visible(false);
+    vad_indicator.set_halign(gtk4::Align::Start);
+
+    // Segment progress indicators for continuous mode
+    let segment_row = GtkBox::new(Orientation::Horizontal, 8);
+    segment_row.set_halign(gtk4::Align::Start);
+
+    let segment_label = Label::new(Some("Сегменти:"));
+    segment_row.append(&segment_label);
+
+    let segment_indicators_box = GtkBox::new(Orientation::Horizontal, 4);
+    segment_indicators_box.set_halign(gtk4::Align::Start);
+
+    let segment_scroll = gtk4::ScrolledWindow::new();
+    segment_scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Never);
+    segment_scroll.set_max_content_width(250);
+    segment_scroll.set_child(Some(&segment_indicators_box));
+
+    segment_row.append(&segment_scroll);
+    segment_row.set_visible(false);
+
+    // Load CSS for segment indicator styling
+    let css_provider = gtk4::CssProvider::new();
+    css_provider.load_from_data(
+        r#"
+        .segment-processing {
+            color: #f0a000;
+            font-size: 16px;
+        }
+        .segment-completed {
+            color: #00aa00;
+            font-size: 16px;
+        }
+        "#,
+    );
+    gtk4::style_context_add_provider_for_display(
+        &gtk4::gdk::Display::default().expect("Could not get default display"),
+        &css_provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 
     // Conference mode: two level bars (mic + loopback)
     let mic_level_bar = LevelBar::new();
@@ -421,6 +567,9 @@ pub fn build_ui(
     let recording_start_time_for_button = recording_start_time.clone();
     let mode_combo_for_button = mode_combo.clone();
     let level_bar_for_button = level_bar.clone();
+    let vad_indicator_for_button = vad_indicator.clone();
+    let segment_indicators_box_for_button = segment_indicators_box.clone();
+    let segment_row_for_button = segment_row.clone();
     let mic_level_bar_for_button = mic_level_bar.clone();
     let loopback_level_bar_for_button = loopback_level_bar.clone();
     setup_record_button(
@@ -429,6 +578,9 @@ pub fn build_ui(
         &result_text_view,
         &timer_label,
         &level_bar_for_button,
+        &vad_indicator_for_button,
+        &segment_indicators_box_for_button,
+        &segment_row_for_button,
         &mic_level_bar_for_button,
         &loopback_level_bar_for_button,
         &spinner,
@@ -497,6 +649,8 @@ pub fn build_ui(
     
     main_box.append(&timer_label);
     main_box.append(&level_bar);
+    main_box.append(&vad_indicator);
+    main_box.append(&segment_row);
     main_box.append(&level_bars_box);
     main_box.append(&result_scrolled);
     main_box.append(&button_box);
@@ -549,6 +703,9 @@ pub fn build_ui(
     let result_text_view_for_hotkey = result_text_view.clone();
     let timer_label_for_hotkey = timer_label.clone();
     let level_bar_for_hotkey = level_bar.clone();
+    let vad_indicator_for_hotkey = vad_indicator.clone();
+    let segment_indicators_box_for_hotkey = segment_indicators_box.clone();
+    let segment_row_for_hotkey = segment_row.clone();
     let mic_level_bar_for_hotkey = mic_level_bar.clone();
     let loopback_level_bar_for_hotkey = loopback_level_bar.clone();
     let spinner_for_hotkey = spinner.clone();
@@ -592,6 +749,9 @@ pub fn build_ui(
                             &result_text_view_for_hotkey,
                             &timer_label_for_hotkey,
                             &level_bar_for_hotkey,
+                            &vad_indicator_for_hotkey,
+                            &segment_indicators_box_for_hotkey,
+                            &segment_row_for_hotkey,
                             &continuous_recorder_for_hotkey,
                             &whisper_for_hotkey,
                             &config_for_hotkey,
@@ -637,6 +797,9 @@ pub fn build_ui(
                             &result_text_view_for_hotkey,
                             &timer_label_for_hotkey,
                             &level_bar_for_hotkey,
+                            &vad_indicator_for_hotkey,
+                            &segment_indicators_box_for_hotkey,
+                            &segment_row_for_hotkey,
                             &spinner_for_hotkey,
                             &continuous_recorder_for_hotkey,
                             &whisper_for_hotkey,
@@ -678,6 +841,9 @@ fn setup_record_button(
     result_text_view: &TextView,
     timer_label: &Label,
     level_bar: &LevelBar,
+    vad_indicator: &Label,
+    segment_indicators_box: &GtkBox,
+    segment_row: &GtkBox,
     mic_level_bar: &LevelBar,
     loopback_level_bar: &LevelBar,
     spinner: &Spinner,
@@ -701,6 +867,9 @@ fn setup_record_button(
     let result_text_view_clone = result_text_view.clone();
     let timer_label_clone = timer_label.clone();
     let level_bar_clone = level_bar.clone();
+    let vad_indicator_clone = vad_indicator.clone();
+    let segment_indicators_box_clone = segment_indicators_box.clone();
+    let segment_row_clone = segment_row.clone();
     let mic_level_bar_clone = mic_level_bar.clone();
     let loopback_level_bar_clone = loopback_level_bar.clone();
     let spinner_clone = spinner.clone();
@@ -737,6 +906,9 @@ fn setup_record_button(
                         &result_text_view_clone,
                         &timer_label_clone,
                         &level_bar_clone,
+                        &vad_indicator_clone,
+                        &segment_indicators_box_clone,
+                        &segment_row_clone,
                         &continuous_recorder_clone,
                         &whisper,
                         &config,
@@ -788,6 +960,9 @@ fn setup_record_button(
                             &result_text_view_clone,
                             &timer_label_clone,
                             &level_bar_clone,
+                            &vad_indicator_clone,
+                            &segment_indicators_box_clone,
+                            &segment_row_clone,
                             &spinner_clone,
                             &continuous_recorder_clone,
                             &whisper,

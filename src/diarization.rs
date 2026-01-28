@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 #[cfg(feature = "sortformer")]
@@ -79,15 +79,15 @@ impl DiarizationEngine {
             if let Some(ref mut sortformer) = self.sortformer {
                 // Sortformer expects audio as Vec<f32> at 16kHz
                 let segments = sortformer
-                    .diarize(audio_samples, SAMPLE_RATE, 1)
+                    .diarize(audio_samples.to_vec(), SAMPLE_RATE, 1)
                     .context("Помилка diarization")?;
 
                 Ok(segments
                     .into_iter()
                     .map(|seg| DiarizationSegment {
                         speaker_id: seg.speaker_id,
-                        start_time: seg.start,
-                        end_time: seg.end,
+                        start_time: seg.start as f64,
+                        end_time: seg.end as f64,
                         text: String::new(), // Will be filled by transcription
                     })
                     .collect())

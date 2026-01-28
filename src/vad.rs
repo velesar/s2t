@@ -16,14 +16,20 @@ pub struct VoiceActivityDetector {
 impl VoiceActivityDetector {
     /// Create a new VAD instance
     pub fn new() -> Result<Self> {
+        Self::with_thresholds(1000, 500)
+    }
+
+    /// Create a new VAD instance with custom thresholds
+    pub fn with_thresholds(silence_threshold_ms: u32, min_speech_duration_ms: u32) -> Result<Self> {
         use webrtc_vad::SampleRate;
         // SampleRate enum variants: Rate8kHz, Rate16kHz, Rate32kHz, Rate48kHz
-        let vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Quality);
+        // VadMode::Aggressive is less sensitive to background noise than Quality
+        let vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
 
         Ok(Self {
             vad: Arc::new(Mutex::new(vad)),
-            silence_threshold_ms: 1000, // 1 second of silence to end segment
-            min_speech_duration_ms: 500, // Minimum 500ms of speech for a segment
+            silence_threshold_ms,
+            min_speech_duration_ms,
         })
     }
 
@@ -87,7 +93,6 @@ impl VoiceActivityDetector {
             } else {
                 if in_speech {
                     silence_duration += chunk.len();
-                    speech_duration += chunk.len();
 
                     // Check if silence is long enough to end segment
                     if silence_duration >= silence_frames {
@@ -97,6 +102,7 @@ impl VoiceActivityDetector {
                         }
                         in_speech = false;
                         silence_duration = 0;
+                        speech_duration = 0; // Reset for next segment
                     }
                 }
             }
@@ -108,6 +114,28 @@ impl VoiceActivityDetector {
         }
 
         Ok(segments)
+    }
+
+    /// Check if speech has ended (silence detected after speech)
+    /// Analyzes recent samples in reverse to detect if we had speech followed by silence
+    pub fn detect_speech_end(&self, recent_samples: &[f32]) -> Result<bool> {
+        let silence_needed = (self.silence_threshold_ms * SAMPLE_RATE_HZ / 1000) as usize;
+        let mut consecutive_silence = 0;
+        let mut had_speech = false;
+
+        // Process frames in reverse order (most recent first)
+        for chunk in recent_samples.chunks(FRAME_SIZE_SAMPLES).rev() {
+            if chunk.len() < FRAME_SIZE_SAMPLES {
+                continue;
+            }
+            if self.is_speech(chunk)? {
+                had_speech = true;
+                break;
+            }
+            consecutive_silence += chunk.len();
+        }
+
+        Ok(had_speech && consecutive_silence >= silence_needed)
     }
 }
 

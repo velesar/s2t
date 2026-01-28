@@ -29,6 +29,12 @@ pub struct Config {
     pub continuous_mode: bool,
     #[serde(default = "default_segment_interval_secs")]
     pub segment_interval_secs: u32,
+    #[serde(default = "default_use_vad")]
+    pub use_vad: bool,
+    #[serde(default = "default_vad_silence_threshold_ms")]
+    pub vad_silence_threshold_ms: u32,
+    #[serde(default = "default_vad_min_speech_ms")]
+    pub vad_min_speech_ms: u32,
 }
 
 fn default_diarization_method() -> String {
@@ -40,7 +46,19 @@ fn default_continuous_mode() -> bool {
 }
 
 fn default_segment_interval_secs() -> u32 {
-    10 // 10 seconds for fixed interval segmentation
+    5 // 5 seconds for more responsive feedback
+}
+
+fn default_use_vad() -> bool {
+    true
+}
+
+fn default_vad_silence_threshold_ms() -> u32 {
+    1000 // 1 second of silence to trigger segment
+}
+
+fn default_vad_min_speech_ms() -> u32 {
+    500 // Minimum 500ms of speech for a valid segment
 }
 
 fn default_history_max_entries() -> usize {
@@ -87,6 +105,9 @@ impl Default for Config {
             sortformer_model_path: None,
             continuous_mode: default_continuous_mode(),
             segment_interval_secs: default_segment_interval_secs(),
+            use_vad: default_use_vad(),
+            vad_silence_threshold_ms: default_vad_silence_threshold_ms(),
+            vad_min_speech_ms: default_vad_min_speech_ms(),
         }
     }
 }
@@ -169,6 +190,7 @@ mod tests {
             auto_copy: false,
             hotkey_enabled: false,
             hotkey: "Control+Shift+Space".to_string(),
+            ..Default::default()
         };
 
         let toml_str = toml::to_string(&config).unwrap();

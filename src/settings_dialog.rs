@@ -166,6 +166,24 @@ pub fn show_settings_dialog(
     continuous_check.set_margin_top(12);
     main_box.append(&continuous_check);
 
+    // VAD checkbox (only active when continuous mode is enabled)
+    let vad_check = CheckButton::with_label("VAD (автовиявлення пауз)");
+    let vad_enabled = {
+        let cfg = config.lock().unwrap();
+        cfg.use_vad
+    };
+    vad_check.set_active(vad_enabled);
+    vad_check.set_sensitive(continuous_enabled);
+    vad_check.set_halign(Align::Start);
+    vad_check.set_margin_start(20); // Indent to show it's related to continuous mode
+    main_box.append(&vad_check);
+
+    // Connect continuous mode checkbox to enable/disable VAD checkbox
+    let vad_check_clone = vad_check.clone();
+    continuous_check.connect_toggled(move |check| {
+        vad_check_clone.set_sensitive(check.is_active());
+    });
+
     // Hotkey settings section
     let hotkey_label = Label::new(Some("Гарячі клавіші:"));
     hotkey_label.set_halign(Align::Start);
@@ -270,6 +288,7 @@ pub fn show_settings_dialog(
     let auto_copy_check_clone = auto_copy_check.clone();
     let auto_paste_check_clone = auto_paste_check.clone();
     let continuous_check_clone = continuous_check.clone();
+    let vad_check_clone = vad_check.clone();
     let mode_combo_clone = mode_combo.clone();
     let diarization_combo_clone = diarization_combo.clone();
     let hotkey_enabled_check_clone = hotkey_enabled_check.clone();
@@ -326,6 +345,7 @@ pub fn show_settings_dialog(
         cfg.auto_copy = auto_copy_check_clone.is_active();
         cfg.auto_paste = auto_paste_check_clone.is_active();
         cfg.continuous_mode = continuous_check_clone.is_active();
+        cfg.use_vad = vad_check_clone.is_active();
         cfg.recording_mode = recording_mode;
         cfg.diarization_method = diarization_method;
         cfg.hotkey_enabled = hotkey_enabled_check_clone.is_active();

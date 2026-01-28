@@ -102,7 +102,8 @@ impl LoopbackRecorder {
                     if !f32_samples.is_empty() {
                         let sum_squares: f32 = f32_samples.iter().map(|s| s * s).sum();
                         let rms = (sum_squares / f32_samples.len() as f32).sqrt();
-                        let normalized = (rms * 3.0).min(1.0);
+                        // Use 6.0 multiplier so typical audio reaches ~50% of scale
+                        let normalized = (rms * 6.0).min(1.0);
                         current_amplitude.store(normalized.to_bits(), Ordering::Relaxed);
                     }
 

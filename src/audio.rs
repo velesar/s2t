@@ -101,8 +101,9 @@ impl AudioRecorder {
                         if !mono.is_empty() {
                             let sum_squares: f32 = mono.iter().map(|s| s * s).sum();
                             let rms = (sum_squares / mono.len() as f32).sqrt();
-                            // Normalize to 0-1 range (typical speech is ~0.1-0.3 RMS)
-                            let normalized = (rms * 3.0).min(1.0);
+                            // Normalize to 0-1 range (typical speech is ~0.05-0.15 RMS)
+                            // Use 6.0 multiplier so typical speech reaches ~50% of scale
+                            let normalized = (rms * 6.0).min(1.0);
                             current_amplitude.store(normalized.to_bits(), Ordering::Relaxed);
                         }
 
