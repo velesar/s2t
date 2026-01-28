@@ -117,3 +117,105 @@ impl Default for VoiceActivityDetector {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FRAME_SAMPLES: usize = FRAME_SIZE_SAMPLES;
+
+    #[test]
+    fn test_vad_new() {
+        let vad = VoiceActivityDetector::new();
+        assert!(vad.is_ok());
+    }
+
+    #[test]
+    fn test_vad_with_thresholds() {
+        let vad = VoiceActivityDetector::with_thresholds(2000, 1000);
+        assert!(vad.is_ok());
+    }
+
+    #[test]
+    fn test_vad_default() {
+        let vad = VoiceActivityDetector::default();
+        assert_eq!(vad.silence_threshold_ms, 1000);
+    }
+
+    #[test]
+    fn test_vad_silence_not_speech() {
+        let vad = VoiceActivityDetector::new().unwrap();
+        let silence = vec![0.0f32; FRAME_SAMPLES];
+        let result = vad.is_speech(&silence).unwrap();
+        assert!(!result, "Silence should not be detected as speech");
+    }
+
+    #[test]
+    fn test_vad_short_samples_not_speech() {
+        let vad = VoiceActivityDetector::new().unwrap();
+        let short = vec![0.0f32; FRAME_SAMPLES - 1];
+        let result = vad.is_speech(&short).unwrap();
+        assert!(!result, "Too-short samples should return false");
+    }
+
+    #[test]
+    fn test_vad_empty_samples_not_speech() {
+        let vad = VoiceActivityDetector::new().unwrap();
+        let result = vad.is_speech(&[]).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_vad_detect_speech_end_pure_silence() {
+        let vad = VoiceActivityDetector::with_thresholds(500, 200).unwrap();
+        // Pure silence: no speech was ever detected, so speech_end should be false
+        let silence = vec![0.0f32; FRAME_SAMPLES * 100];
+        let result = vad.detect_speech_end(&silence).unwrap();
+        assert!(!result, "Pure silence should not trigger speech end (no speech preceded it)");
+    }
+
+    #[test]
+    fn test_vad_detect_speech_end_short_input() {
+        let vad = VoiceActivityDetector::new().unwrap();
+        let short = vec![0.0f32; 10];
+        let result = vad.detect_speech_end(&short).unwrap();
+        assert!(!result);
+    }
+
+    // === Trait Implementation Tests ===
+
+    #[test]
+    fn test_trait_is_speech_matches_inherent() {
+        use crate::traits::VoiceDetection;
+
+        let mut vad = VoiceActivityDetector::new().unwrap();
+        let silence = vec![0.0f32; FRAME_SAMPLES];
+
+        let trait_result = VoiceDetection::is_speech(&mut vad, &silence).unwrap();
+        assert!(!trait_result);
+    }
+
+    #[test]
+    fn test_trait_detect_speech_end_matches_inherent() {
+        use crate::traits::VoiceDetection;
+
+        let mut vad = VoiceActivityDetector::new().unwrap();
+        let silence = vec![0.0f32; FRAME_SAMPLES * 50];
+
+        let trait_result = VoiceDetection::detect_speech_end(&mut vad, &silence).unwrap();
+        assert!(!trait_result);
+    }
+
+    #[test]
+    fn test_trait_reset() {
+        use crate::traits::VoiceDetection;
+
+        let mut vad = VoiceActivityDetector::new().unwrap();
+        // Reset should not panic and should leave VAD in working state
+        VoiceDetection::reset(&mut vad);
+
+        let silence = vec![0.0f32; FRAME_SAMPLES];
+        let result = VoiceDetection::is_speech(&mut vad, &silence).unwrap();
+        assert!(!result);
+    }
+}

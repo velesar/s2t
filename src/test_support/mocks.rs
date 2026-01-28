@@ -3,7 +3,7 @@
 //! These mocks implement the core traits from `crate::traits` to enable
 //! testing without real audio devices or Whisper models.
 
-use crate::traits::{AudioRecording, Transcription};
+use crate::traits::{AudioRecording, ConfigProvider, Transcription, VoiceDetection};
 use anyhow::Result;
 use async_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -131,6 +131,117 @@ impl Transcription for MockTranscription {
     }
 }
 
+/// Mock voice activity detector for testing.
+///
+/// Returns configurable speech detection results.
+pub struct MockVoiceDetector {
+    speech_result: bool,
+    speech_end_result: bool,
+    reset_count: std::sync::atomic::AtomicUsize,
+}
+
+impl MockVoiceDetector {
+    /// Create a mock that always detects speech.
+    pub fn detecting_speech() -> Self {
+        Self {
+            speech_result: true,
+            speech_end_result: false,
+            reset_count: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// Create a mock that never detects speech.
+    pub fn silent() -> Self {
+        Self {
+            speech_result: false,
+            speech_end_result: false,
+            reset_count: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// Create a mock that reports speech end.
+    pub fn speech_ended() -> Self {
+        Self {
+            speech_result: false,
+            speech_end_result: true,
+            reset_count: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// Get how many times reset() was called.
+    pub fn reset_count(&self) -> usize {
+        self.reset_count
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl VoiceDetection for MockVoiceDetector {
+    fn is_speech(&mut self, _samples: &[f32]) -> anyhow::Result<bool> {
+        Ok(self.speech_result)
+    }
+
+    fn detect_speech_end(&mut self, _samples: &[f32]) -> anyhow::Result<bool> {
+        Ok(self.speech_end_result)
+    }
+
+    fn reset(&mut self) {
+        self.reset_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Mock configuration provider for testing.
+///
+/// Returns configurable values for all config fields.
+pub struct MockConfigProvider {
+    pub language: String,
+    pub default_model: String,
+    pub auto_copy: bool,
+    pub auto_paste: bool,
+    pub continuous_mode: bool,
+    pub recording_mode: String,
+}
+
+impl MockConfigProvider {
+    /// Create a mock with default Ukrainian config.
+    pub fn default_uk() -> Self {
+        Self {
+            language: "uk".to_string(),
+            default_model: "ggml-base.bin".to_string(),
+            auto_copy: true,
+            auto_paste: false,
+            continuous_mode: false,
+            recording_mode: "dictation".to_string(),
+        }
+    }
+}
+
+impl ConfigProvider for MockConfigProvider {
+    fn language(&self) -> String {
+        self.language.clone()
+    }
+
+    fn default_model(&self) -> String {
+        self.default_model.clone()
+    }
+
+    fn auto_copy(&self) -> bool {
+        self.auto_copy
+    }
+
+    fn auto_paste(&self) -> bool {
+        self.auto_paste
+    }
+
+    fn continuous_mode(&self) -> bool {
+        self.continuous_mode
+    }
+
+    fn recording_mode(&self) -> String {
+        self.recording_mode.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,5 +306,99 @@ mod tests {
 
         transcriber.set_result("updated");
         assert_eq!(transcriber.transcribe(&[], "en").unwrap(), "updated");
+    }
+
+    // === MockVoiceDetector Tests ===
+
+    #[test]
+    fn test_mock_voice_detector_detecting_speech() {
+        let mut vad = MockVoiceDetector::detecting_speech();
+        assert!(vad.is_speech(&[0.0; 480]).unwrap());
+        assert!(!vad.detect_speech_end(&[0.0; 480]).unwrap());
+    }
+
+    #[test]
+    fn test_mock_voice_detector_silent() {
+        let mut vad = MockVoiceDetector::silent();
+        assert!(!vad.is_speech(&[0.0; 480]).unwrap());
+    }
+
+    #[test]
+    fn test_mock_voice_detector_speech_ended() {
+        let mut vad = MockVoiceDetector::speech_ended();
+        assert!(vad.detect_speech_end(&[0.0; 480]).unwrap());
+    }
+
+    #[test]
+    fn test_mock_voice_detector_reset_count() {
+        let mut vad = MockVoiceDetector::silent();
+        assert_eq!(vad.reset_count(), 0);
+        vad.reset();
+        vad.reset();
+        assert_eq!(vad.reset_count(), 2);
+    }
+
+    // === MockConfigProvider Tests ===
+
+    #[test]
+    fn test_mock_config_provider_defaults() {
+        let config = MockConfigProvider::default_uk();
+        assert_eq!(ConfigProvider::language(&config), "uk");
+        assert_eq!(ConfigProvider::default_model(&config), "ggml-base.bin");
+        assert!(ConfigProvider::auto_copy(&config));
+        assert!(!ConfigProvider::auto_paste(&config));
+        assert!(!ConfigProvider::continuous_mode(&config));
+        assert_eq!(ConfigProvider::recording_mode(&config), "dictation");
+    }
+
+    #[test]
+    fn test_mock_config_provider_custom() {
+        let config = MockConfigProvider {
+            language: "en".to_string(),
+            default_model: "ggml-large.bin".to_string(),
+            auto_copy: false,
+            auto_paste: true,
+            continuous_mode: true,
+            recording_mode: "continuous".to_string(),
+        };
+        assert_eq!(config.language(), "en");
+        assert!(config.auto_paste());
+        assert!(config.continuous_mode());
+    }
+
+    // === Trait Object (Box<dyn>) Tests ===
+
+    #[test]
+    fn test_audio_recording_as_trait_object() {
+        let recorder: Box<dyn AudioRecording> = Box::new(MockAudioRecorder::with_samples(vec![0.5, 0.6]));
+        assert!(!recorder.is_recording());
+        recorder.start().unwrap();
+        assert!(recorder.is_recording());
+        let (samples, _) = recorder.stop();
+        assert_eq!(samples, vec![0.5, 0.6]);
+    }
+
+    #[test]
+    fn test_transcription_as_trait_object() {
+        let transcriber: Box<dyn Transcription> = Box::new(MockTranscription::returning("test output"));
+        assert!(transcriber.is_loaded());
+        assert_eq!(transcriber.model_name(), Some("mock-model".to_string()));
+        let text = transcriber.transcribe(&[0.0; 16000], "uk").unwrap();
+        assert_eq!(text, "test output");
+    }
+
+    #[test]
+    fn test_transcription_unloaded_as_trait_object() {
+        let transcriber: Box<dyn Transcription> = Box::new(MockTranscription::unloaded());
+        assert!(!transcriber.is_loaded());
+        assert!(transcriber.transcribe(&[], "en").is_err());
+    }
+
+    #[test]
+    fn test_config_provider_as_trait_object() {
+        let config: Box<dyn ConfigProvider> = Box::new(MockConfigProvider::default_uk());
+        assert_eq!(config.language(), "uk");
+        assert_eq!(config.default_model(), "ggml-base.bin");
+        assert!(config.auto_copy());
     }
 }
