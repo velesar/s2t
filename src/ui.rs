@@ -27,6 +27,13 @@ mod ui_continuous {
     const SEGMENT_PROCESSING: &str = "◐";  // U+25D0 Half circle - processing
     const SEGMENT_COMPLETED: &str = "●";   // U+25CF Black circle - completed
 
+    // Thread-local counters for tracking segment completion
+    // These are used to wait for all transcriptions to complete before reading final text
+    thread_local! {
+        static SEGMENTS_SENT: Cell<usize> = const { Cell::new(0) };
+        static SEGMENTS_COMPLETED: Cell<usize> = const { Cell::new(0) };
+    }
+
     /// Start continuous recording with automatic segmentation
     pub fn handle_start_continuous(
         button: &Button,
@@ -79,6 +86,10 @@ mod ui_continuous {
                     segment_indicators_box.remove(&child);
                 }
                 segment_row.set_visible(true);
+
+                // Reset segment completion counters
+                SEGMENTS_SENT.with(|c| c.set(0));
+                SEGMENTS_COMPLETED.with(|c| c.set(0));
 
                 // Start timer update loop
                 let timer_label_clone = timer_label.clone();
@@ -151,6 +162,9 @@ mod ui_continuous {
                         let lang = language_for_segments.clone();
                         let tx = result_tx_for_segments.clone();
 
+                        // Track segment as sent for transcription
+                        SEGMENTS_SENT.with(|c| c.set(c.get() + 1));
+
                         // Create indicator label for this segment (starts as processing)
                         let indicator = Label::new(Some(SEGMENT_PROCESSING));
                         indicator.add_css_class("segment-processing");
@@ -189,6 +203,9 @@ mod ui_continuous {
 
                     while let Ok((segment_id, text)) = result_rx.recv().await {
                         completed_count += 1;
+
+                        // Track segment as completed for synchronization
+                        SEGMENTS_COMPLETED.with(|c| c.set(c.get() + 1));
 
                         // Mark segment indicator as completed
                         if let Some(label) = segment_labels_for_results.borrow().get(&segment_id) {
@@ -281,10 +298,31 @@ mod ui_continuous {
                 let _ = rx.recv().await;
             }
 
-            // Wait for in-flight transcriptions to complete
-            // The result processor is still running and updating the buffer
-            // Give it time to finish processing all segments
-            glib::timeout_future(std::time::Duration::from_millis(500)).await;
+            // Wait for all transcriptions to complete
+            // Poll until segments_completed >= segments_sent (with timeout)
+            let max_wait = std::time::Duration::from_secs(30);
+            let start_wait = std::time::Instant::now();
+            let poll_interval = std::time::Duration::from_millis(100);
+
+            loop {
+                let sent = SEGMENTS_SENT.with(|c| c.get());
+                let completed = SEGMENTS_COMPLETED.with(|c| c.get());
+
+                if completed >= sent && sent > 0 {
+                    // All segments processed
+                    break;
+                }
+
+                if start_wait.elapsed() > max_wait {
+                    eprintln!("Timeout waiting for segments: {}/{}", completed, sent);
+                    break;
+                }
+
+                // Update status with progress
+                status_label.set_text(&format!("Обробка сегментів: {}/{}...", completed, sent));
+
+                glib::timeout_future(poll_interval).await;
+            }
 
             // NOW get the final accumulated text from result_text_view
             // (after all segments have been processed)
