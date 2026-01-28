@@ -25,10 +25,22 @@ pub struct Config {
     pub diarization_method: String,
     #[serde(default)]
     pub sortformer_model_path: Option<String>,
+    #[serde(default = "default_continuous_mode")]
+    pub continuous_mode: bool,
+    #[serde(default = "default_segment_interval_secs")]
+    pub segment_interval_secs: u32,
 }
 
 fn default_diarization_method() -> String {
     "channel".to_string() // "channel" or "sortformer"
+}
+
+fn default_continuous_mode() -> bool {
+    false
+}
+
+fn default_segment_interval_secs() -> u32 {
+    10 // 10 seconds for fixed interval segmentation
 }
 
 fn default_history_max_entries() -> usize {
@@ -73,6 +85,8 @@ impl Default for Config {
             recording_mode: default_recording_mode(),
             diarization_method: default_diarization_method(),
             sortformer_model_path: None,
+            continuous_mode: default_continuous_mode(),
+            segment_interval_secs: default_segment_interval_secs(),
         }
     }
 }

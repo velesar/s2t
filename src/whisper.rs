@@ -1,4 +1,4 @@
-use crate::diarization::{DiarizationEngine, DiarizationSegment};
+use crate::diarization::DiarizationEngine;
 use anyhow::{Context, Result};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 

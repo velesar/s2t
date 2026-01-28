@@ -1,6 +1,7 @@
 mod audio;
 mod config;
 mod conference_recorder;
+mod continuous;
 mod diarization;
 mod history;
 mod history_dialog;
@@ -10,9 +11,11 @@ mod model_dialog;
 mod models;
 mod paste;
 mod recordings;
+mod ring_buffer;
 mod settings_dialog;
 mod tray;
 mod ui;
+mod vad;
 mod whisper;
 
 use anyhow::Result;

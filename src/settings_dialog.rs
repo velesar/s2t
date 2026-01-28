@@ -155,6 +155,17 @@ pub fn show_settings_dialog(
     auto_paste_check.set_halign(Align::Start);
     main_box.append(&auto_paste_check);
 
+    // Continuous mode checkbox
+    let continuous_check = CheckButton::with_label("Неперервний режим (автоматична сегментація)");
+    let continuous_enabled = {
+        let cfg = config.lock().unwrap();
+        cfg.continuous_mode
+    };
+    continuous_check.set_active(continuous_enabled);
+    continuous_check.set_halign(Align::Start);
+    continuous_check.set_margin_top(12);
+    main_box.append(&continuous_check);
+
     // Hotkey settings section
     let hotkey_label = Label::new(Some("Гарячі клавіші:"));
     hotkey_label.set_halign(Align::Start);
@@ -258,6 +269,7 @@ pub fn show_settings_dialog(
     let languages_clone = languages.clone();
     let auto_copy_check_clone = auto_copy_check.clone();
     let auto_paste_check_clone = auto_paste_check.clone();
+    let continuous_check_clone = continuous_check.clone();
     let mode_combo_clone = mode_combo.clone();
     let diarization_combo_clone = diarization_combo.clone();
     let hotkey_enabled_check_clone = hotkey_enabled_check.clone();
@@ -313,6 +325,7 @@ pub fn show_settings_dialog(
         cfg.language = language;
         cfg.auto_copy = auto_copy_check_clone.is_active();
         cfg.auto_paste = auto_paste_check_clone.is_active();
+        cfg.continuous_mode = continuous_check_clone.is_active();
         cfg.recording_mode = recording_mode;
         cfg.diarization_method = diarization_method;
         cfg.hotkey_enabled = hotkey_enabled_check_clone.is_active();

@@ -52,6 +52,9 @@ pipewire = "0.9"
 # Audio file encoding (WAV format)
 hound = "3.5"
 
+# Voice Activity Detection for continuous mode
+webrtc-vad = "0.4"
+
 # Speaker diarization with Sortformer
 # Note: Requires rustc 1.88+ and ort dependency
 # Enable with: cargo build --features sortformer

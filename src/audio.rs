@@ -12,7 +12,7 @@ use std::time::Duration;
 const WHISPER_SAMPLE_RATE: u32 = 16000;
 
 pub struct AudioRecorder {
-    samples: Arc<Mutex<Vec<f32>>>,
+    pub(crate) samples: Arc<Mutex<Vec<f32>>>,
     is_recording: Arc<AtomicBool>,
     completion_rx: Arc<Mutex<Option<Receiver<()>>>>,
     /// Current audio amplitude (RMS), stored as u32 bits for atomic access

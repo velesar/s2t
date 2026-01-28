@@ -1,12 +1,246 @@
 use crate::audio::AudioRecorder;
 use crate::config::Config;
 use crate::conference_recorder::ConferenceRecorder;
+use crate::continuous::ContinuousRecorder;
 use crate::history::{save_history, History, HistoryEntry};
 use crate::history_dialog::show_history_dialog;
 use crate::model_dialog::show_model_dialog;
 use crate::recordings::{ensure_recordings_dir, generate_recording_filename, recording_path, save_recording};
 use crate::settings_dialog::show_settings_dialog;
 use crate::whisper::WhisperSTT;
+
+// Continuous mode handlers
+mod ui_continuous {
+    use crate::continuous::{AudioSegment, ContinuousRecorder};
+    use crate::whisper::WhisperSTT;
+    use gtk4::prelude::*;
+    use gtk4::{glib, Button, Label, LevelBar, TextView, Spinner};
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
+    use std::time::Instant;
+
+    use super::AppState;
+
+    /// Start continuous recording with automatic segmentation
+    pub fn handle_start_continuous(
+        button: &Button,
+        status_label: &Label,
+        result_text_view: &TextView,
+        timer_label: &Label,
+        level_bar: &LevelBar,
+        continuous_recorder: &Arc<ContinuousRecorder>,
+        whisper: &Arc<Mutex<Option<WhisperSTT>>>,
+        config: &Arc<Mutex<crate::config::Config>>,
+        app_state: &Rc<Cell<AppState>>,
+        recording_start_time: &Rc<Cell<Option<Instant>>>,
+    ) {
+        {
+            let w = whisper.lock().unwrap();
+            if w.is_none() {
+                status_label.set_text("Модель не завантажено. Натисніть 'Моделі'.");
+                return;
+            }
+        }
+
+        // Get segment interval from config
+        let segment_interval = {
+            let cfg = config.lock().unwrap();
+            cfg.segment_interval_secs
+        };
+
+        // Create channel for segments
+        let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
+
+        match continuous_recorder.start_continuous(segment_tx) {
+            Ok(()) => {
+                app_state.set(AppState::Recording);
+                recording_start_time.set(Some(Instant::now()));
+
+                button.set_label("Зупинити запис");
+                button.remove_css_class("suggested-action");
+                button.add_css_class("destructive-action");
+                status_label.set_text("Неперервний запис...");
+                let buffer = result_text_view.buffer();
+                buffer.set_text("");
+
+                // Show timer and level bar
+                timer_label.set_text("00:00");
+                timer_label.set_visible(true);
+                level_bar.set_value(0.0);
+                level_bar.set_visible(true);
+
+                // Start timer update loop
+                let timer_label_clone = timer_label.clone();
+                let app_state_clone = app_state.clone();
+                let recording_start_time_clone = recording_start_time.clone();
+                glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+                    if app_state_clone.get() != AppState::Recording {
+                        return glib::ControlFlow::Break;
+                    }
+                    if let Some(start) = recording_start_time_clone.get() {
+                        let elapsed = start.elapsed().as_secs();
+                        let minutes = elapsed / 60;
+                        let seconds = elapsed % 60;
+                        timer_label_clone.set_text(&format!("{:02}:{:02}", minutes, seconds));
+                    }
+                    glib::ControlFlow::Continue
+                });
+
+                // Start level bar update loop
+                let level_bar_clone = level_bar.clone();
+                let continuous_recorder_clone = continuous_recorder.clone();
+                let app_state_clone = app_state.clone();
+                glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                    if app_state_clone.get() != AppState::Recording {
+                        return glib::ControlFlow::Break;
+                    }
+                    let amplitude = continuous_recorder_clone.get_amplitude();
+                    level_bar_clone.set_value(amplitude as f64);
+                    glib::ControlFlow::Continue
+                });
+
+                // Start segment processing loop
+                let result_text_view_clone = result_text_view.clone();
+                let whisper_clone = whisper.clone();
+                let language = {
+                    let cfg = config.lock().unwrap();
+                    cfg.language.clone()
+                };
+
+                glib::spawn_future_local(async move {
+                    let mut accumulated_text = String::new();
+
+                    while let Ok(segment) = segment_rx.recv().await {
+                        // Transcribe segment in background thread
+                        let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
+                        let segment_samples = segment.samples.clone();
+                        let language_clone = language.clone();
+                        let whisper_for_segment = whisper_clone.clone();
+
+                        std::thread::spawn(move || {
+                            let w = whisper_for_segment.lock().unwrap();
+                            if let Some(ref whisper) = *w {
+                                let result = whisper.transcribe(&segment_samples, Some(&language_clone));
+                                let _ = tx.send_blocking(result);
+                            } else {
+                                let _ = tx.send_blocking(Err(anyhow::anyhow!("Модель не завантажено")));
+                            }
+                        });
+
+                        if let Ok(result) = rx.recv().await {
+                            match result {
+                                Ok(text) => {
+                                    if !text.is_empty() {
+                                        accumulated_text.push_str(&text);
+                                        accumulated_text.push_str(" ");
+
+                                        // Update UI with accumulated text
+                                        let buffer = result_text_view_clone.buffer();
+                                        buffer.set_text(&accumulated_text);
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Помилка транскрипції сегменту {}: {}", segment.segment_id, e);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                status_label.set_text(&format!("Помилка: {}", e));
+            }
+        }
+    }
+
+    /// Stop continuous recording
+    pub fn handle_stop_continuous(
+        button: &Button,
+        status_label: &Label,
+        result_text_view: &TextView,
+        timer_label: &Label,
+        level_bar: &LevelBar,
+        spinner: &Spinner,
+        continuous_recorder: &Arc<ContinuousRecorder>,
+        whisper: &Arc<Mutex<Option<WhisperSTT>>>,
+        config: &Arc<Mutex<crate::config::Config>>,
+        history: &Arc<Mutex<crate::history::History>>,
+        app_state: &Rc<Cell<AppState>>,
+        recording_start_time: &Rc<Cell<Option<Instant>>>,
+    ) {
+        app_state.set(AppState::Processing);
+        recording_start_time.set(None);
+
+        button.set_label("Обробка...");
+        button.remove_css_class("destructive-action");
+        button.remove_css_class("suggested-action");
+        button.set_sensitive(false);
+        status_label.set_text("Обробка...");
+        timer_label.set_visible(false);
+        level_bar.set_visible(false);
+        spinner.set_visible(true);
+        spinner.start();
+
+        let (final_samples, completion_rx) = continuous_recorder.stop_continuous();
+
+        // Calculate duration
+        let duration_secs = final_samples.len() as f32 / 16000.0;
+
+        let whisper = whisper.clone();
+        let history = history.clone();
+        let status_label = status_label.clone();
+        let result_text_view = result_text_view.clone();
+        let button = button.clone();
+        let spinner = spinner.clone();
+        let app_state = app_state.clone();
+        let language = {
+            let cfg = config.lock().unwrap();
+            cfg.language.clone()
+        };
+
+        glib::spawn_future_local(async move {
+            // Wait for recording to finish
+            if let Some(rx) = completion_rx {
+                let _ = rx.recv().await;
+            }
+
+            // Get final text from result_text_view
+            let buffer = result_text_view.buffer();
+            let start = buffer.start_iter();
+            let end = buffer.end_iter();
+            let final_text = buffer.text(&start, &end, false).to_string();
+
+            if !final_text.is_empty() {
+                status_label.set_text("Готово!");
+
+                // Save to history
+                let entry = crate::history::HistoryEntry::new(
+                    final_text.clone(),
+                    duration_secs,
+                    language,
+                );
+                let mut h = history.lock().unwrap();
+                h.add(entry);
+                if let Err(e) = crate::history::save_history(&h) {
+                    eprintln!("Помилка збереження історії: {}", e);
+                }
+            } else {
+                status_label.set_text("Не вдалося розпізнати мову");
+            }
+
+            // Transition back to Idle state
+            app_state.set(AppState::Idle);
+            spinner.stop();
+            spinner.set_visible(false);
+            button.set_label("Почати запис");
+            button.add_css_class("suggested-action");
+            button.set_sensitive(true);
+        });
+    }
+}
+
+use ui_continuous::{handle_start_continuous, handle_stop_continuous};
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, LevelBar, Orientation, Spinner, TextView};
 use std::cell::Cell;
@@ -38,6 +272,14 @@ pub fn build_ui(
 ) {
     let recorder = Arc::new(AudioRecorder::new());
     let conference_recorder = Arc::new(ConferenceRecorder::new());
+    
+    // Create continuous recorder (will be initialized if continuous mode is enabled)
+    let continuous_recorder = Arc::new(
+        ContinuousRecorder::new(false, 10).unwrap_or_else(|_| {
+            // Fallback if VAD fails - will use fixed intervals only
+            ContinuousRecorder::new(false, 10).unwrap()
+        })
+    );
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -174,6 +416,7 @@ pub fn build_ui(
     let diarization_engine_for_ui = diarization_engine.clone();
     let recorder_for_button = recorder.clone();
     let conference_recorder_for_button = conference_recorder.clone();
+    let continuous_recorder_for_button = continuous_recorder.clone();
     let app_state_for_button = app_state.clone();
     let recording_start_time_for_button = recording_start_time.clone();
     let mode_combo_for_button = mode_combo.clone();
@@ -191,6 +434,7 @@ pub fn build_ui(
         &spinner,
         recorder_for_button,
         conference_recorder_for_button,
+        continuous_recorder_for_button,
         mode_combo_for_button,
         whisper.clone(),
         config_for_ui,
@@ -310,6 +554,7 @@ pub fn build_ui(
     let spinner_for_hotkey = spinner.clone();
     let recorder_for_hotkey = recorder.clone();
     let conference_recorder_for_hotkey = conference_recorder.clone();
+    let continuous_recorder_for_hotkey = continuous_recorder.clone();
     let diarization_engine_for_hotkey = diarization_engine.clone();
     let mode_combo_for_hotkey = mode_combo.clone();
     let whisper_for_hotkey = whisper.clone();
@@ -320,6 +565,10 @@ pub fn build_ui(
     glib::spawn_future_local(async move {
         while toggle_recording_rx.recv().await.is_ok() {
             let is_conference = mode_combo_for_hotkey.active() == Some(1);
+            let is_continuous = {
+                let cfg = config_for_hotkey.lock().unwrap();
+                cfg.continuous_mode
+            };
             
             match app_state_for_hotkey.get() {
                 AppState::Idle => {
@@ -333,6 +582,19 @@ pub fn build_ui(
                             &loopback_level_bar_for_hotkey,
                             &conference_recorder_for_hotkey,
                             &whisper_for_hotkey,
+                            &app_state_for_hotkey,
+                            &recording_start_time_for_hotkey,
+                        );
+                    } else if is_continuous {
+                        handle_start_continuous(
+                            &record_button_for_hotkey,
+                            &status_label_for_hotkey,
+                            &result_text_view_for_hotkey,
+                            &timer_label_for_hotkey,
+                            &level_bar_for_hotkey,
+                            &continuous_recorder_for_hotkey,
+                            &whisper_for_hotkey,
+                            &config_for_hotkey,
                             &app_state_for_hotkey,
                             &recording_start_time_for_hotkey,
                         );
@@ -365,6 +627,21 @@ pub fn build_ui(
                             &config_for_hotkey,
                             &history_for_hotkey,
                             &diarization_engine_for_hotkey,
+                            &app_state_for_hotkey,
+                            &recording_start_time_for_hotkey,
+                        );
+                    } else if is_continuous {
+                        handle_stop_continuous(
+                            &record_button_for_hotkey,
+                            &status_label_for_hotkey,
+                            &result_text_view_for_hotkey,
+                            &timer_label_for_hotkey,
+                            &level_bar_for_hotkey,
+                            &spinner_for_hotkey,
+                            &continuous_recorder_for_hotkey,
+                            &whisper_for_hotkey,
+                            &config_for_hotkey,
+                            &history_for_hotkey,
                             &app_state_for_hotkey,
                             &recording_start_time_for_hotkey,
                         );
@@ -406,6 +683,7 @@ fn setup_record_button(
     spinner: &Spinner,
     recorder: Arc<AudioRecorder>,
     conference_recorder: Arc<ConferenceRecorder>,
+    continuous_recorder: Arc<ContinuousRecorder>,
     mode_combo: gtk4::ComboBoxText,
     whisper: Arc<Mutex<Option<WhisperSTT>>>,
     config: Arc<Mutex<Config>>,
@@ -416,6 +694,7 @@ fn setup_record_button(
 ) {
     let recorder_clone = recorder.clone();
     let conference_recorder_clone = conference_recorder.clone();
+    let continuous_recorder_clone = continuous_recorder.clone();
     let diarization_engine_clone = diarization_engine.clone();
     let mode_combo_clone = mode_combo.clone();
     let status_label_clone = status_label.clone();
@@ -431,6 +710,10 @@ fn setup_record_button(
 
     button.connect_clicked(move |_| {
         let is_conference = mode_combo_clone.active() == Some(1);
+        let is_continuous = {
+            let cfg = config.lock().unwrap();
+            cfg.continuous_mode
+        };
         
         match app_state_clone.get() {
             AppState::Idle => {
@@ -444,6 +727,19 @@ fn setup_record_button(
                         &loopback_level_bar_clone,
                         &conference_recorder_clone,
                         &whisper,
+                        &app_state_clone,
+                        &recording_start_time_clone,
+                    );
+                } else if is_continuous {
+                    handle_start_continuous(
+                        &button_clone,
+                        &status_label_clone,
+                        &result_text_view_clone,
+                        &timer_label_clone,
+                        &level_bar_clone,
+                        &continuous_recorder_clone,
+                        &whisper,
+                        &config,
                         &app_state_clone,
                         &recording_start_time_clone,
                     );
@@ -480,20 +776,42 @@ fn setup_record_button(
                         &recording_start_time_clone,
                     );
                 } else {
-                    handle_stop_recording(
-                        &button_clone,
-                        &status_label_clone,
-                        &result_text_view_clone,
-                        &timer_label_clone,
-                        &level_bar_clone,
-                        &spinner_clone,
-                        &recorder_clone,
-                        &whisper,
-                        &config,
-                        &history,
-                        &app_state_clone,
-                        &recording_start_time_clone,
-                    );
+                    let is_continuous = {
+                        let cfg = config.lock().unwrap();
+                        cfg.continuous_mode
+                    };
+                    
+                    if is_continuous {
+                        handle_stop_continuous(
+                            &button_clone,
+                            &status_label_clone,
+                            &result_text_view_clone,
+                            &timer_label_clone,
+                            &level_bar_clone,
+                            &spinner_clone,
+                            &continuous_recorder_clone,
+                            &whisper,
+                            &config,
+                            &history,
+                            &app_state_clone,
+                            &recording_start_time_clone,
+                        );
+                    } else {
+                        handle_stop_recording(
+                            &button_clone,
+                            &status_label_clone,
+                            &result_text_view_clone,
+                            &timer_label_clone,
+                            &level_bar_clone,
+                            &spinner_clone,
+                            &recorder_clone,
+                            &whisper,
+                            &config,
+                            &history,
+                            &app_state_clone,
+                            &recording_start_time_clone,
+                        );
+                    }
                 }
             }
             AppState::Processing => {
