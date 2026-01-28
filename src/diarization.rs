@@ -15,7 +15,6 @@ pub struct DiarizationSegment {
     pub speaker_id: usize,
     pub start_time: f64,
     pub end_time: f64,
-    pub text: String,
 }
 
 /// Diarization engine using NVIDIA Sortformer
@@ -91,7 +90,6 @@ impl DiarizationEngine {
                         speaker_id: seg.speaker_id,
                         start_time: seg.start as f64,
                         end_time: seg.end as f64,
-                        text: String::new(), // Will be filled by transcription
                     })
                     .collect())
             } else {

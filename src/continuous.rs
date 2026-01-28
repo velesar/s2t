@@ -235,11 +235,6 @@ impl ContinuousRecorder {
         (final_samples, completion_rx)
     }
 
-    /// Add samples to the ring buffer (called from audio callback)
-    pub fn add_samples(&self, samples: &[f32]) {
-        self.ring_buffer.write(samples);
-    }
-
     /// Get current amplitude
     pub fn get_amplitude(&self) -> f32 {
         self.recorder.get_amplitude()

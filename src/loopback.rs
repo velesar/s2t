@@ -45,7 +45,6 @@ impl LoopbackRecorder {
         *self.completion_rx.lock().unwrap() = Some(completion_rx);
 
         let samples = self.samples.clone();
-        let is_recording = self.is_recording.clone();
         let is_recording_for_loop = self.is_recording.clone();
         let current_amplitude = self.current_amplitude.clone();
 
