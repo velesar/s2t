@@ -4,7 +4,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 pub struct WhisperSTT {
     ctx: WhisperContext,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used by Transcription trait implementation
     model_path: String,
 }
 
@@ -80,7 +80,7 @@ impl WhisperSTT {
 
         if !loopback_text.is_empty() {
             if !result.is_empty() {
-                result.push_str(" ");
+                result.push(' ');
             }
             result.push_str("[Учасник] ");
             result.push_str(&loopback_text);
@@ -185,4 +185,9 @@ impl WhisperSTT {
         self.transcribe_with_diarization(mic_samples, loopback_samples, language)
     }
 
+    /// Get the model path (used by Transcription trait implementation)
+    #[allow(dead_code)]
+    pub fn model_path(&self) -> &str {
+        &self.model_path
+    }
 }

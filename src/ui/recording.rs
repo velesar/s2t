@@ -16,7 +16,9 @@ const MIN_RECORDING_SAMPLES: usize = WHISPER_SAMPLE_RATE; // 1 second
 pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &DictationUI) {
     // Check if model is loaded
     if !ctx.is_model_loaded() {
-        ui.base.status_label.set_text("Модель не завантажено. Натисніть 'Моделі'.");
+        ui.base
+            .status_label
+            .set_text("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -129,16 +131,14 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictation
                             std::thread::sleep(std::time::Duration::from_millis(100));
                             if let Err(e) = crate::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
-                                ui.base.status_label.set_text(&format!("Готово! (помилка вставки: {})", e));
+                                ui.base
+                                    .status_label
+                                    .set_text(&format!("Готово! (помилка вставки: {})", e));
                             }
                         }
 
                         // Save to history
-                        let entry = HistoryEntry::new(
-                            text,
-                            duration_secs,
-                            language.clone(),
-                        );
+                        let entry = HistoryEntry::new(text, duration_secs, language.clone());
                         let mut h = ctx.history.lock().unwrap();
                         h.add(entry);
                         if let Err(e) = save_history(&h) {

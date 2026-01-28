@@ -5,19 +5,21 @@
 
 use crate::context::AppContext;
 use crate::history::{save_history, HistoryEntry};
-use crate::recordings::{ensure_recordings_dir, generate_recording_filename, recording_path, save_recording};
+use crate::recordings::{
+    ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
+};
 use gtk4::glib;
 use std::sync::Arc;
 
 use super::state::{ConferenceUI, RecordingContext};
 
-const SAMPLE_RATE: usize = 16000;
-
 /// Start conference recording (mic + loopback)
 pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &ConferenceUI) {
     // Check if model is loaded
     if !ctx.is_model_loaded() {
-        ui.base.status_label.set_text("Модель не завантажено. Натисніть 'Моделі'.");
+        ui.base
+            .status_label
+            .set_text("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -71,8 +73,8 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
 
     let recording = ctx.audio.stop_conference();
 
-    // Calculate duration
-    let duration_secs = recording.mic_samples.len().max(recording.loopback_samples.len()) as f32 / SAMPLE_RATE as f32;
+    // Calculate duration using shared type's method
+    let duration_secs = recording.duration_secs();
     let duration_mins = (duration_secs / 60.0).floor() as u32;
     let duration_remaining_secs = (duration_secs % 60.0).floor() as u32;
     ui.base.status_label.set_text(&format!(
@@ -104,7 +106,11 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
         // Save audio file
         let filename = generate_recording_filename();
         let file_path = recording_path(&filename);
-        if let Err(e) = save_recording(&recording.mic_samples, &recording.loopback_samples, &file_path) {
+        if let Err(e) = save_recording(
+            &recording.mic_samples,
+            &recording.loopback_samples,
+            &file_path,
+        ) {
             eprintln!("Помилка збереження аудіо файлу: {}", e);
         }
 
@@ -157,7 +163,9 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
                             std::thread::sleep(std::time::Duration::from_millis(100));
                             if let Err(e) = crate::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
-                                ui.base.status_label.set_text(&format!("Готово! (помилка вставки: {})", e));
+                                ui.base
+                                    .status_label
+                                    .set_text(&format!("Готово! (помилка вставки: {})", e));
                             }
                         }
 

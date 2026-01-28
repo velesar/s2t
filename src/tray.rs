@@ -1,11 +1,11 @@
 use crate::config::{save_config, Config};
 use crate::models::{get_model_path, list_downloaded_models};
 use crate::whisper::WhisperSTT;
+use async_channel::Sender;
 use ksni::{
     menu::{StandardItem, SubMenu},
     MenuItem, Tray, TrayService,
 };
-use async_channel::Sender;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
@@ -29,7 +29,11 @@ impl DictationTray {
         config: Arc<Mutex<Config>>,
         whisper: Arc<Mutex<Option<WhisperSTT>>>,
     ) -> Self {
-        Self { tx, config, whisper }
+        Self {
+            tx,
+            config,
+            whisper,
+        }
     }
 
     pub fn spawn_service(

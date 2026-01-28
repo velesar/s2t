@@ -1,18 +1,20 @@
 //! Audio recording service layer.
 //!
-//! This module provides a unified interface for all recording modes.
-//! The methods are currently unused as handlers haven't been migrated yet
-//! (hybrid migration phase).
+//! This module provides a unified interface for all recording modes:
+//! - Dictation: Single recording session with transcription
+//! - Continuous: Automatic segmentation with parallel transcription
+//! - Conference: Dual-channel (mic + loopback) with diarization
 
 use crate::audio::AudioRecorder;
 use crate::conference_recorder::ConferenceRecorder;
 use crate::continuous::{AudioSegment, ContinuousRecorder};
+use crate::traits::AudioRecording;
+use crate::types::ConferenceRecording;
 use anyhow::Result;
 use async_channel::{Receiver, Sender};
 use std::sync::Arc;
 
 /// Configuration for continuous recording mode
-#[allow(dead_code)]
 pub struct ContinuousConfig {
     pub use_vad: bool,
     pub segment_interval_secs: u32,
@@ -31,27 +33,26 @@ impl Default for ContinuousConfig {
     }
 }
 
-/// Result from stopping conference recording
-#[allow(dead_code)]
-pub struct ConferenceRecording {
-    pub mic_samples: Vec<f32>,
-    pub loopback_samples: Vec<f32>,
-    pub mic_completion: Option<Receiver<()>>,
-    pub loopback_completion: Option<Receiver<()>>,
-}
-
-/// Unified audio service wrapping all recording modes
-#[allow(dead_code)]
+/// Unified audio service wrapping all recording modes.
+///
+/// `AudioService` provides a clean API for recording operations,
+/// abstracting away the underlying recorder implementations.
+///
+/// The `mic` field uses the `AudioRecording` trait to enable
+/// dependency injection for testing.
 pub struct AudioService {
-    mic: Arc<AudioRecorder>,
+    /// Microphone recorder (trait object for testability)
+    mic: Arc<dyn AudioRecording>,
+    /// Conference recorder (mic + loopback)
     conference: Arc<ConferenceRecorder>,
+    /// Continuous recorder with VAD
     continuous: Arc<ContinuousRecorder>,
 }
 
-#[allow(dead_code)]
-
 impl AudioService {
-    /// Create a new AudioService with the given continuous recording configuration
+    /// Create a new AudioService with the given continuous recording configuration.
+    ///
+    /// Uses the default `AudioRecorder` for microphone capture.
     pub fn new(continuous_config: ContinuousConfig) -> Result<Self> {
         let continuous = ContinuousRecorder::new(
             continuous_config.use_vad,
@@ -62,6 +63,28 @@ impl AudioService {
 
         Ok(Self {
             mic: Arc::new(AudioRecorder::new()),
+            conference: Arc::new(ConferenceRecorder::new()),
+            continuous: Arc::new(continuous),
+        })
+    }
+
+    /// Create with a custom microphone recorder (for testing).
+    ///
+    /// This constructor enables dependency injection of mock recorders.
+    #[cfg(test)]
+    pub fn with_recorder(
+        mic: Arc<dyn AudioRecording>,
+        continuous_config: ContinuousConfig,
+    ) -> Result<Self> {
+        let continuous = ContinuousRecorder::new(
+            continuous_config.use_vad,
+            continuous_config.segment_interval_secs,
+            continuous_config.vad_silence_threshold_ms,
+            continuous_config.vad_min_speech_ms,
+        )?;
+
+        Ok(Self {
+            mic,
             conference: Arc::new(ConferenceRecorder::new()),
             continuous: Arc::new(continuous),
         })
@@ -83,17 +106,23 @@ impl AudioService {
 
     /// Start dictation (single recording session)
     pub fn start_dictation(&self) -> Result<()> {
-        self.mic.start_recording()
+        self.mic.start()
     }
 
     /// Stop dictation and return recorded samples
     pub fn stop_dictation(&self) -> (Vec<f32>, Option<Receiver<()>>) {
-        self.mic.stop_recording()
+        self.mic.stop()
     }
 
     /// Get current microphone amplitude for dictation mode
     pub fn get_dictation_amplitude(&self) -> f32 {
-        self.mic.get_amplitude()
+        self.mic.amplitude()
+    }
+
+    /// Check if dictation is currently recording
+    #[allow(dead_code)] // Useful for future UI state queries
+    pub fn is_dictation_recording(&self) -> bool {
+        self.mic.is_recording()
     }
 
     // === Continuous Mode ===
@@ -127,15 +156,7 @@ impl AudioService {
 
     /// Stop conference recording and return both channels
     pub fn stop_conference(&self) -> ConferenceRecording {
-        let (mic_samples, loopback_samples, mic_completion, loopback_completion) =
-            self.conference.stop_conference();
-
-        ConferenceRecording {
-            mic_samples,
-            loopback_samples,
-            mic_completion,
-            loopback_completion,
-        }
+        self.conference.stop_conference()
     }
 
     /// Get microphone amplitude for conference mode
@@ -147,21 +168,83 @@ impl AudioService {
     pub fn get_loopback_amplitude(&self) -> f32 {
         self.conference.get_loopback_amplitude()
     }
+}
 
-    // === Access to underlying recorders (for legacy code during migration) ===
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::mocks::{MockAudioRecorder, MockTranscription};
+    use crate::traits::Transcription;
 
-    /// Get reference to mic recorder (for legacy compatibility)
-    pub fn mic_recorder(&self) -> &Arc<AudioRecorder> {
-        &self.mic
+    #[test]
+    fn test_audio_service_with_mock_recorder() {
+        let mock = Arc::new(MockAudioRecorder::with_samples(vec![0.1, 0.2, 0.3]));
+        let service = AudioService::with_recorder(mock, ContinuousConfig::default()).unwrap();
+
+        assert!(!service.is_dictation_recording());
+        service.start_dictation().unwrap();
+
+        let (samples, _) = service.stop_dictation();
+        assert_eq!(samples, vec![0.1, 0.2, 0.3]);
     }
 
-    /// Get reference to conference recorder (for legacy compatibility)
-    pub fn conference_recorder(&self) -> &Arc<ConferenceRecorder> {
-        &self.conference
+    #[test]
+    fn test_audio_service_amplitude() {
+        let mock = Arc::new(MockAudioRecorder::with_amplitude(0.75));
+        let service = AudioService::with_recorder(mock, ContinuousConfig::default()).unwrap();
+
+        assert_eq!(service.get_dictation_amplitude(), 0.75);
     }
 
-    /// Get reference to continuous recorder (for legacy compatibility)
-    pub fn continuous_recorder(&self) -> &Arc<ContinuousRecorder> {
-        &self.continuous
+    /// Integration test: full dictation start → stop → transcribe workflow.
+    #[test]
+    fn test_dictation_workflow_end_to_end() {
+        // Simulate 1 second of 440Hz sine wave at 16kHz
+        let num_samples = 16000;
+        let samples: Vec<f32> = (0..num_samples)
+            .map(|i| (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 16000.0).sin())
+            .collect();
+
+        let mock_recorder = Arc::new(MockAudioRecorder::with_samples(samples.clone()));
+        let mock_transcriber = MockTranscription::returning("Привіт, світе");
+
+        let service =
+            AudioService::with_recorder(mock_recorder, ContinuousConfig::default()).unwrap();
+
+        // Start recording
+        service.start_dictation().unwrap();
+
+        // Stop and get samples
+        let (recorded_samples, _) = service.stop_dictation();
+        assert_eq!(recorded_samples.len(), num_samples);
+
+        // Transcribe the recorded samples
+        let text = mock_transcriber
+            .transcribe(&recorded_samples, "uk")
+            .unwrap();
+        assert_eq!(text, "Привіт, світе");
+    }
+
+    /// Integration test: verifies amplitude reflects recording state.
+    #[test]
+    fn test_dictation_amplitude_during_recording() {
+        let mock = Arc::new(MockAudioRecorder::with_amplitude(0.6));
+        let service = AudioService::with_recorder(mock, ContinuousConfig::default()).unwrap();
+
+        // Amplitude available before recording starts (mock returns constant)
+        assert_eq!(service.get_dictation_amplitude(), 0.6);
+
+        // Start recording - amplitude still available
+        service.start_dictation().unwrap();
+        assert_eq!(service.get_dictation_amplitude(), 0.6);
+    }
+
+    #[test]
+    fn test_continuous_config_default() {
+        let config = ContinuousConfig::default();
+        assert!(config.use_vad);
+        assert_eq!(config.segment_interval_secs, 10);
+        assert_eq!(config.vad_silence_threshold_ms, 1000);
+        assert_eq!(config.vad_min_speech_ms, 500);
     }
 }

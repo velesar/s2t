@@ -1,8 +1,7 @@
 use crate::config::{save_config, Config};
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton,
-    Window,
+    Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton, Window,
 };
 use std::sync::{Arc, Mutex};
 
@@ -111,7 +110,7 @@ pub fn show_settings_dialog(
     let diarization_combo = ComboBoxText::new();
     diarization_combo.append_text("За каналами (2 мовці)");
     diarization_combo.append_text("Sortformer (до 4 мовців)");
-    
+
     let current_diarization = {
         let cfg = config.lock().unwrap();
         cfg.diarization_method.clone()
@@ -122,7 +121,7 @@ pub fn show_settings_dialog(
         diarization_combo.set_active(Some(0));
     }
     diarization_combo.set_halign(Align::Start);
-    
+
     // Check if Sortformer model is available
     let sortformer_available = crate::models::is_sortformer_model_downloaded();
     if !sortformer_available {
@@ -132,7 +131,7 @@ pub fn show_settings_dialog(
         info_label.set_halign(Align::Start);
         main_box.append(&info_label);
     }
-    
+
     main_box.append(&diarization_combo);
 
     // Auto-copy checkbox

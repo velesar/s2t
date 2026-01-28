@@ -1,14 +1,14 @@
-//! UI state management helpers.
+//! UI state management.
 //!
-//! Note: Context structs are currently unused (hybrid migration phase).
-//! They will be used as handlers are refactored to use context structs.
+//! This module provides recording state, UI context structs, and
+//! recording mode selection logic.
 
-#![allow(dead_code)]
-
+use crate::context::AppContext;
 use gtk4::prelude::*;
-use gtk4::{Button, Label, LevelBar, Spinner, TextView, Box as GtkBox};
+use gtk4::{Box as GtkBox, Button, Label, LevelBar, Spinner, TextView};
 use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 /// Application state for recording modes
@@ -17,6 +17,37 @@ pub enum AppState {
     Idle,
     Recording,
     Processing,
+}
+
+/// Recording mode selection.
+///
+/// Determines which recording handler and UI widgets to use.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum RecordingMode {
+    /// Single recording session with transcription
+    Dictation,
+    /// Automatic segmentation with parallel transcription
+    Continuous,
+    /// Dual-channel (mic + loopback) with diarization
+    Conference,
+}
+
+impl RecordingMode {
+    /// Resolve the current recording mode from UI state and config.
+    ///
+    /// The mode combo selects between Dictation and Conference.
+    /// When Dictation is selected but continuous mode is enabled in config,
+    /// Continuous mode is used instead.
+    pub fn resolve(mode_combo: &gtk4::ComboBoxText, ctx: &Arc<AppContext>) -> Self {
+        let is_conference = mode_combo.active() == Some(1);
+        if is_conference {
+            RecordingMode::Conference
+        } else if ctx.continuous_mode() {
+            RecordingMode::Continuous
+        } else {
+            RecordingMode::Dictation
+        }
+    }
 }
 
 /// Recording state shared across UI components
@@ -33,16 +64,8 @@ impl RecordingContext {
         }
     }
 
-    pub fn is_idle(&self) -> bool {
-        self.state.get() == AppState::Idle
-    }
-
     pub fn is_recording(&self) -> bool {
         self.state.get() == AppState::Recording
-    }
-
-    pub fn is_processing(&self) -> bool {
-        self.state.get() == AppState::Processing
     }
 
     pub fn start_recording(&self) {
@@ -144,7 +167,8 @@ impl UIContext {
     pub fn update_timer(&self, secs: u64) {
         let minutes = secs / 60;
         let seconds = secs % 60;
-        self.timer_label.set_text(&format!("{:02}:{:02}", minutes, seconds));
+        self.timer_label
+            .set_text(&format!("{:02}:{:02}", minutes, seconds));
     }
 
     /// Get current result text
@@ -256,11 +280,7 @@ pub struct ConferenceUI {
 }
 
 impl ConferenceUI {
-    pub fn new(
-        base: UIContext,
-        mic_level_bar: LevelBar,
-        loopback_level_bar: LevelBar,
-    ) -> Self {
+    pub fn new(base: UIContext, mic_level_bar: LevelBar, loopback_level_bar: LevelBar) -> Self {
         Self {
             base,
             mic_level_bar,

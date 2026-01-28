@@ -1,7 +1,7 @@
 use crate::config::{save_config, Config};
 use crate::models::{
-    delete_model, delete_sortformer_model, download_model, download_sortformer_model,
-    format_size, get_available_models, get_sortformer_model_info, is_model_downloaded,
+    delete_model, delete_sortformer_model, download_model, download_sortformer_model, format_size,
+    get_available_models, get_sortformer_model_info, is_model_downloaded,
     is_sortformer_model_downloaded,
 };
 use crate::whisper::WhisperSTT;
@@ -22,6 +22,14 @@ struct RowWidgets {
 }
 
 type RowWidgetsMap = Rc<RefCell<HashMap<String, RowWidgets>>>;
+
+/// Context for creating model rows, reducing parameter count
+struct ModelRowContext {
+    config: Arc<Mutex<Config>>,
+    whisper: Arc<Mutex<Option<WhisperSTT>>>,
+    download_states: Rc<RefCell<HashMap<String, DownloadState>>>,
+    row_widgets: RowWidgetsMap,
+}
 
 pub fn show_model_dialog(
     parent: &impl IsA<Window>,
@@ -56,16 +64,20 @@ pub fn show_model_dialog(
 
     let row_widgets: RowWidgetsMap = Rc::new(RefCell::new(HashMap::new()));
 
+    let model_ctx = ModelRowContext {
+        config: config.clone(),
+        whisper: whisper.clone(),
+        download_states: download_states.clone(),
+        row_widgets: row_widgets.clone(),
+    };
+
     for model in get_available_models() {
         let row = create_model_row(
             &model.filename,
             &model.display_name,
             model.size_bytes,
             &model.description,
-            config.clone(),
-            whisper.clone(),
-            download_states.clone(),
-            row_widgets.clone(),
+            &model_ctx,
         );
         list_box.append(&row);
     }
@@ -128,11 +140,12 @@ fn create_model_row(
     display_name: &str,
     size_bytes: u64,
     description: &str,
-    config: Arc<Mutex<Config>>,
-    whisper: Arc<Mutex<Option<WhisperSTT>>>,
-    download_states: Rc<RefCell<HashMap<String, DownloadState>>>,
-    row_widgets: RowWidgetsMap,
+    ctx: &ModelRowContext,
 ) -> ListBoxRow {
+    let config = ctx.config.clone();
+    let whisper = ctx.whisper.clone();
+    let download_states = ctx.download_states.clone();
+    let row_widgets = ctx.row_widgets.clone();
     let row = ListBoxRow::new();
     row.set_activatable(false);
 
@@ -156,7 +169,11 @@ fn create_model_row(
     default_indicator.add_css_class("monospace");
     name_box.append(&default_indicator);
 
-    let name_label = Label::new(Some(&format!("{} ({})", display_name, format_size(size_bytes))));
+    let name_label = Label::new(Some(&format!(
+        "{} ({})",
+        display_name,
+        format_size(size_bytes)
+    )));
     name_label.set_hexpand(true);
     name_label.set_halign(Align::Start);
     name_label.add_css_class("heading");
@@ -290,9 +307,12 @@ fn create_model_row(
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             let tx_clone = tx.clone();
-            let result = rt.block_on(download_model(&filename_for_thread, move |downloaded, total| {
-                let _ = tx_clone.send_blocking(DownloadProgress::Progress(downloaded, total));
-            }));
+            let result = rt.block_on(download_model(
+                &filename_for_thread,
+                move |downloaded, total| {
+                    let _ = tx_clone.send_blocking(DownloadProgress::Progress(downloaded, total));
+                },
+            ));
 
             match result {
                 Ok(()) => {

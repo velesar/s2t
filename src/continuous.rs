@@ -57,14 +57,12 @@ impl ContinuousRecorder {
     }
 
     /// Start continuous recording with segment callback
-    pub fn start_continuous(
-        &self,
-        segment_tx: Sender<AudioSegment>,
-    ) -> Result<()> {
+    pub fn start_continuous(&self, segment_tx: Sender<AudioSegment>) -> Result<()> {
         self.recorder.start_recording()?;
         self.ring_buffer.clear();
         *self.segment_tx.lock().unwrap() = Some(segment_tx);
-        self.is_recording.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.is_recording
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         *self.segment_counter.lock().unwrap() = 0;
         *self.last_segment_time.lock().unwrap() = Some(Instant::now());
 
@@ -89,7 +87,8 @@ impl ContinuousRecorder {
             // Create VAD INSIDE thread - solves Send trait issue
             // (webrtc_vad::Vad is not Send, so we can't pass it across thread boundaries)
             let vad = if use_vad {
-                VoiceActivityDetector::with_thresholds(vad_silence_threshold_ms, vad_min_speech_ms).ok()
+                VoiceActivityDetector::with_thresholds(vad_silence_threshold_ms, vad_min_speech_ms)
+                    .ok()
             } else {
                 None
             };
@@ -125,8 +124,8 @@ impl ContinuousRecorder {
                     is_speech_detected.store(speech_now, std::sync::atomic::Ordering::SeqCst);
 
                     // Only segment if we have at least 1 second of audio
-                    samples.len() >= SAMPLE_RATE as usize &&
-                        vad.detect_speech_end(&samples).unwrap_or(false)
+                    samples.len() >= SAMPLE_RATE as usize
+                        && vad.detect_speech_end(&samples).unwrap_or(false)
                 } else {
                     // No VAD - always show as "listening"
                     is_speech_detected.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -150,7 +149,10 @@ impl ContinuousRecorder {
                             *counter
                         };
 
-                        let start_time = last_segment_time.lock().unwrap().unwrap_or_else(|| Instant::now());
+                        let start_time = last_segment_time
+                            .lock()
+                            .unwrap()
+                            .unwrap_or_else(Instant::now);
                         let end_time = Instant::now();
 
                         let segment = AudioSegment {
@@ -177,10 +179,10 @@ impl ContinuousRecorder {
         Ok(())
     }
 
-
     /// Stop continuous recording
     pub fn stop_continuous(&self) -> (Vec<f32>, Option<Receiver<()>>) {
-        self.is_recording.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.is_recording
+            .store(false, std::sync::atomic::Ordering::SeqCst);
 
         // Give the monitoring thread a moment to finish its current iteration
         std::thread::sleep(Duration::from_millis(100));
@@ -217,7 +219,11 @@ impl ContinuousRecorder {
             if let Some(ref tx) = *self.segment_tx.lock().unwrap() {
                 let segment = AudioSegment {
                     samples: remaining,
-                    start_time: self.last_segment_time.lock().unwrap().unwrap_or_else(Instant::now),
+                    start_time: self
+                        .last_segment_time
+                        .lock()
+                        .unwrap()
+                        .unwrap_or_else(Instant::now),
                     end_time: Instant::now(),
                     segment_id,
                 };
@@ -242,6 +248,7 @@ impl ContinuousRecorder {
 
     /// Check if speech is currently detected (for UI display)
     pub fn is_speech_detected(&self) -> bool {
-        self.is_speech_detected.load(std::sync::atomic::Ordering::SeqCst)
+        self.is_speech_detected
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 }

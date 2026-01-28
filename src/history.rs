@@ -102,7 +102,11 @@ impl History {
     }
 
     /// Filter entries by date range (inclusive)
-    pub fn filter_by_date_range(&self, start_date: Option<DateTime<Utc>>, end_date: Option<DateTime<Utc>>) -> Vec<&HistoryEntry> {
+    pub fn filter_by_date_range(
+        &self,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> Vec<&HistoryEntry> {
         self.entries
             .iter()
             .filter(|e| {
@@ -120,42 +124,46 @@ impl History {
             })
             .collect()
     }
-
-    /// Export filtered entries to text file
-    pub fn export_to_text(&self, entries: &[&HistoryEntry], path: &PathBuf) -> Result<()> {
-        use std::io::Write;
-        
-        let mut file = fs::File::create(path)
-            .with_context(|| format!("Не вдалося створити файл: {}", path.display()))?;
-
-        writeln!(file, "# Історія диктовок")
-            .context("Не вдалося записати заголовок")?;
-        writeln!(file, "# Експортовано: {}", Utc::now().format("%Y-%m-%d %H:%M:%S"))
-            .context("Не вдалося записати дату експорту")?;
-        writeln!(file, "")
-            .context("Не вдалося записати порожній рядок")?;
-
-        for entry in entries {
-            let local_time = entry.timestamp.with_timezone(&chrono::Local);
-            writeln!(file, "---")
-                .context("Не вдалося записати роздільник")?;
-            writeln!(file, "Дата: {}", local_time.format("%Y-%m-%d %H:%M:%S"))
-                .context("Не вдалося записати дату")?;
-            writeln!(file, "Тривалість: {}", entry.formatted_duration())
-                .context("Не вдалося записати тривалість")?;
-            writeln!(file, "Мова: {}", entry.language)
-                .context("Не вдалося записати мову")?;
-            writeln!(file, "")
-                .context("Не вдалося записати порожній рядок")?;
-            writeln!(file, "{}", entry.text)
-                .context("Не вдалося записати текст")?;
-            writeln!(file, "")
-                .context("Не вдалося записати порожній рядок")?;
-        }
-
-        Ok(())
-    }
 }
+
+// === Export ===
+
+/// Export history entries to a text file.
+///
+/// This is a standalone function (not a method on History) because
+/// file I/O is an infrastructure concern, not domain logic.
+pub fn export_to_text(entries: &[&HistoryEntry], path: &PathBuf) -> Result<()> {
+    use std::io::Write;
+
+    let mut file = fs::File::create(path)
+        .with_context(|| format!("Не вдалося створити файл: {}", path.display()))?;
+
+    writeln!(file, "# Історія диктовок").context("Не вдалося записати заголовок")?;
+    writeln!(
+        file,
+        "# Експортовано: {}",
+        Utc::now().format("%Y-%m-%d %H:%M:%S")
+    )
+    .context("Не вдалося записати дату експорту")?;
+    writeln!(file).context("Не вдалося записати порожній рядок")?;
+
+    for entry in entries {
+        let local_time = entry.timestamp.with_timezone(&chrono::Local);
+        writeln!(file, "---").context("Не вдалося записати роздільник")?;
+        writeln!(file, "Дата: {}", local_time.format("%Y-%m-%d %H:%M:%S"))
+            .context("Не вдалося записати дату")?;
+        writeln!(file, "Тривалість: {}", entry.formatted_duration())
+            .context("Не вдалося записати тривалість")?;
+        writeln!(file, "Мова: {}", entry.language).context("Не вдалося записати мову")?;
+        writeln!(file).context("Не вдалося записати порожній рядок")?;
+        writeln!(file, "{}", entry.text).context("Не вдалося записати текст")?;
+        writeln!(file).context("Не вдалося записати порожній рядок")?;
+    }
+
+    Ok(())
+}
+
+// === Persistence ===
 
 pub fn history_path() -> PathBuf {
     dirs::data_local_dir()
@@ -184,7 +192,8 @@ pub fn save_history(history: &History) -> Result<()> {
     fs::create_dir_all(dir)
         .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
 
-    let content = serde_json::to_string_pretty(history).context("Не вдалося серіалізувати історію")?;
+    let content =
+        serde_json::to_string_pretty(history).context("Не вдалося серіалізувати історію")?;
 
     fs::write(&path, content)
         .with_context(|| format!("Не вдалося записати історію: {}", path.display()))?;
@@ -195,6 +204,20 @@ pub fn save_history(history: &History) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
+
+    /// Helper to create an entry with a specific timestamp.
+    fn entry_at(text: &str, timestamp: DateTime<Utc>) -> HistoryEntry {
+        HistoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            text: text.to_string(),
+            timestamp,
+            duration_secs: 5.0,
+            language: "uk".to_string(),
+            recording_path: None,
+            speakers: Vec::new(),
+        }
+    }
 
     #[test]
     fn test_history_entry_new() {
@@ -248,8 +271,16 @@ mod tests {
     #[test]
     fn test_history_add_inserts_at_front() {
         let mut history = History::default();
-        history.add(HistoryEntry::new("First".to_string(), 5.0, "uk".to_string()));
-        history.add(HistoryEntry::new("Second".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new(
+            "First".to_string(),
+            5.0,
+            "uk".to_string(),
+        ));
+        history.add(HistoryEntry::new(
+            "Second".to_string(),
+            5.0,
+            "uk".to_string(),
+        ));
 
         assert_eq!(history.entries[0].text, "Second");
         assert_eq!(history.entries[1].text, "First");
@@ -259,7 +290,11 @@ mod tests {
     fn test_history_trim_to_limit() {
         let mut history = History::default();
         for i in 0..10 {
-            history.add(HistoryEntry::new(format!("Entry {}", i), 5.0, "uk".to_string()));
+            history.add(HistoryEntry::new(
+                format!("Entry {}", i),
+                5.0,
+                "uk".to_string(),
+            ));
         }
 
         history.trim_to_limit(5);
@@ -285,5 +320,255 @@ mod tests {
 
         assert_eq!(parsed.entries.len(), 1);
         assert_eq!(parsed.entries[0].text, "Test");
+    }
+
+    #[test]
+    fn test_new_with_recording() {
+        let entry = HistoryEntry::new_with_recording(
+            "Conference text".to_string(),
+            120.0,
+            "en".to_string(),
+            Some("/tmp/recording.wav".to_string()),
+            vec!["Speaker A".to_string(), "Speaker B".to_string()],
+        );
+        assert_eq!(entry.recording_path, Some("/tmp/recording.wav".to_string()));
+        assert_eq!(entry.speakers.len(), 2);
+        assert_eq!(entry.duration_secs, 120.0);
+    }
+
+    #[test]
+    fn test_filter_by_date_range_both_bounds() {
+        let mut history = History::default();
+        let jan1 = Utc.with_ymd_and_hms(2025, 1, 1, 12, 0, 0).unwrap();
+        let jan15 = Utc.with_ymd_and_hms(2025, 1, 15, 12, 0, 0).unwrap();
+        let feb1 = Utc.with_ymd_and_hms(2025, 2, 1, 12, 0, 0).unwrap();
+
+        history.add(entry_at(
+            "before",
+            Utc.with_ymd_and_hms(2024, 12, 15, 0, 0, 0).unwrap(),
+        ));
+        history.add(entry_at("inside", jan15));
+        history.add(entry_at(
+            "after",
+            Utc.with_ymd_and_hms(2025, 3, 1, 0, 0, 0).unwrap(),
+        ));
+
+        let result = history.filter_by_date_range(Some(jan1), Some(feb1));
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].text, "inside");
+    }
+
+    #[test]
+    fn test_filter_by_date_range_start_only() {
+        let mut history = History::default();
+        let jan1 = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+
+        history.add(entry_at(
+            "old",
+            Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap(),
+        ));
+        history.add(entry_at(
+            "new",
+            Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap(),
+        ));
+
+        let result = history.filter_by_date_range(Some(jan1), None);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].text, "new");
+    }
+
+    #[test]
+    fn test_filter_by_date_range_end_only() {
+        let mut history = History::default();
+        let jan1 = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+
+        history.add(entry_at(
+            "old",
+            Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap(),
+        ));
+        history.add(entry_at(
+            "new",
+            Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap(),
+        ));
+
+        let result = history.filter_by_date_range(None, Some(jan1));
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].text, "old");
+    }
+
+    #[test]
+    fn test_filter_by_date_range_no_bounds() {
+        let mut history = History::default();
+        history.add(entry_at(
+            "a",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+        ));
+        history.add(entry_at(
+            "b",
+            Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
+        ));
+
+        let result = history.filter_by_date_range(None, None);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_cleanup_old_entries() {
+        let mut history = History::default();
+        // Add an entry from 100 days ago
+        history.add(entry_at("old", Utc::now() - Duration::days(100)));
+        // Add a recent entry
+        history.add(entry_at("recent", Utc::now() - Duration::days(1)));
+
+        history.cleanup_old_entries(30);
+        assert_eq!(history.entries.len(), 1);
+        assert_eq!(history.entries[0].text, "recent");
+    }
+
+    #[test]
+    fn test_cleanup_old_entries_keeps_all_when_recent() {
+        let mut history = History::default();
+        history.add(entry_at("a", Utc::now() - Duration::days(5)));
+        history.add(entry_at("b", Utc::now() - Duration::days(10)));
+
+        history.cleanup_old_entries(30);
+        assert_eq!(history.entries.len(), 2);
+    }
+
+    #[test]
+    fn test_export_to_text() {
+        let entry1 = entry_at(
+            "First dictation",
+            Utc.with_ymd_and_hms(2025, 1, 15, 10, 30, 0).unwrap(),
+        );
+        let entry2 = entry_at(
+            "Second dictation",
+            Utc.with_ymd_and_hms(2025, 1, 16, 14, 0, 0).unwrap(),
+        );
+        let entries: Vec<&HistoryEntry> = vec![&entry1, &entry2];
+
+        let dir = std::env::temp_dir().join("s2t_test_export");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("test_export.txt");
+
+        export_to_text(&entries, &path).unwrap();
+
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("Історія диктовок"));
+        assert!(content.contains("First dictation"));
+        assert!(content.contains("Second dictation"));
+        assert!(content.contains("---"));
+
+        // Cleanup
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_trim_to_limit_no_op_when_under() {
+        let mut history = History::default();
+        history.add(HistoryEntry::new("One".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("Two".to_string(), 5.0, "uk".to_string()));
+
+        history.trim_to_limit(10);
+        assert_eq!(history.entries.len(), 2);
+    }
+
+    #[test]
+    fn test_formatted_timestamp_contains_date() {
+        let entry = entry_at(
+            "test",
+            Utc.with_ymd_and_hms(2025, 3, 15, 10, 30, 0).unwrap(),
+        );
+        let formatted = entry.formatted_timestamp();
+        // The exact output depends on local timezone, but should contain a date pattern
+        assert!(formatted.contains("2025"));
+        assert!(formatted.contains("03") || formatted.contains("3"));
+    }
+
+    #[test]
+    fn test_remove_nonexistent_id_is_noop() {
+        let mut history = History::default();
+        history.add(HistoryEntry::new("Test".to_string(), 5.0, "uk".to_string()));
+
+        history.remove("nonexistent-id");
+        assert_eq!(history.entries.len(), 1);
+    }
+
+    /// Integration test: full persistence round-trip (serialize → file → deserialize).
+    #[test]
+    fn test_history_persistence_round_trip() {
+        let dir = std::env::temp_dir().join("s2t_test_persistence");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("test_history.json");
+
+        // Create history with varied entries
+        let mut history = History::default();
+        history.add(HistoryEntry::new(
+            "Simple dictation".to_string(),
+            5.0,
+            "uk".to_string(),
+        ));
+        history.add(HistoryEntry::new_with_recording(
+            "Conference notes".to_string(),
+            120.0,
+            "en".to_string(),
+            Some("/tmp/rec.wav".to_string()),
+            vec!["Alice".to_string(), "Bob".to_string()],
+        ));
+
+        // Save (mirrors save_history implementation)
+        let content = serde_json::to_string_pretty(&history).unwrap();
+        fs::write(&path, &content).unwrap();
+
+        // Load (mirrors load_history implementation)
+        let loaded_content = fs::read_to_string(&path).unwrap();
+        let loaded: History = serde_json::from_str(&loaded_content).unwrap();
+
+        // Verify round-trip preserves all data
+        assert_eq!(loaded.entries.len(), 2);
+        assert_eq!(loaded.entries[0].text, "Conference notes");
+        assert_eq!(loaded.entries[0].language, "en");
+        assert_eq!(loaded.entries[0].duration_secs, 120.0);
+        assert_eq!(
+            loaded.entries[0].recording_path,
+            Some("/tmp/rec.wav".to_string())
+        );
+        assert_eq!(loaded.entries[0].speakers, vec!["Alice", "Bob"]);
+        assert_eq!(loaded.entries[1].text, "Simple dictation");
+        assert_eq!(loaded.entries[1].recording_path, None);
+        assert!(loaded.entries[1].speakers.is_empty());
+
+        // Cleanup
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    /// Integration test: history operations chain (add → filter → cleanup → trim).
+    #[test]
+    fn test_history_operations_chain() {
+        let mut history = History::default();
+
+        // Add entries spanning different dates
+        history.add(entry_at("old", Utc::now() - Duration::days(100)));
+        history.add(entry_at("medium", Utc::now() - Duration::days(20)));
+        history.add(entry_at("recent1", Utc::now() - Duration::days(1)));
+        history.add(entry_at("recent2", Utc::now()));
+        assert_eq!(history.entries.len(), 4);
+
+        // Filter shows all within range
+        let recent = history.filter_by_date_range(Some(Utc::now() - Duration::days(30)), None);
+        assert_eq!(recent.len(), 3); // medium, recent1, recent2
+
+        // Cleanup removes old entries
+        history.cleanup_old_entries(30);
+        assert_eq!(history.entries.len(), 3);
+
+        // Trim to limit
+        history.trim_to_limit(2);
+        assert_eq!(history.entries.len(), 2);
+        // Newest entries kept (they're at front because add() inserts at 0)
+        assert_eq!(history.entries[0].text, "recent2");
+        assert_eq!(history.entries[1].text, "recent1");
     }
 }

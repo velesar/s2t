@@ -1,0 +1,50 @@
+//! Shared types used across multiple modules.
+//!
+//! This module contains common data structures that are used by multiple
+//! parts of the application to avoid duplication and circular dependencies.
+
+use async_channel::Receiver;
+
+/// Result from stopping conference recording.
+///
+/// Contains audio samples from both microphone and system loopback channels,
+/// along with completion receivers for synchronization.
+#[derive(Default)]
+pub struct ConferenceRecording {
+    /// Audio samples captured from the microphone
+    pub mic_samples: Vec<f32>,
+    /// Audio samples captured from system audio (loopback)
+    pub loopback_samples: Vec<f32>,
+    /// Completion signal for microphone recording
+    pub mic_completion: Option<Receiver<()>>,
+    /// Completion signal for loopback recording
+    pub loopback_completion: Option<Receiver<()>>,
+}
+
+impl ConferenceRecording {
+    /// Create a new ConferenceRecording with the given data
+    pub fn new(
+        mic_samples: Vec<f32>,
+        loopback_samples: Vec<f32>,
+        mic_completion: Option<Receiver<()>>,
+        loopback_completion: Option<Receiver<()>>,
+    ) -> Self {
+        Self {
+            mic_samples,
+            loopback_samples,
+            mic_completion,
+            loopback_completion,
+        }
+    }
+
+    /// Check if recording has any audio data
+    #[allow(dead_code)] // Utility method for future validation use
+    pub fn has_audio(&self) -> bool {
+        !self.mic_samples.is_empty() || !self.loopback_samples.is_empty()
+    }
+
+    /// Get total duration in seconds (based on longest channel at 16kHz)
+    pub fn duration_secs(&self) -> f32 {
+        self.mic_samples.len().max(self.loopback_samples.len()) as f32 / 16000.0
+    }
+}

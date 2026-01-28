@@ -3,11 +3,6 @@
 //! This module provides the `AppContext` struct which serves as the central
 //! point for dependency injection, breaking cyclic dependencies between
 //! main.rs, ui/, whisper.rs, and config.rs.
-//!
-//! Note: Many convenience methods are currently unused (hybrid migration phase).
-//! They will be used as handlers are migrated to use AppContext directly.
-
-#![allow(dead_code)]
 
 use crate::channels::UIChannels;
 use crate::config::Config;
@@ -70,8 +65,8 @@ impl AppContext {
             }
         };
 
-        let audio = AudioService::new(continuous_config)
-            .unwrap_or_else(|_| AudioService::new_default());
+        let audio =
+            AudioService::new(continuous_config).unwrap_or_else(|_| AudioService::new_default());
 
         Ok(Self {
             audio: Arc::new(audio),
@@ -83,21 +78,17 @@ impl AppContext {
         })
     }
 
-    // === Convenience accessors for migration ===
+    // === Legacy accessors for dialog compatibility ===
+    // TODO: Migrate dialogs to use AppContext directly, then remove these
 
-    /// Get a clone of the config Arc (for legacy code during migration)
+    /// Get a clone of the config Arc (for dialogs not yet migrated)
     pub fn config_arc(&self) -> Arc<Mutex<Config>> {
         Arc::clone(&self.config)
     }
 
-    /// Get a clone of the history Arc (for legacy code during migration)
+    /// Get a clone of the history Arc (for dialogs not yet migrated)
     pub fn history_arc(&self) -> Arc<Mutex<History>> {
         Arc::clone(&self.history)
-    }
-
-    /// Get a clone of the diarization Arc (for legacy code during migration)
-    pub fn diarization_arc(&self) -> Arc<Mutex<DiarizationEngine>> {
-        Arc::clone(&self.diarization)
     }
 
     // === Config convenience methods ===
@@ -105,11 +96,6 @@ impl AppContext {
     /// Get current language setting
     pub fn language(&self) -> String {
         self.config.lock().unwrap().language.clone()
-    }
-
-    /// Get current recording mode ("dictation" or "conference")
-    pub fn recording_mode(&self) -> String {
-        self.config.lock().unwrap().recording_mode.clone()
     }
 
     /// Check if continuous mode is enabled
@@ -137,10 +123,5 @@ impl AppContext {
     /// Check if a Whisper model is loaded
     pub fn is_model_loaded(&self) -> bool {
         self.transcription.lock().unwrap().is_loaded()
-    }
-
-    /// Check if diarization is available
-    pub fn is_diarization_available(&self) -> bool {
-        self.transcription.lock().unwrap().is_diarization_available()
     }
 }

@@ -54,10 +54,7 @@ pub fn save_recording(
 /// Generate filename for recording based on current timestamp
 pub fn generate_recording_filename() -> String {
     let now = Utc::now();
-    format!(
-        "conference_{}.wav",
-        now.format("%Y-%m-%d_%H-%M-%S")
-    )
+    format!("conference_{}.wav", now.format("%Y-%m-%d_%H-%M-%S"))
 }
 
 /// Get full path for a recording file

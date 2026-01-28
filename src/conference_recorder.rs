@@ -1,7 +1,7 @@
 use crate::audio::AudioRecorder;
 use crate::loopback::LoopbackRecorder;
+use crate::types::ConferenceRecording;
 use anyhow::{Context, Result};
-use async_channel::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -37,20 +37,13 @@ impl ConferenceRecorder {
     }
 
     /// Stop recording and return synchronized samples from both sources
-    pub fn stop_conference(
-        &self,
-    ) -> (
-        Vec<f32>,                    // mic_samples
-        Vec<f32>,                    // loopback_samples
-        Option<Receiver<()>>,        // mic_completion
-        Option<Receiver<()>>,        // loopback_completion
-    ) {
+    pub fn stop_conference(&self) -> ConferenceRecording {
         let (mic_samples, mic_completion) = self.mic_recorder.stop_recording();
         let (loopback_samples, loopback_completion) = self.loopback_recorder.stop_loopback();
 
         *self.start_time.lock().unwrap() = None;
 
-        (
+        ConferenceRecording::new(
             mic_samples,
             loopback_samples,
             mic_completion,

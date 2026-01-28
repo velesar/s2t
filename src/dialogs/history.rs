@@ -9,6 +9,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
+/// Context for creating history rows, reducing parameter count
+struct HistoryRowContext {
+    history: Arc<Mutex<History>>,
+    list_box: ListBox,
+    search_query: Rc<RefCell<String>>,
+}
+
 pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History>>) {
     let dialog = Window::builder()
         .title("Історія диктовок")
@@ -28,9 +35,7 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
     filter_box.set_margin_end(12);
 
     // Search entry
-    let search_entry = Entry::builder()
-        .placeholder_text("Пошук...")
-        .build();
+    let search_entry = Entry::builder().placeholder_text("Пошук...").build();
     filter_box.append(&search_entry);
 
     // Date filter row
@@ -83,7 +88,13 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
     let date_to: Rc<RefCell<Option<DateTime<Utc>>>> = Rc::new(RefCell::new(None));
 
     // Populate list
-    populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+    populate_list(
+        &list_box,
+        history.clone(),
+        &search_query,
+        &date_from,
+        &date_to,
+    );
 
     scrolled.set_child(Some(&list_box));
     main_box.append(&scrolled);
@@ -103,7 +114,13 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
         move |entry| {
             let query = entry.text().to_string();
             *search_query.borrow_mut() = query;
-            populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+            populate_list(
+                &list_box,
+                history.clone(),
+                &search_query,
+                &date_from,
+                &date_to,
+            );
         }
     });
 
@@ -122,7 +139,13 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
         move |entry| {
             let text = entry.text().to_string();
             *date_from.borrow_mut() = parse_date(&text);
-            populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+            populate_list(
+                &list_box,
+                history.clone(),
+                &search_query,
+                &date_from,
+                &date_to,
+            );
         }
     });
 
@@ -141,7 +164,13 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History
         move |entry| {
             let text = entry.text().to_string();
             *date_to.borrow_mut() = parse_date(&text);
-            populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
+            populate_list(
+                &list_box,
+                history.clone(),
+                &search_query,
+                &date_from,
+                &date_to,
+            );
         }
     });
 
@@ -195,17 +224,15 @@ fn parse_date(date_str: &str) -> Option<DateTime<Utc>> {
     NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d")
         .ok()
         .and_then(|date| {
-            date.and_hms_opt(0, 0, 0)
-                .map(|dt| {
-                    // Convert local naive datetime to UTC
-                    // Use Local.from_local_datetime which returns LocalResult
-                    match Local.from_local_datetime(&dt) {
-                        chrono::LocalResult::Single(dt) => Some(dt.with_timezone(&Utc)),
-                        chrono::LocalResult::Ambiguous(dt, _) => Some(dt.with_timezone(&Utc)),
-                        chrono::LocalResult::None => None,
-                    }
-                })
-                .flatten()
+            date.and_hms_opt(0, 0, 0).and_then(|dt| {
+                // Convert local naive datetime to UTC
+                // Use Local.from_local_datetime which returns LocalResult
+                match Local.from_local_datetime(&dt) {
+                    chrono::LocalResult::Single(dt) => Some(dt.with_timezone(&Utc)),
+                    chrono::LocalResult::Ambiguous(dt, _) => Some(dt.with_timezone(&Utc)),
+                    chrono::LocalResult::None => None,
+                }
+            })
         })
 }
 
@@ -242,6 +269,12 @@ fn populate_list(
             .collect()
     };
 
+    let row_ctx = HistoryRowContext {
+        history: history.clone(),
+        list_box: list_box.clone(),
+        search_query: search_query.clone(),
+    };
+
     for entry in entries {
         let row = create_history_row(
             &entry.id,
@@ -249,9 +282,7 @@ fn populate_list(
             &entry.formatted_timestamp(),
             &entry.formatted_duration(),
             &entry.preview(),
-            history.clone(),
-            list_box.clone(),
-            search_query.clone(),
+            &row_ctx,
         );
         list_box.append(&row);
     }
@@ -307,7 +338,7 @@ fn export_history(
                             .collect()
                     };
 
-                    if let Err(e) = history_guard.export_to_text(&entries, &path) {
+                    if let Err(e) = crate::history::export_to_text(&entries, &path) {
                         eprintln!("Помилка експорту: {}", e);
                         // TODO: Show error dialog
                     }
@@ -326,10 +357,11 @@ fn create_history_row(
     timestamp: &str,
     duration: &str,
     preview: &str,
-    history: Arc<Mutex<History>>,
-    list_box: ListBox,
-    search_query: Rc<RefCell<String>>,
+    ctx: &HistoryRowContext,
 ) -> ListBoxRow {
+    let history = ctx.history.clone();
+    let list_box = ctx.list_box.clone();
+    let search_query = ctx.search_query.clone();
     let row = ListBoxRow::new();
     row.set_activatable(false);
 

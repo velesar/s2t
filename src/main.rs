@@ -1,22 +1,24 @@
 mod audio;
 mod channels;
-mod config;
 mod conference_recorder;
+mod config;
 mod context;
 mod continuous;
+mod dialogs;
 mod diarization;
 mod history;
-mod history_dialog;
 mod hotkeys;
 mod loopback;
-mod model_dialog;
 mod models;
 mod paste;
 mod recordings;
 mod ring_buffer;
 mod services;
-mod settings_dialog;
+#[cfg(test)]
+mod test_support;
+mod traits;
 mod tray;
+mod types;
 mod ui;
 mod vad;
 mod whisper;
@@ -68,7 +70,10 @@ fn main() -> Result<()> {
     gtk4::init()?;
 
     let config = load_config().unwrap_or_else(|e| {
-        eprintln!("Помилка завантаження конфігу: {}. Використовую значення за замовчуванням.", e);
+        eprintln!(
+            "Помилка завантаження конфігу: {}. Використовую значення за замовчуванням.",
+            e
+        );
         Config::default()
     });
     let config = Arc::new(Mutex::new(config));
@@ -123,7 +128,8 @@ fn main() -> Result<()> {
             Some(PathBuf::from(path))
         } else {
             // Try default location
-            let default_path = sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
+            let default_path =
+                sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
             if default_path.exists() {
                 Some(default_path)
             } else {
@@ -141,8 +147,13 @@ fn main() -> Result<()> {
 
     // Create AppContext bundling all services
     let ctx = Arc::new(
-        AppContext::new(config.clone(), history.clone(), transcription, diarization_engine)
-            .expect("Failed to create AppContext")
+        AppContext::new(
+            config.clone(),
+            history.clone(),
+            transcription,
+            diarization_engine,
+        )
+        .expect("Failed to create AppContext"),
     );
 
     // Legacy whisper Arc for tray compatibility (tray still uses the old API)
@@ -201,15 +212,13 @@ fn main() -> Result<()> {
 
     // Listen for hotkey events
     let toggle_recording_tx_for_hotkey = ctx.channels.toggle_recording_tx().clone();
-    std::thread::spawn(move || {
-        loop {
-            if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
-                if event.state == HotKeyState::Pressed {
-                    let _ = toggle_recording_tx_for_hotkey.try_send(());
-                }
+    std::thread::spawn(move || loop {
+        if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
+            if event.state == HotKeyState::Pressed {
+                let _ = toggle_recording_tx_for_hotkey.try_send(());
             }
-            std::thread::sleep(std::time::Duration::from_millis(50));
         }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     });
 
     // Pass AppContext to UI

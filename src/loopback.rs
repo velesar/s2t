@@ -36,7 +36,7 @@ impl LoopbackRecorder {
         // For MVP, we'll use a fallback: try to use parec command-line tool
         // This is simpler and works on both PipeWire and PulseAudio
         // TODO: Implement proper PipeWire API integration
-        
+
         self.samples.lock().unwrap().clear();
         self.is_recording.store(true, Ordering::SeqCst);
 
@@ -50,7 +50,7 @@ impl LoopbackRecorder {
 
         // Try to get default monitor source using pactl
         let monitor_source = std::process::Command::new("pactl")
-            .args(&["list", "sources", "short"])
+            .args(["list", "sources", "short"])
             .output()
             .ok()
             .and_then(|output| {
@@ -74,7 +74,10 @@ impl LoopbackRecorder {
             .spawn()
             .context("Не вдалося запустити parec. Переконайтеся, що встановлено pulseaudio-utils (sudo dnf install pulseaudio-utils)")?;
 
-        let stdout = child.stdout.take().context("Не вдалося отримати stdout від parec")?;
+        let stdout = child
+            .stdout
+            .take()
+            .context("Не вдалося отримати stdout від parec")?;
         let mut reader = std::io::BufReader::new(stdout);
 
         // Spawn thread to read audio data
@@ -125,7 +128,8 @@ impl LoopbackRecorder {
 
     pub fn stop_loopback(&self) -> (Vec<f32>, Option<Receiver<()>>) {
         self.is_recording.store(false, Ordering::SeqCst);
-        self.current_amplitude.store(0.0_f32.to_bits(), Ordering::Relaxed);
+        self.current_amplitude
+            .store(0.0_f32.to_bits(), Ordering::Relaxed);
         let completion_rx = self.completion_rx.lock().unwrap().take();
         let samples = self.samples.lock().unwrap().clone();
         (samples, completion_rx)

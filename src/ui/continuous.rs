@@ -33,7 +33,9 @@ thread_local! {
 pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &ContinuousUI) {
     // Check if model is loaded
     if !ctx.is_model_loaded() {
-        ui.base.status_label.set_text("Модель не завантажено. Натисніть 'Моделі'.");
+        ui.base
+            .status_label
+            .set_text("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -112,8 +114,10 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuo
                     SEGMENTS_SENT.with(|c| c.set(c.get() + 1));
 
                     // Calculate segment duration from timing
-                    let duration_secs =
-                        segment.end_time.duration_since(segment.start_time).as_secs_f32();
+                    let duration_secs = segment
+                        .end_time
+                        .duration_since(segment.start_time)
+                        .as_secs_f32();
                     let duration_text = format!("{:.1}s", duration_secs);
 
                     // Create indicator label for this segment (starts as processing)
@@ -219,7 +223,9 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Continuou
         PROCESSING_CANCELLED.with(|c| c.set(true));
     });
 
-    ui.base.status_label.set_text("Завершення обробки сегментів...");
+    ui.base
+        .status_label
+        .set_text("Завершення обробки сегментів...");
     ui.base.timer_label.set_visible(false);
     ui.hide_recording_ui();
     // Keep segment_row visible to show progress during processing

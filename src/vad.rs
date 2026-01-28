@@ -1,14 +1,20 @@
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
 use webrtc_vad::{Vad, VadMode};
 
 const SAMPLE_RATE_HZ: u32 = 16000;
 const FRAME_SIZE_MS: u32 = 30; // 30ms frames for VAD
 const FRAME_SIZE_SAMPLES: usize = (SAMPLE_RATE_HZ as usize * FRAME_SIZE_MS as usize) / 1000;
 
-/// Voice Activity Detection for segmenting audio
+/// Voice Activity Detection for segmenting audio.
+///
+/// # Thread Safety
+///
+/// This type is intentionally `!Send` and `!Sync` because the underlying
+/// `webrtc_vad::Vad` type is not thread-safe. Create a new instance for
+/// each thread that needs VAD functionality.
 pub struct VoiceActivityDetector {
-    vad: Arc<Mutex<Vad>>,
+    vad: RefCell<Vad>,
     silence_threshold_ms: u32,
 }
 
@@ -19,14 +25,17 @@ impl VoiceActivityDetector {
     }
 
     /// Create a new VAD instance with custom silence threshold
-    pub fn with_thresholds(silence_threshold_ms: u32, _min_speech_duration_ms: u32) -> Result<Self> {
+    pub fn with_thresholds(
+        silence_threshold_ms: u32,
+        _min_speech_duration_ms: u32,
+    ) -> Result<Self> {
         use webrtc_vad::SampleRate;
         // SampleRate enum variants: Rate8kHz, Rate16kHz, Rate32kHz, Rate48kHz
         // VadMode::Aggressive is less sensitive to background noise than Quality
         let vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
 
         Ok(Self {
-            vad: Arc::new(Mutex::new(vad)),
+            vad: RefCell::new(vad),
             silence_threshold_ms,
         })
     }
@@ -44,9 +53,11 @@ impl VoiceActivityDetector {
             .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
             .collect();
 
-        let mut vad = self.vad.lock().unwrap();
+        let mut vad = self.vad.borrow_mut();
         let frame = &i16_samples[..FRAME_SIZE_SAMPLES.min(i16_samples.len())];
-        let result = vad.is_voice_segment(frame).map_err(|_| anyhow::anyhow!("Invalid frame length"))?;
+        let result = vad
+            .is_voice_segment(frame)
+            .map_err(|_| anyhow::anyhow!("Invalid frame length"))?;
 
         Ok(result)
     }

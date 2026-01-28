@@ -12,8 +12,7 @@ pub struct ModelInfo {
     pub description: String,
 }
 
-const HUGGINGFACE_BASE_URL: &str =
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";
+const HUGGINGFACE_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";
 
 pub fn get_available_models() -> Vec<ModelInfo> {
     vec![
@@ -160,8 +159,7 @@ where
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.context("Помилка при завантаженні")?;
-        std::io::Write::write_all(&mut file, &chunk)
-            .context("Не вдалося записати дані")?;
+        std::io::Write::write_all(&mut file, &chunk).context("Не вдалося записати дані")?;
 
         downloaded += chunk.len() as u64;
         progress_callback(downloaded, total_size);
@@ -200,7 +198,8 @@ pub fn get_sortformer_model_info() -> ModelInfo {
         filename: "diar_streaming_sortformer_4spk-v2.1.onnx".to_string(),
         display_name: "Sortformer v2.1 (4 speakers)".to_string(),
         size_bytes: 50_000_000, // ~50MB
-        description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)".to_string(),
+        description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)"
+            .to_string(),
     }
 }
 
@@ -226,7 +225,8 @@ where
     F: Fn(u64, u64) + Send + 'static,
 {
     // Download from HuggingFace
-    let url = "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1/resolve/main/model.onnx";
+    let url =
+        "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1/resolve/main/model.onnx";
     let dir = crate::config::sortformer_models_dir();
     let filename = "diar_streaming_sortformer_4spk-v2.1.onnx";
 
@@ -260,8 +260,7 @@ where
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.context("Помилка при завантаженні")?;
-        std::io::Write::write_all(&mut file, &chunk)
-            .context("Не вдалося записати дані")?;
+        std::io::Write::write_all(&mut file, &chunk).context("Не вдалося записати дані")?;
 
         downloaded += chunk.len() as u64;
         progress_callback(downloaded, total_size);
@@ -327,11 +326,23 @@ mod tests {
     #[test]
     fn test_get_available_models_has_quantized_and_full() {
         let models = get_available_models();
-        let quantized_count = models.iter().filter(|m| m.filename.contains("q5_") || m.filename.contains("q8_")).count();
-        let full_count = models.iter().filter(|m| !m.filename.contains("q5_") && !m.filename.contains("q8_")).count();
+        let quantized_count = models
+            .iter()
+            .filter(|m| m.filename.contains("q5_") || m.filename.contains("q8_"))
+            .count();
+        let full_count = models
+            .iter()
+            .filter(|m| !m.filename.contains("q5_") && !m.filename.contains("q8_"))
+            .count();
 
-        assert!(quantized_count >= 5, "Should have at least 5 quantized models");
-        assert!(full_count >= 5, "Should have at least 5 full precision models");
+        assert!(
+            quantized_count >= 5,
+            "Should have at least 5 quantized models"
+        );
+        assert!(
+            full_count >= 5,
+            "Should have at least 5 full precision models"
+        );
     }
 
     #[test]

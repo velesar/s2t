@@ -125,9 +125,10 @@ impl AudioRecorder {
                                 let input = vec![padded];
                                 if let Ok(output) = resampler.process(&input, None) {
                                     // Only take proportional output for partial input
-                                    let output_len =
-                                        (chunk.len() as f64 * resampler.output_frames_next() as f64
-                                            / input_frames as f64) as usize;
+                                    let output_len = (chunk.len() as f64
+                                        * resampler.output_frames_next() as f64
+                                        / input_frames as f64)
+                                        as usize;
                                     samples
                                         .lock()
                                         .unwrap()
@@ -156,17 +157,39 @@ impl AudioRecorder {
 
     pub fn stop_recording(&self) -> (Vec<f32>, Option<Receiver<()>>) {
         self.is_recording.store(false, Ordering::SeqCst);
-        self.current_amplitude.store(0.0_f32.to_bits(), Ordering::Relaxed);
+        self.current_amplitude
+            .store(0.0_f32.to_bits(), Ordering::Relaxed);
         let completion_rx = self.completion_rx.lock().unwrap().take();
         let samples = self.samples.lock().unwrap().clone();
         (samples, completion_rx)
     }
-
 }
 
 impl Default for AudioRecorder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// === Trait Implementation ===
+
+use crate::traits::AudioRecording;
+
+impl AudioRecording for AudioRecorder {
+    fn start(&self) -> Result<()> {
+        self.start_recording()
+    }
+
+    fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
+        self.stop_recording()
+    }
+
+    fn amplitude(&self) -> f32 {
+        self.get_amplitude()
+    }
+
+    fn is_recording(&self) -> bool {
+        self.is_recording.load(Ordering::SeqCst)
     }
 }
 
@@ -193,4 +216,54 @@ mod tests {
         assert_eq!(WHISPER_SAMPLE_RATE, 16000);
     }
 
+    #[test]
+    fn test_audio_recorder_default() {
+        let recorder = AudioRecorder::default();
+        assert!(!recorder.is_recording.load(Ordering::SeqCst));
+        assert!(recorder.samples.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_audio_recorder_amplitude_initially_zero() {
+        let recorder = AudioRecorder::new();
+        assert_eq!(recorder.get_amplitude(), 0.0);
+    }
+
+    #[test]
+    fn test_audio_recorder_not_recording_initially() {
+        let recorder = AudioRecorder::new();
+        assert!(!recorder.is_recording.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_audio_recording_trait_amplitude() {
+        use crate::traits::AudioRecording;
+        let recorder = AudioRecorder::new();
+        // Trait method should match direct method
+        assert_eq!(
+            AudioRecording::amplitude(&recorder),
+            recorder.get_amplitude()
+        );
+    }
+
+    #[test]
+    fn test_audio_recording_trait_is_recording() {
+        use crate::traits::AudioRecording;
+        let recorder = AudioRecorder::new();
+        assert!(!AudioRecording::is_recording(&recorder));
+    }
+
+    #[test]
+    fn test_stop_resets_amplitude() {
+        let recorder = AudioRecorder::new();
+        // Manually set amplitude to non-zero
+        recorder
+            .current_amplitude
+            .store(0.5_f32.to_bits(), Ordering::Relaxed);
+        assert!(recorder.get_amplitude() > 0.0);
+
+        // Stop should reset amplitude
+        recorder.stop_recording();
+        assert_eq!(recorder.get_amplitude(), 0.0);
+    }
 }
