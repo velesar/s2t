@@ -1,4 +1,5 @@
 mod audio;
+mod channels;
 mod config;
 mod conference_recorder;
 mod continuous;
@@ -12,6 +13,7 @@ mod models;
 mod paste;
 mod recordings;
 mod ring_buffer;
+mod services;
 mod settings_dialog;
 mod tray;
 mod ui;
@@ -19,6 +21,7 @@ mod vad;
 mod whisper;
 
 use anyhow::Result;
+use channels::UIChannels;
 use config::{load_config, models_dir, sortformer_models_dir, Config};
 use diarization::DiarizationEngine;
 use gtk4::{glib, prelude::*, Application};
@@ -139,11 +142,7 @@ fn main() -> Result<()> {
 
     let app = Application::builder().application_id(APP_ID).build();
 
-    let (open_models_tx, open_models_rx) = async_channel::bounded::<()>(1);
-    let (open_history_tx, open_history_rx) = async_channel::bounded::<()>(1);
-    let (open_settings_tx, open_settings_rx) = async_channel::bounded::<()>(1);
-    let (toggle_recording_tx, toggle_recording_rx) = async_channel::bounded::<()>(1);
-    let (reload_hotkeys_tx, reload_hotkeys_rx) = async_channel::bounded::<()>(1);
+    let ui_channels = UIChannels::new();
 
     // Initialize hotkey manager
     let hotkey_manager = Arc::new(Mutex::new(HotkeyManager::new().unwrap_or_else(|e| {
@@ -163,6 +162,7 @@ fn main() -> Result<()> {
     // Listen for hotkey reload signals (when settings change)
     let hotkey_manager_for_reload = hotkey_manager.clone();
     let config_for_reload = config.clone();
+    let reload_hotkeys_rx = ui_channels.reload_hotkeys_rx().clone();
     std::thread::spawn(move || {
         while reload_hotkeys_rx.recv_blocking().is_ok() {
             let cfg = config_for_reload.lock().unwrap();
@@ -174,7 +174,7 @@ fn main() -> Result<()> {
     });
 
     // Listen for hotkey events
-    let toggle_recording_tx_for_hotkey = toggle_recording_tx.clone();
+    let toggle_recording_tx_for_hotkey = ui_channels.toggle_recording_tx().clone();
     std::thread::spawn(move || {
         loop {
             if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
@@ -190,7 +190,11 @@ fn main() -> Result<()> {
     let config_for_app = config.clone();
     let history_for_app = history.clone();
     let diarization_engine_for_app = diarization_engine.clone();
-    let reload_hotkeys_tx_for_app = reload_hotkeys_tx.clone();
+    let open_models_rx = ui_channels.open_models_rx().clone();
+    let open_history_rx = ui_channels.open_history_rx().clone();
+    let open_settings_rx = ui_channels.open_settings_rx().clone();
+    let toggle_recording_rx = ui_channels.toggle_recording_rx().clone();
+    let reload_hotkeys_tx_for_app = ui_channels.reload_hotkeys_tx().clone();
     app.connect_activate(move |app| {
         ui::build_ui(
             app,
@@ -226,7 +230,7 @@ fn main() -> Result<()> {
                         } else {
                             app.activate();
                         }
-                        let _ = open_models_tx.try_send(());
+                        let _ = ui_channels.open_models_tx().try_send(());
                     }
                 }
                 TrayAction::OpenHistory => {
@@ -236,7 +240,7 @@ fn main() -> Result<()> {
                         } else {
                             app.activate();
                         }
-                        let _ = open_history_tx.try_send(());
+                        let _ = ui_channels.open_history_tx().try_send(());
                     }
                 }
                 TrayAction::OpenSettings => {
@@ -246,7 +250,7 @@ fn main() -> Result<()> {
                         } else {
                             app.activate();
                         }
-                        let _ = open_settings_tx.try_send(());
+                        let _ = ui_channels.open_settings_tx().try_send(());
                     }
                 }
                 TrayAction::Quit => {
