@@ -21,6 +21,7 @@ pub struct DiarizationSegment {
 pub struct DiarizationEngine {
     #[cfg(feature = "sortformer")]
     sortformer: Option<Sortformer>,
+    #[cfg_attr(not(feature = "sortformer"), allow(dead_code))]
     model_path: Option<PathBuf>,
 }
 
@@ -100,11 +101,6 @@ impl DiarizationEngine {
         {
             anyhow::bail!("Sortformer не доступний. Зберіть з feature 'sortformer'.")
         }
-    }
-
-    /// Get model path
-    pub fn model_path(&self) -> Option<&PathBuf> {
-        self.model_path.as_ref()
     }
 }
 

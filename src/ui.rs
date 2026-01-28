@@ -166,8 +166,12 @@ mod ui_continuous {
                         // Track segment as sent for transcription
                         SEGMENTS_SENT.with(|c| c.set(c.get() + 1));
 
+                        // Calculate segment duration from timing (uses start_time and end_time fields)
+                        let duration_secs = segment.end_time.duration_since(segment.start_time).as_secs_f32();
+                        let duration_text = format!("{:.1}s", duration_secs);
+
                         // Create indicator label for this segment (starts as processing)
-                        let indicator = Label::new(Some(SEGMENT_PROCESSING));
+                        let indicator = Label::new(Some(&format!("{} {}", SEGMENT_PROCESSING, duration_text)));
                         indicator.add_css_class("segment-processing");
                         segment_indicators_box_clone.append(&indicator);
                         segment_labels_for_receiver.borrow_mut().insert(segment_id, indicator);
@@ -208,9 +212,14 @@ mod ui_continuous {
                         // Track segment as completed for synchronization
                         SEGMENTS_COMPLETED.with(|c| c.set(c.get() + 1));
 
-                        // Mark segment indicator as completed
+                        // Mark segment indicator as completed (preserve duration)
                         if let Some(label) = segment_labels_for_results.borrow().get(&segment_id) {
-                            label.set_label(SEGMENT_COMPLETED);
+                            let current_text = label.text();
+                            let duration = current_text
+                                .split_whitespace()
+                                .last()
+                                .unwrap_or("");
+                            label.set_label(&format!("{} {}", SEGMENT_COMPLETED, duration));
                             label.remove_css_class("segment-processing");
                             label.add_css_class("segment-completed");
                         }

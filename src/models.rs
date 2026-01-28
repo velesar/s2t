@@ -212,6 +212,15 @@ pub fn is_sortformer_model_downloaded() -> bool {
     get_sortformer_model_path().exists()
 }
 
+pub fn delete_sortformer_model() -> Result<()> {
+    let path = get_sortformer_model_path();
+    if path.exists() {
+        fs::remove_file(&path)
+            .with_context(|| format!("Не вдалося видалити модель: {}", path.display()))?;
+    }
+    Ok(())
+}
+
 pub async fn download_sortformer_model<F>(progress_callback: F) -> Result<()>
 where
     F: Fn(u64, u64) + Send + 'static,

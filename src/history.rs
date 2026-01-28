@@ -88,15 +88,6 @@ impl History {
         self.entries.retain(|e| e.id != id);
     }
 
-    /// Search entries by text (case-insensitive)
-    pub fn search(&self, query: &str) -> Vec<&HistoryEntry> {
-        let query_lower = query.to_lowercase();
-        self.entries
-            .iter()
-            .filter(|e| e.text.to_lowercase().contains(&query_lower))
-            .collect()
-    }
-
     /// Trim history to max_entries, keeping newest
     pub fn trim_to_limit(&mut self, max_entries: usize) {
         if self.entries.len() > max_entries {
@@ -262,23 +253,6 @@ mod tests {
 
         assert_eq!(history.entries[0].text, "Second");
         assert_eq!(history.entries[1].text, "First");
-    }
-
-    #[test]
-    fn test_history_search() {
-        let mut history = History::default();
-        history.add(HistoryEntry::new("Hello world".to_string(), 5.0, "uk".to_string()));
-        history.add(HistoryEntry::new("Goodbye world".to_string(), 5.0, "uk".to_string()));
-        history.add(HistoryEntry::new("Something else".to_string(), 5.0, "uk".to_string()));
-
-        let results = history.search("world");
-        assert_eq!(results.len(), 2);
-
-        let results = history.search("WORLD"); // case-insensitive
-        assert_eq!(results.len(), 2);
-
-        let results = history.search("hello");
-        assert_eq!(results.len(), 1);
     }
 
     #[test]
