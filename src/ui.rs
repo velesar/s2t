@@ -32,6 +32,7 @@ mod ui_continuous {
     thread_local! {
         static SEGMENTS_SENT: Cell<usize> = const { Cell::new(0) };
         static SEGMENTS_COMPLETED: Cell<usize> = const { Cell::new(0) };
+        static PROCESSING_CANCELLED: Cell<bool> = const { Cell::new(false) };
     }
 
     /// Start continuous recording with automatic segmentation
@@ -262,10 +263,20 @@ mod ui_continuous {
         app_state.set(AppState::Processing);
         recording_start_time.set(None);
 
-        button.set_label("Обробка...");
+        // Reset cancel flag
+        PROCESSING_CANCELLED.with(|c| c.set(false));
+
+        // Show cancel button instead of disabling
+        button.set_label("Скасувати очікування");
         button.remove_css_class("destructive-action");
-        button.remove_css_class("suggested-action");
-        button.set_sensitive(false);
+        button.add_css_class("warning");
+        button.set_sensitive(true);
+
+        // Connect cancel handler
+        let cancel_handler_id = button.connect_clicked(|_| {
+            PROCESSING_CANCELLED.with(|c| c.set(true));
+        });
+
         status_label.set_text("Завершення обробки сегментів...");
         timer_label.set_visible(false);
         level_bar.set_visible(false);
@@ -293,16 +304,17 @@ mod ui_continuous {
         };
 
         glib::spawn_future_local(async move {
+            // Move cancel_handler_id into async block
+            let cancel_handler_id = cancel_handler_id;
             // Wait for recording to finish
             if let Some(rx) = completion_rx {
                 let _ = rx.recv().await;
             }
 
             // Wait for all transcriptions to complete
-            // Poll until segments_completed >= segments_sent (with timeout)
-            let max_wait = std::time::Duration::from_secs(30);
-            let start_wait = std::time::Instant::now();
+            // Poll until segments_completed >= segments_sent (no timeout - user can cancel)
             let poll_interval = std::time::Duration::from_millis(100);
+            let mut was_cancelled = false;
 
             loop {
                 let sent = SEGMENTS_SENT.with(|c| c.get());
@@ -313,8 +325,10 @@ mod ui_continuous {
                     break;
                 }
 
-                if start_wait.elapsed() > max_wait {
-                    eprintln!("Timeout waiting for segments: {}/{}", completed, sent);
+                // Check if user cancelled
+                if PROCESSING_CANCELLED.with(|c| c.get()) {
+                    was_cancelled = true;
+                    eprintln!("Processing cancelled by user: {}/{}", completed, sent);
                     break;
                 }
 
@@ -323,6 +337,10 @@ mod ui_continuous {
 
                 glib::timeout_future(poll_interval).await;
             }
+
+            // Disconnect cancel handler
+            button.disconnect(cancel_handler_id);
+            button.remove_css_class("warning");
 
             // NOW get the final accumulated text from result_text_view
             // (after all segments have been processed)
@@ -336,11 +354,17 @@ mod ui_continuous {
             // before the channel is closed. The result processor handles it.
 
             if !final_text.is_empty() {
-                status_label.set_text("Готово!");
+                if was_cancelled {
+                    let sent = SEGMENTS_SENT.with(|c| c.get());
+                    let completed = SEGMENTS_COMPLETED.with(|c| c.get());
+                    status_label.set_text(&format!("Скасовано (оброблено {}/{})", completed, sent));
+                } else {
+                    status_label.set_text("Готово!");
+                }
                 // Don't overwrite buffer - it already has the correct content
                 // from the result processor
 
-                // Save to history
+                // Save to history (even if cancelled - save what we have)
                 let entry = crate::history::HistoryEntry::new(
                     final_text.clone(),
                     duration_secs,
@@ -352,7 +376,11 @@ mod ui_continuous {
                     eprintln!("Помилка збереження історії: {}", e);
                 }
             } else {
-                status_label.set_text("Не вдалося розпізнати мову");
+                if was_cancelled {
+                    status_label.set_text("Скасовано (нічого не оброблено)");
+                } else {
+                    status_label.set_text("Не вдалося розпізнати мову");
+                }
             }
 
             // Transition back to Idle state
