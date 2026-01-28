@@ -526,10 +526,11 @@ pub fn build_ui(
 
     let segment_scroll = gtk4::ScrolledWindow::new();
     segment_scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Never);
-    segment_scroll.set_max_content_width(250);
+    segment_scroll.set_hexpand(true);  // Expand to fill available space
     segment_scroll.set_child(Some(&segment_indicators_box));
 
     segment_row.append(&segment_scroll);
+    segment_row.set_hexpand(true);  // Row also expands
     segment_row.set_visible(false);
 
     // Load CSS for segment indicator styling
