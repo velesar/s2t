@@ -1,3 +1,10 @@
+//! Transcription service layer.
+//!
+//! Note: Most methods are currently unused (hybrid migration phase).
+//! They will be used as handlers are migrated to use TranscriptionService directly.
+
+#![allow(dead_code)]
+
 use crate::diarization::DiarizationEngine;
 use crate::whisper::WhisperSTT;
 use anyhow::{Context, Result};

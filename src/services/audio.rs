@@ -1,3 +1,9 @@
+//! Audio recording service layer.
+//!
+//! This module provides a unified interface for all recording modes.
+//! The methods are currently unused as handlers haven't been migrated yet
+//! (hybrid migration phase).
+
 use crate::audio::AudioRecorder;
 use crate::conference_recorder::ConferenceRecorder;
 use crate::continuous::{AudioSegment, ContinuousRecorder};
@@ -6,6 +12,7 @@ use async_channel::{Receiver, Sender};
 use std::sync::Arc;
 
 /// Configuration for continuous recording mode
+#[allow(dead_code)]
 pub struct ContinuousConfig {
     pub use_vad: bool,
     pub segment_interval_secs: u32,
@@ -25,6 +32,7 @@ impl Default for ContinuousConfig {
 }
 
 /// Result from stopping conference recording
+#[allow(dead_code)]
 pub struct ConferenceRecording {
     pub mic_samples: Vec<f32>,
     pub loopback_samples: Vec<f32>,
@@ -33,11 +41,14 @@ pub struct ConferenceRecording {
 }
 
 /// Unified audio service wrapping all recording modes
+#[allow(dead_code)]
 pub struct AudioService {
     mic: Arc<AudioRecorder>,
     conference: Arc<ConferenceRecorder>,
     continuous: Arc<ContinuousRecorder>,
 }
+
+#[allow(dead_code)]
 
 impl AudioService {
     /// Create a new AudioService with the given continuous recording configuration

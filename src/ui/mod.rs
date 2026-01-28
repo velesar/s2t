@@ -8,6 +8,7 @@ use state::AppState;
 use crate::audio::AudioRecorder;
 use crate::config::Config;
 use crate::conference_recorder::ConferenceRecorder;
+use crate::context::AppContext;
 use crate::continuous::ContinuousRecorder;
 use crate::history::History;
 use crate::history_dialog::show_history_dialog;
@@ -90,36 +91,46 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-pub fn build_ui(
-    app: &Application,
-    whisper: Arc<Mutex<Option<WhisperSTT>>>,
-    config: Arc<Mutex<Config>>,
-    history: Arc<Mutex<History>>,
-    diarization_engine: Arc<Mutex<crate::diarization::DiarizationEngine>>,
-    open_models_rx: async_channel::Receiver<()>,
-    open_history_rx: async_channel::Receiver<()>,
-    open_settings_rx: async_channel::Receiver<()>,
-    toggle_recording_rx: async_channel::Receiver<()>,
-    reload_hotkeys_tx: async_channel::Sender<()>,
-) {
-    let recorder = Arc::new(AudioRecorder::new());
-    let conference_recorder = Arc::new(ConferenceRecorder::new());
-    
-    // Create continuous recorder with config values
-    let continuous_recorder = {
-        let cfg = config.lock().unwrap();
-        Arc::new(
-            ContinuousRecorder::new(
-                cfg.use_vad,
-                cfg.segment_interval_secs,
-                cfg.vad_silence_threshold_ms,
-                cfg.vad_min_speech_ms,
-            ).unwrap_or_else(|_| {
-                // Fallback if VAD fails - will use fixed intervals only
-                ContinuousRecorder::new(false, 10, 1000, 500).unwrap()
-            })
-        )
+pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
+    // Extract legacy references from AppContext for handlers not yet migrated
+    // This allows gradual migration of individual handlers to use ctx directly
+    let config = ctx.config_arc();
+    let history = ctx.history_arc();
+    let diarization_engine = ctx.diarization_arc();
+
+    // Get channels from AppContext
+    let open_models_rx = ctx.channels.open_models_rx().clone();
+    let open_history_rx = ctx.channels.open_history_rx().clone();
+    let open_settings_rx = ctx.channels.open_settings_rx().clone();
+    let toggle_recording_rx = ctx.channels.toggle_recording_rx().clone();
+    let reload_hotkeys_tx = ctx.channels.reload_hotkeys_tx().clone();
+
+    // Create legacy whisper Arc from TranscriptionService
+    // TODO: Migrate handlers to use ctx.transcription directly
+    let whisper: Arc<Mutex<Option<WhisperSTT>>> = {
+        let ts = ctx.transcription.lock().unwrap();
+        if ts.is_loaded() {
+            // Re-create whisper for legacy handlers
+            let cfg = config.lock().unwrap();
+            let model_path = crate::models::get_model_path(&cfg.default_model);
+            drop(cfg);
+            if model_path.exists() {
+                match WhisperSTT::new(model_path.to_str().unwrap_or_default()) {
+                    Ok(w) => Arc::new(Mutex::new(Some(w))),
+                    Err(_) => Arc::new(Mutex::new(None)),
+                }
+            } else {
+                Arc::new(Mutex::new(None))
+            }
+        } else {
+            Arc::new(Mutex::new(None))
+        }
     };
+
+    // Use AudioService's recorders (via legacy accessors for now)
+    let recorder = Arc::clone(ctx.audio.mic_recorder());
+    let conference_recorder = Arc::clone(ctx.audio.conference_recorder());
+    let continuous_recorder = Arc::clone(ctx.audio.continuous_recorder());
 
     let window = ApplicationWindow::builder()
         .application(app)

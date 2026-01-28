@@ -1,3 +1,10 @@
+//! UI state management helpers.
+//!
+//! Note: Context structs are currently unused (hybrid migration phase).
+//! They will be used as handlers are refactored to use context structs.
+
+#![allow(dead_code)]
+
 use gtk4::prelude::*;
 use gtk4::{Button, Label, LevelBar, Spinner, TextView, Box as GtkBox};
 use std::cell::Cell;

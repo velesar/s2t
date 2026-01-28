@@ -2,6 +2,7 @@ mod audio;
 mod channels;
 mod config;
 mod conference_recorder;
+mod context;
 mod continuous;
 mod diarization;
 mod history;
@@ -21,19 +22,19 @@ mod vad;
 mod whisper;
 
 use anyhow::Result;
-use channels::UIChannels;
 use config::{load_config, models_dir, sortformer_models_dir, Config};
+use context::AppContext;
 use diarization::DiarizationEngine;
+use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use gtk4::{glib, prelude::*, Application};
 use history::{load_history, save_history, History};
+use hotkeys::HotkeyManager;
 use models::get_model_path;
+use services::TranscriptionService;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-
-use hotkeys::HotkeyManager;
 use tray::{DictationTray, TrayAction};
 use whisper::WhisperSTT;
-use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 
 const APP_ID: &str = "ua.voice.dictation";
 
@@ -93,29 +94,30 @@ fn main() -> Result<()> {
         Arc::new(Mutex::new(h))
     };
 
-    let whisper: Arc<Mutex<Option<WhisperSTT>>> = {
+    // Initialize transcription service with Whisper model
+    let transcription = {
         let cfg = config.lock().unwrap();
         if let Some(model_path) = find_model_path(&cfg) {
             println!("Завантаження моделі: {}", model_path);
-            match WhisperSTT::new(&model_path) {
-                Ok(w) => {
+            match TranscriptionService::with_model(&model_path) {
+                Ok(service) => {
                     println!("Модель завантажено!");
-                    Arc::new(Mutex::new(Some(w)))
+                    service
                 }
                 Err(e) => {
                     eprintln!("Не вдалося завантажити модель: {}", e);
                     eprintln!("Запустіть додаток і завантажте модель через меню 'Моделі'");
-                    Arc::new(Mutex::new(None))
+                    TranscriptionService::new()
                 }
             }
         } else {
             println!("Модель не знайдено. Завантажте через меню 'Моделі'.");
-            Arc::new(Mutex::new(None))
+            TranscriptionService::new()
         }
     };
 
     // Initialize diarization engine
-    let diarization_engine: Arc<Mutex<DiarizationEngine>> = {
+    let diarization_engine = {
         let cfg = config.lock().unwrap();
         let model_path = if let Some(ref path) = cfg.sortformer_model_path {
             Some(PathBuf::from(path))
@@ -134,15 +136,39 @@ fn main() -> Result<()> {
             eprintln!("Не вдалося завантажити модель Sortformer: {}", e);
             eprintln!("Diarization буде використовувати channel-based метод.");
         }
-        Arc::new(Mutex::new(engine))
+        engine
+    };
+
+    // Create AppContext bundling all services
+    let ctx = Arc::new(
+        AppContext::new(config.clone(), history.clone(), transcription, diarization_engine)
+            .expect("Failed to create AppContext")
+    );
+
+    // Legacy whisper Arc for tray compatibility (tray still uses the old API)
+    // TODO: Migrate tray to use AppContext directly
+    let whisper_for_tray: Arc<Mutex<Option<WhisperSTT>>> = {
+        let ts = ctx.transcription.lock().unwrap();
+        if ts.is_loaded() {
+            // Re-load model for tray (tray needs its own mutable reference)
+            let cfg = config.lock().unwrap();
+            if let Some(model_path) = find_model_path(&cfg) {
+                match WhisperSTT::new(&model_path) {
+                    Ok(w) => Arc::new(Mutex::new(Some(w))),
+                    Err(_) => Arc::new(Mutex::new(None)),
+                }
+            } else {
+                Arc::new(Mutex::new(None))
+            }
+        } else {
+            Arc::new(Mutex::new(None))
+        }
     };
 
     let (tray_tx, tray_rx) = async_channel::unbounded();
-    let tray_handle = DictationTray::spawn_service(tray_tx, config.clone(), whisper.clone());
+    let tray_handle = DictationTray::spawn_service(tray_tx, config.clone(), whisper_for_tray);
 
     let app = Application::builder().application_id(APP_ID).build();
-
-    let ui_channels = UIChannels::new();
 
     // Initialize hotkey manager
     let hotkey_manager = Arc::new(Mutex::new(HotkeyManager::new().unwrap_or_else(|e| {
@@ -162,7 +188,7 @@ fn main() -> Result<()> {
     // Listen for hotkey reload signals (when settings change)
     let hotkey_manager_for_reload = hotkey_manager.clone();
     let config_for_reload = config.clone();
-    let reload_hotkeys_rx = ui_channels.reload_hotkeys_rx().clone();
+    let reload_hotkeys_rx = ctx.channels.reload_hotkeys_rx().clone();
     std::thread::spawn(move || {
         while reload_hotkeys_rx.recv_blocking().is_ok() {
             let cfg = config_for_reload.lock().unwrap();
@@ -174,7 +200,7 @@ fn main() -> Result<()> {
     });
 
     // Listen for hotkey events
-    let toggle_recording_tx_for_hotkey = ui_channels.toggle_recording_tx().clone();
+    let toggle_recording_tx_for_hotkey = ctx.channels.toggle_recording_tx().clone();
     std::thread::spawn(move || {
         loop {
             if let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
@@ -186,30 +212,14 @@ fn main() -> Result<()> {
         }
     });
 
-    let whisper_for_app = whisper.clone();
-    let config_for_app = config.clone();
-    let history_for_app = history.clone();
-    let diarization_engine_for_app = diarization_engine.clone();
-    let open_models_rx = ui_channels.open_models_rx().clone();
-    let open_history_rx = ui_channels.open_history_rx().clone();
-    let open_settings_rx = ui_channels.open_settings_rx().clone();
-    let toggle_recording_rx = ui_channels.toggle_recording_rx().clone();
-    let reload_hotkeys_tx_for_app = ui_channels.reload_hotkeys_tx().clone();
+    // Pass AppContext to UI
+    let ctx_for_app = ctx.clone();
     app.connect_activate(move |app| {
-        ui::build_ui(
-            app,
-            whisper_for_app.clone(),
-            config_for_app.clone(),
-            history_for_app.clone(),
-            diarization_engine_for_app.clone(),
-            open_models_rx.clone(),
-            open_history_rx.clone(),
-            open_settings_rx.clone(),
-            toggle_recording_rx.clone(),
-            reload_hotkeys_tx_for_app.clone(),
-        );
+        ui::build_ui(app, ctx_for_app.clone());
     });
 
+    // Use channels from ctx for tray action handling
+    let channels_for_tray = ctx.channels.clone();
     let app_weak = app.downgrade();
     glib::spawn_future_local(async move {
         while let Ok(action) = tray_rx.recv().await {
@@ -230,7 +240,7 @@ fn main() -> Result<()> {
                         } else {
                             app.activate();
                         }
-                        let _ = ui_channels.open_models_tx().try_send(());
+                        let _ = channels_for_tray.open_models_tx().try_send(());
                     }
                 }
                 TrayAction::OpenHistory => {
@@ -240,7 +250,7 @@ fn main() -> Result<()> {
                         } else {
                             app.activate();
                         }
-                        let _ = ui_channels.open_history_tx().try_send(());
+                        let _ = channels_for_tray.open_history_tx().try_send(());
                     }
                 }
                 TrayAction::OpenSettings => {
@@ -250,7 +260,7 @@ fn main() -> Result<()> {
                         } else {
                             app.activate();
                         }
-                        let _ = ui_channels.open_settings_tx().try_send(());
+                        let _ = channels_for_tray.open_settings_tx().try_send(());
                     }
                 }
                 TrayAction::Quit => {
