@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "/home/velesar/projects/alpha-zero-review-/target/release/codegraph-server",
+      "args": []
+    },
+    "mental-model": {
+      "command": "/home/velesar/projects/alpha-zero-review-/target/release/mental-model-server",
+      "args": [
+        "--model-path",
+        "/home/velesar/projects/s2t/.audit/mental_model.yaml"
+      ]
+    }
+  }
+}

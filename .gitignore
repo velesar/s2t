@@ -25,3 +25,6 @@ models/
 *~
 *.bak
 *.swp
+
+# AI Code Audit Agent artifacts
+.audit/
