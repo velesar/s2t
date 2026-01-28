@@ -1,138 +1,81 @@
-use crate::conference_recorder::ConferenceRecorder;
-use crate::config::Config;
-use crate::history::{save_history, History, HistoryEntry};
-use crate::recordings::{ensure_recordings_dir, generate_recording_filename, recording_path, save_recording};
-use crate::whisper::WhisperSTT;
-use gtk4::prelude::*;
-use gtk4::{glib, Button, Label, LevelBar, Spinner, TextView};
-use std::cell::Cell;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+//! Conference mode recording handler.
+//!
+//! This module handles start/stop recording for conference mode
+//! with dual-channel audio (microphone + system loopback) and diarization.
 
-use super::state::AppState;
+use crate::context::AppContext;
+use crate::history::{save_history, HistoryEntry};
+use crate::recordings::{ensure_recordings_dir, generate_recording_filename, recording_path, save_recording};
+use gtk4::glib;
+use std::sync::Arc;
+
+use super::state::{ConferenceUI, RecordingContext};
+
+const SAMPLE_RATE: usize = 16000;
 
 /// Start conference recording (mic + loopback)
-pub fn handle_start(
-    button: &Button,
-    status_label: &Label,
-    result_text_view: &TextView,
-    timer_label: &Label,
-    mic_level_bar: &LevelBar,
-    loopback_level_bar: &LevelBar,
-    conference_recorder: &Arc<ConferenceRecorder>,
-    whisper: &Arc<Mutex<Option<WhisperSTT>>>,
-    app_state: &Rc<Cell<AppState>>,
-    recording_start_time: &Rc<Cell<Option<Instant>>>,
-) {
-    {
-        let w = whisper.lock().unwrap();
-        if w.is_none() {
-            status_label.set_text("Модель не завантажено. Натисніть 'Моделі'.");
-            return;
-        }
+pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &ConferenceUI) {
+    // Check if model is loaded
+    if !ctx.is_model_loaded() {
+        ui.base.status_label.set_text("Модель не завантажено. Натисніть 'Моделі'.");
+        return;
     }
 
-    match conference_recorder.start_conference() {
+    match ctx.audio.start_conference() {
         Ok(()) => {
-            app_state.set(AppState::Recording);
-            recording_start_time.set(Some(Instant::now()));
+            rec.start_recording();
 
-            button.set_label("Зупинити запис");
-            button.remove_css_class("suggested-action");
-            button.add_css_class("destructive-action");
-            status_label.set_text("Запис конференції...");
-            let buffer = result_text_view.buffer();
-            buffer.set_text("");
-
-            // Show timer and level bars
-            timer_label.set_text("00:00");
-            timer_label.set_visible(true);
-            mic_level_bar.set_value(0.0);
-            mic_level_bar.set_visible(true);
-            loopback_level_bar.set_value(0.0);
-            loopback_level_bar.set_visible(true);
+            ui.base.set_recording("Запис конференції...");
+            ui.show_level_bars();
 
             // Start timer update loop
-            let timer_label_clone = timer_label.clone();
-            let app_state_clone = app_state.clone();
-            let recording_start_time_clone = recording_start_time.clone();
+            let rec_clone = rec.clone();
+            let ui_clone = ui.clone();
             glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-                if app_state_clone.get() != AppState::Recording {
+                if !rec_clone.is_recording() {
                     return glib::ControlFlow::Break;
                 }
-                if let Some(start) = recording_start_time_clone.get() {
-                    let elapsed = start.elapsed().as_secs();
-                    let minutes = elapsed / 60;
-                    let seconds = elapsed % 60;
-                    timer_label_clone.set_text(&format!("{:02}:{:02}", minutes, seconds));
+                if let Some(secs) = rec_clone.elapsed_secs() {
+                    ui_clone.base.update_timer(secs);
                 }
                 glib::ControlFlow::Continue
             });
 
             // Start level bar update loops for both channels
-            let mic_level_bar_clone = mic_level_bar.clone();
-            let loopback_level_bar_clone = loopback_level_bar.clone();
-            let conference_recorder_clone = conference_recorder.clone();
-            let app_state_clone = app_state.clone();
+            let ctx_clone = ctx.clone();
+            let rec_clone = rec.clone();
+            let ui_clone = ui.clone();
             glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
-                if app_state_clone.get() != AppState::Recording {
+                if !rec_clone.is_recording() {
                     return glib::ControlFlow::Break;
                 }
-                let mic_amplitude = conference_recorder_clone.get_mic_amplitude();
-                let loopback_amplitude = conference_recorder_clone.get_loopback_amplitude();
-                mic_level_bar_clone.set_value(mic_amplitude as f64);
-                loopback_level_bar_clone.set_value(loopback_amplitude as f64);
+                let mic_amplitude = ctx_clone.audio.get_mic_amplitude();
+                let loopback_amplitude = ctx_clone.audio.get_loopback_amplitude();
+                ui_clone.update_levels(mic_amplitude as f64, loopback_amplitude as f64);
                 glib::ControlFlow::Continue
             });
         }
         Err(e) => {
-            status_label.set_text(&format!("Помилка: {}", e));
+            ui.base.status_label.set_text(&format!("Помилка: {}", e));
         }
     }
 }
 
 /// Stop conference recording and transcribe with diarization
-pub fn handle_stop(
-    button: &Button,
-    status_label: &Label,
-    result_text_view: &TextView,
-    timer_label: &Label,
-    mic_level_bar: &LevelBar,
-    loopback_level_bar: &LevelBar,
-    spinner: &Spinner,
-    conference_recorder: &Arc<ConferenceRecorder>,
-    whisper: &Arc<Mutex<Option<WhisperSTT>>>,
-    config: &Arc<Mutex<Config>>,
-    history: &Arc<Mutex<History>>,
-    diarization_engine: &Arc<Mutex<crate::diarization::DiarizationEngine>>,
-    app_state: &Rc<Cell<AppState>>,
-    recording_start_time: &Rc<Cell<Option<Instant>>>,
-) {
-    // Transition to Processing state
-    app_state.set(AppState::Processing);
-    recording_start_time.set(None);
+pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &ConferenceUI) {
+    rec.start_processing();
 
     // Update UI for processing state
-    button.set_label("Обробка...");
-    button.remove_css_class("destructive-action");
-    button.remove_css_class("suggested-action");
-    button.set_sensitive(false);
-    status_label.set_text("Обробка...");
-    timer_label.set_visible(false);
-    mic_level_bar.set_visible(false);
-    loopback_level_bar.set_visible(false);
-    spinner.set_visible(true);
-    spinner.start();
+    ui.base.set_processing("Обробка...");
+    ui.hide_level_bars();
 
-    let (mic_samples, loopback_samples, mic_completion_rx, loopback_completion_rx) =
-        conference_recorder.stop_conference();
+    let recording = ctx.audio.stop_conference();
 
     // Calculate duration
-    let duration_secs = mic_samples.len().max(loopback_samples.len()) as f32 / 16000.0;
+    let duration_secs = recording.mic_samples.len().max(recording.loopback_samples.len()) as f32 / SAMPLE_RATE as f32;
     let duration_mins = (duration_secs / 60.0).floor() as u32;
     let duration_remaining_secs = (duration_secs % 60.0).floor() as u32;
-    status_label.set_text(&format!(
+    ui.base.status_label.set_text(&format!(
         "Обробка запису {:02}:{:02}...",
         duration_mins, duration_remaining_secs
     ));
@@ -142,55 +85,47 @@ pub fn handle_stop(
         eprintln!("Помилка створення директорії записів: {}", e);
     }
 
-    let whisper = whisper.clone();
-    let history = history.clone();
-    let config_for_auto_copy = config.clone();
-    let diarization_engine_for_transcribe = diarization_engine.clone();
-    let status_label = status_label.clone();
-    let result_text_view = result_text_view.clone();
-    let button = button.clone();
-    let spinner = spinner.clone();
-    let app_state = app_state.clone();
-    let language = {
-        let cfg = config.lock().unwrap();
-        cfg.language.clone()
-    };
-    let language_for_history = language.clone();
+    // Clone what we need for the async block
+    let ctx = ctx.clone();
+    let rec = rec.clone();
+    let ui = ui.clone();
+    let language = ctx.language();
+    let diarization_method = ctx.diarization_method();
 
     glib::spawn_future_local(async move {
         // Wait for both recording threads to finish
-        if let Some(rx) = mic_completion_rx {
+        if let Some(rx) = recording.mic_completion {
             let _ = rx.recv().await;
         }
-        if let Some(rx) = loopback_completion_rx {
+        if let Some(rx) = recording.loopback_completion {
             let _ = rx.recv().await;
         }
 
         // Save audio file
         let filename = generate_recording_filename();
-        let recording_path = recording_path(&filename);
-        if let Err(e) = save_recording(&mic_samples, &loopback_samples, &recording_path) {
+        let file_path = recording_path(&filename);
+        if let Err(e) = save_recording(&recording.mic_samples, &recording.loopback_samples, &file_path) {
             eprintln!("Помилка збереження аудіо файлу: {}", e);
         }
 
-        // Get diarization method from config
-        let diarization_method = {
-            let cfg = config_for_auto_copy.lock().unwrap();
-            cfg.diarization_method.clone()
-        };
-
-        // Transcribe with diarization (auto-selects method)
+        // Transcribe with diarization
         let (tx, rx) = async_channel::bounded::<anyhow::Result<String>>(1);
 
+        let ctx_for_thread = ctx.clone();
+        let mic_samples = recording.mic_samples;
+        let loopback_samples = recording.loopback_samples;
+        let language_for_thread = language.clone();
+        let diarization_method_for_thread = diarization_method.clone();
+
         std::thread::spawn(move || {
-            let w = whisper.lock().unwrap();
-            if let Some(ref whisper) = *w {
-                let mut engine_guard = diarization_engine_for_transcribe.lock().unwrap();
+            let ts = ctx_for_thread.transcription.lock().unwrap();
+            if let Some(whisper) = ts.whisper() {
+                let mut engine_guard = ctx_for_thread.diarization.lock().unwrap();
                 let result = whisper.transcribe_with_auto_diarization(
                     &mic_samples,
                     &loopback_samples,
-                    Some(&language),
-                    &diarization_method,
+                    Some(&language_for_thread),
+                    &diarization_method_for_thread,
                     Some(&mut *engine_guard),
                 );
                 let _ = tx.send_blocking(result);
@@ -203,17 +138,14 @@ pub fn handle_stop(
             match result {
                 Ok(text) => {
                     if text.is_empty() {
-                        status_label.set_text("Не вдалося розпізнати мову");
+                        ui.base.status_label.set_text("Не вдалося розпізнати мову");
                     } else {
-                        status_label.set_text("Готово!");
-                        let buffer = result_text_view.buffer();
-                        buffer.set_text(&text);
+                        ui.base.status_label.set_text("Готово!");
+                        ui.base.set_result_text(&text);
 
                         // Get config values for auto-copy/auto-paste
-                        let (auto_copy_enabled, auto_paste_enabled) = {
-                            let cfg = config_for_auto_copy.lock().unwrap();
-                            (cfg.auto_copy, cfg.auto_paste)
-                        };
+                        let auto_copy_enabled = ctx.auto_copy();
+                        let auto_paste_enabled = ctx.auto_paste();
 
                         // Copy to clipboard if enabled
                         if auto_copy_enabled || auto_paste_enabled {
@@ -225,7 +157,7 @@ pub fn handle_stop(
                             std::thread::sleep(std::time::Duration::from_millis(100));
                             if let Err(e) = crate::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
-                                status_label.set_text(&format!("Готово! (помилка вставки: {})", e));
+                                ui.base.status_label.set_text(&format!("Готово! (помилка вставки: {})", e));
                             }
                         }
 
@@ -234,11 +166,11 @@ pub fn handle_stop(
                         let entry = HistoryEntry::new_with_recording(
                             text,
                             duration_secs,
-                            language_for_history.clone(),
-                            Some(recording_path.to_string_lossy().to_string()),
+                            language.clone(),
+                            Some(file_path.to_string_lossy().to_string()),
                             speakers,
                         );
-                        let mut h = history.lock().unwrap();
+                        let mut h = ctx.history.lock().unwrap();
                         h.add(entry);
                         if let Err(e) = save_history(&h) {
                             eprintln!("Помилка збереження історії: {}", e);
@@ -246,17 +178,13 @@ pub fn handle_stop(
                     }
                 }
                 Err(e) => {
-                    status_label.set_text(&format!("Помилка: {}", e));
+                    ui.base.status_label.set_text(&format!("Помилка: {}", e));
                 }
             }
         }
 
         // Transition back to Idle state
-        app_state.set(AppState::Idle);
-        spinner.stop();
-        spinner.set_visible(false);
-        button.set_label("Почати запис");
-        button.add_css_class("suggested-action");
-        button.set_sensitive(true);
+        rec.finish();
+        ui.base.set_idle();
     });
 }
