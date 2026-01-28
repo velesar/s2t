@@ -10,7 +10,6 @@ const FRAME_SIZE_SAMPLES: usize = (SAMPLE_RATE_HZ as usize * FRAME_SIZE_MS as us
 pub struct VoiceActivityDetector {
     vad: Arc<Mutex<Vad>>,
     silence_threshold_ms: u32,
-    min_speech_duration_ms: u32,
 }
 
 impl VoiceActivityDetector {
@@ -19,8 +18,8 @@ impl VoiceActivityDetector {
         Self::with_thresholds(1000, 500)
     }
 
-    /// Create a new VAD instance with custom thresholds
-    pub fn with_thresholds(silence_threshold_ms: u32, min_speech_duration_ms: u32) -> Result<Self> {
+    /// Create a new VAD instance with custom silence threshold
+    pub fn with_thresholds(silence_threshold_ms: u32, _min_speech_duration_ms: u32) -> Result<Self> {
         use webrtc_vad::SampleRate;
         // SampleRate enum variants: Rate8kHz, Rate16kHz, Rate32kHz, Rate48kHz
         // VadMode::Aggressive is less sensitive to background noise than Quality
@@ -29,18 +28,7 @@ impl VoiceActivityDetector {
         Ok(Self {
             vad: Arc::new(Mutex::new(vad)),
             silence_threshold_ms,
-            min_speech_duration_ms,
         })
-    }
-
-    /// Set silence threshold (ms) - how long silence before ending segment
-    pub fn set_silence_threshold(&mut self, ms: u32) {
-        self.silence_threshold_ms = ms;
-    }
-
-    /// Set minimum speech duration (ms) - minimum speech length for a valid segment
-    pub fn set_min_speech_duration(&mut self, ms: u32) {
-        self.min_speech_duration_ms = ms;
     }
 
     /// Detect if audio frame contains speech
@@ -61,59 +49,6 @@ impl VoiceActivityDetector {
         let result = vad.is_voice_segment(frame).map_err(|_| anyhow::anyhow!("Invalid frame length"))?;
 
         Ok(result)
-    }
-
-    /// Detect segments in audio stream
-    /// Returns vector of (start_idx, end_idx) tuples for speech segments
-    pub fn detect_segments(&self, samples: &[f32]) -> Result<Vec<(usize, usize)>> {
-        let mut segments = Vec::new();
-        let mut in_speech = false;
-        let mut speech_start = 0;
-        let mut silence_duration = 0;
-        let mut speech_duration = 0;
-
-        let silence_frames = (self.silence_threshold_ms * SAMPLE_RATE_HZ / 1000) as usize;
-        let min_speech_frames = (self.min_speech_duration_ms * SAMPLE_RATE_HZ / 1000) as usize;
-
-        // Process audio in frames
-        for (i, chunk) in samples.chunks(FRAME_SIZE_SAMPLES).enumerate() {
-            let frame_start = i * FRAME_SIZE_SAMPLES;
-            let is_speech_frame = self.is_speech(chunk)?;
-
-            if is_speech_frame {
-                if !in_speech {
-                    // Start of new speech segment
-                    in_speech = true;
-                    speech_start = frame_start;
-                    speech_duration = 0;
-                    silence_duration = 0;
-                } else {
-                    speech_duration += chunk.len();
-                }
-            } else {
-                if in_speech {
-                    silence_duration += chunk.len();
-
-                    // Check if silence is long enough to end segment
-                    if silence_duration >= silence_frames {
-                        // End of speech segment
-                        if speech_duration >= min_speech_frames {
-                            segments.push((speech_start, frame_start));
-                        }
-                        in_speech = false;
-                        silence_duration = 0;
-                        speech_duration = 0; // Reset for next segment
-                    }
-                }
-            }
-        }
-
-        // Handle segment that continues to end of audio
-        if in_speech && speech_duration >= min_speech_frames {
-            segments.push((speech_start, samples.len()));
-        }
-
-        Ok(segments)
     }
 
     /// Check if speech has ended (silence detected after speech)

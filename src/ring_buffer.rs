@@ -99,16 +99,6 @@ impl RingBuffer {
         result
     }
 
-    /// Get current size (number of samples in buffer)
-    pub fn len(&self) -> usize {
-        *self.size.lock().unwrap()
-    }
-
-    /// Check if buffer is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     /// Clear the buffer
     pub fn clear(&self) {
         *self.size.lock().unwrap() = 0;
