@@ -66,7 +66,7 @@ impl LoopbackRecorder {
         // This works on both PipeWire and PulseAudio
         let mut child = std::process::Command::new("parec")
             .arg("--format=s16le")
-            .arg("--rate=16000")
+            .arg(format!("--rate={}", WHISPER_SAMPLE_RATE))
             .arg("--channels=1")
             .arg("--device")
             .arg(&monitor_source)
