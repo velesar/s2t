@@ -3,95 +3,19 @@ pub mod continuous;
 pub mod recording;
 pub mod state;
 
-use state::{AppState, ConferenceUI, DictationUI, RecordingContext, UIContext};
+use state::{AppState, ConferenceUI, ContinuousUI, DictationUI, RecordingContext, UIContext};
 
-use crate::config::Config;
 use crate::context::AppContext;
-use crate::continuous::ContinuousRecorder;
-use crate::history::History;
 use crate::history_dialog::show_history_dialog;
 use crate::model_dialog::show_model_dialog;
 use crate::settings_dialog::show_settings_dialog;
 use crate::whisper::WhisperSTT;
-
-// Continuous mode handlers now in continuous.rs module
-fn handle_start_continuous(
-    button: &Button,
-    status_label: &Label,
-    result_text_view: &TextView,
-    timer_label: &Label,
-    level_bar: &LevelBar,
-    vad_indicator: &Label,
-    segment_indicators_box: &GtkBox,
-    segment_row: &GtkBox,
-    continuous_recorder: &Arc<ContinuousRecorder>,
-    whisper: &Arc<Mutex<Option<WhisperSTT>>>,
-    config: &Arc<Mutex<Config>>,
-    app_state: &Rc<Cell<AppState>>,
-    recording_start_time: &Rc<Cell<Option<Instant>>>,
-) {
-    continuous::handle_start(
-        button,
-        status_label,
-        result_text_view,
-        timer_label,
-        level_bar,
-        vad_indicator,
-        segment_indicators_box,
-        segment_row,
-        continuous_recorder,
-        whisper,
-        config,
-        app_state,
-        recording_start_time,
-    );
-}
-
-fn handle_stop_continuous(
-    button: &Button,
-    status_label: &Label,
-    result_text_view: &TextView,
-    timer_label: &Label,
-    level_bar: &LevelBar,
-    vad_indicator: &Label,
-    segment_indicators_box: &GtkBox,
-    segment_row: &GtkBox,
-    spinner: &Spinner,
-    continuous_recorder: &Arc<ContinuousRecorder>,
-    whisper: &Arc<Mutex<Option<WhisperSTT>>>,
-    config: &Arc<Mutex<Config>>,
-    history: &Arc<Mutex<History>>,
-    app_state: &Rc<Cell<AppState>>,
-    recording_start_time: &Rc<Cell<Option<Instant>>>,
-) {
-    continuous::handle_stop(
-        button,
-        status_label,
-        result_text_view,
-        timer_label,
-        level_bar,
-        vad_indicator,
-        segment_indicators_box,
-        segment_row,
-        spinner,
-        continuous_recorder,
-        whisper,
-        config,
-        history,
-        app_state,
-        recording_start_time,
-    );
-}
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Box as GtkBox, Button, Label, LevelBar, Orientation, Spinner, TextView};
-use std::cell::Cell;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
-    // Extract legacy references from AppContext for handlers not yet migrated
-    // This allows gradual migration of individual handlers to use ctx directly
+    // Extract legacy references from AppContext for components not yet migrated
     let config = ctx.config_arc();
     let history = ctx.history_arc();
 
@@ -102,12 +26,11 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let toggle_recording_rx = ctx.channels.toggle_recording_rx().clone();
     let reload_hotkeys_tx = ctx.channels.reload_hotkeys_tx().clone();
 
-    // Create legacy whisper Arc from TranscriptionService
-    // TODO: Migrate handlers to use ctx.transcription directly
+    // Create legacy whisper Arc from TranscriptionService for model dialog
+    // TODO: Migrate model_dialog to use ctx.transcription directly
     let whisper: Arc<Mutex<Option<WhisperSTT>>> = {
         let ts = ctx.transcription.lock().unwrap();
         if ts.is_loaded() {
-            // Re-create whisper for legacy handlers
             let cfg = config.lock().unwrap();
             let model_path = crate::models::get_model_path(&cfg.default_model);
             drop(cfg);
@@ -123,9 +46,6 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
             Arc::new(Mutex::new(None))
         }
     };
-
-    // Use AudioService's recorders (via legacy accessors for continuous mode - not yet migrated)
-    let continuous_recorder = Arc::clone(ctx.audio.continuous_recorder());
 
     let window = ApplicationWindow::builder()
         .application(app)
@@ -272,10 +192,6 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     record_button.add_css_class("suggested-action");
     record_button.add_css_class("pill");
 
-    // Shared application state
-    let app_state = Rc::new(Cell::new(AppState::Idle));
-    let recording_start_time: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
-
     // Update UI based on mode selection
     let level_bar_clone = level_bar.clone();
     let level_bars_box_clone = level_bars_box.clone();
@@ -311,28 +227,22 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
         spinner.clone(),
     );
     let dictation_ui = DictationUI::new(ui_ctx.clone(), level_bar.clone());
-    let conference_ui = ConferenceUI::new(ui_ctx, mic_level_bar.clone(), loopback_level_bar.clone());
+    let conference_ui = ConferenceUI::new(ui_ctx.clone(), mic_level_bar.clone(), loopback_level_bar.clone());
+    let continuous_ui = ContinuousUI::new(
+        ui_ctx,
+        level_bar.clone(),
+        vad_indicator.clone(),
+        segment_indicators_box.clone(),
+        segment_row.clone(),
+    );
 
-    let config_for_ui = config.clone();
-    let history_for_ui = history.clone();
-    let continuous_recorder_for_button = continuous_recorder.clone();
-    let mode_combo_for_button = mode_combo.clone();
-    let vad_indicator_for_button = vad_indicator.clone();
-    let segment_indicators_box_for_button = segment_indicators_box.clone();
-    let segment_row_for_button = segment_row.clone();
     setup_record_button(
         ctx.clone(),
         rec_ctx.clone(),
         dictation_ui.clone(),
         conference_ui.clone(),
-        &vad_indicator_for_button,
-        &segment_indicators_box_for_button,
-        &segment_row_for_button,
-        continuous_recorder_for_button,
-        mode_combo_for_button,
-        whisper.clone(),
-        config_for_ui,
-        history_for_ui,
+        continuous_ui.clone(),
+        mode_combo.clone(),
     );
 
     let copy_button = Button::with_label("Копіювати");
@@ -437,55 +347,23 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     });
 
     // Listen for hotkey toggle recording signal
-    // Clone context structs for hotkey handler
     let ctx_for_hotkey = ctx.clone();
     let rec_ctx_for_hotkey = rec_ctx.clone();
     let dictation_ui_for_hotkey = dictation_ui.clone();
     let conference_ui_for_hotkey = conference_ui.clone();
-    let record_button_for_hotkey = record_button.clone();
-    let status_label_for_hotkey = status_label.clone();
-    let result_text_view_for_hotkey = result_text_view.clone();
-    let timer_label_for_hotkey = timer_label.clone();
-    let level_bar_for_hotkey = level_bar.clone();
-    let vad_indicator_for_hotkey = vad_indicator.clone();
-    let segment_indicators_box_for_hotkey = segment_indicators_box.clone();
-    let segment_row_for_hotkey = segment_row.clone();
-    let spinner_for_hotkey = spinner.clone();
-    let continuous_recorder_for_hotkey = continuous_recorder.clone();
+    let continuous_ui_for_hotkey = continuous_ui.clone();
     let mode_combo_for_hotkey = mode_combo.clone();
-    let whisper_for_hotkey = whisper.clone();
-    let config_for_hotkey = config.clone();
-    let history_for_hotkey = history.clone();
-    let app_state_for_hotkey = app_state.clone();
-    let recording_start_time_for_hotkey = recording_start_time.clone();
     glib::spawn_future_local(async move {
         while toggle_recording_rx.recv().await.is_ok() {
             let is_conference = mode_combo_for_hotkey.active() == Some(1);
-            let is_continuous = {
-                let cfg = config_for_hotkey.lock().unwrap();
-                cfg.continuous_mode
-            };
+            let is_continuous = ctx_for_hotkey.continuous_mode();
 
             match rec_ctx_for_hotkey.state.get() {
                 AppState::Idle => {
                     if is_conference {
                         conference::handle_start(&ctx_for_hotkey, &rec_ctx_for_hotkey, &conference_ui_for_hotkey);
                     } else if is_continuous {
-                        handle_start_continuous(
-                            &record_button_for_hotkey,
-                            &status_label_for_hotkey,
-                            &result_text_view_for_hotkey,
-                            &timer_label_for_hotkey,
-                            &level_bar_for_hotkey,
-                            &vad_indicator_for_hotkey,
-                            &segment_indicators_box_for_hotkey,
-                            &segment_row_for_hotkey,
-                            &continuous_recorder_for_hotkey,
-                            &whisper_for_hotkey,
-                            &config_for_hotkey,
-                            &app_state_for_hotkey,
-                            &recording_start_time_for_hotkey,
-                        );
+                        continuous::handle_start(&ctx_for_hotkey, &rec_ctx_for_hotkey, &continuous_ui_for_hotkey);
                     } else {
                         recording::handle_start(&ctx_for_hotkey, &rec_ctx_for_hotkey, &dictation_ui_for_hotkey);
                     }
@@ -494,23 +372,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
                     if is_conference {
                         conference::handle_stop(&ctx_for_hotkey, &rec_ctx_for_hotkey, &conference_ui_for_hotkey);
                     } else if is_continuous {
-                        handle_stop_continuous(
-                            &record_button_for_hotkey,
-                            &status_label_for_hotkey,
-                            &result_text_view_for_hotkey,
-                            &timer_label_for_hotkey,
-                            &level_bar_for_hotkey,
-                            &vad_indicator_for_hotkey,
-                            &segment_indicators_box_for_hotkey,
-                            &segment_row_for_hotkey,
-                            &spinner_for_hotkey,
-                            &continuous_recorder_for_hotkey,
-                            &whisper_for_hotkey,
-                            &config_for_hotkey,
-                            &history_for_hotkey,
-                            &app_state_for_hotkey,
-                            &recording_start_time_for_hotkey,
-                        );
+                        continuous::handle_stop(&ctx_for_hotkey, &rec_ctx_for_hotkey, &continuous_ui_for_hotkey);
                     } else {
                         recording::handle_stop(&ctx_for_hotkey, &rec_ctx_for_hotkey, &dictation_ui_for_hotkey);
                     }
@@ -530,64 +392,28 @@ fn setup_record_button(
     rec_ctx: RecordingContext,
     dictation_ui: DictationUI,
     conference_ui: ConferenceUI,
-    vad_indicator: &Label,
-    segment_indicators_box: &GtkBox,
-    segment_row: &GtkBox,
-    continuous_recorder: Arc<ContinuousRecorder>,
+    continuous_ui: ContinuousUI,
     mode_combo: gtk4::ComboBoxText,
-    whisper: Arc<Mutex<Option<WhisperSTT>>>,
-    config: Arc<Mutex<Config>>,
-    history: Arc<Mutex<History>>,
 ) {
-    let continuous_recorder_clone = continuous_recorder.clone();
     let mode_combo_clone = mode_combo.clone();
-    let vad_indicator_clone = vad_indicator.clone();
-    let segment_indicators_box_clone = segment_indicators_box.clone();
-    let segment_row_clone = segment_row.clone();
 
     // Clone context structs for the closure
     let ctx_clone = ctx.clone();
     let rec_ctx_clone = rec_ctx.clone();
     let dictation_ui_clone = dictation_ui.clone();
     let conference_ui_clone = conference_ui.clone();
-
-    // Legacy clones for continuous mode (not yet migrated)
-    let button_clone = dictation_ui.base.button.clone();
-    let status_label_clone = dictation_ui.base.status_label.clone();
-    let result_text_view_clone = dictation_ui.base.result_text_view.clone();
-    let timer_label_clone = dictation_ui.base.timer_label.clone();
-    let spinner_clone = dictation_ui.base.spinner.clone();
-    let level_bar_clone = dictation_ui.level_bar.clone();
-    let app_state_clone = rec_ctx.state.clone();
-    let recording_start_time_clone = rec_ctx.start_time.clone();
+    let continuous_ui_clone = continuous_ui.clone();
 
     dictation_ui.base.button.connect_clicked(move |_| {
         let is_conference = mode_combo_clone.active() == Some(1);
-        let is_continuous = {
-            let cfg = config.lock().unwrap();
-            cfg.continuous_mode
-        };
+        let is_continuous = ctx_clone.continuous_mode();
 
         match rec_ctx_clone.state.get() {
             AppState::Idle => {
                 if is_conference {
                     conference::handle_start(&ctx_clone, &rec_ctx_clone, &conference_ui_clone);
                 } else if is_continuous {
-                    handle_start_continuous(
-                        &button_clone,
-                        &status_label_clone,
-                        &result_text_view_clone,
-                        &timer_label_clone,
-                        &level_bar_clone,
-                        &vad_indicator_clone,
-                        &segment_indicators_box_clone,
-                        &segment_row_clone,
-                        &continuous_recorder_clone,
-                        &whisper,
-                        &config,
-                        &app_state_clone,
-                        &recording_start_time_clone,
-                    );
+                    continuous::handle_start(&ctx_clone, &rec_ctx_clone, &continuous_ui_clone);
                 } else {
                     recording::handle_start(&ctx_clone, &rec_ctx_clone, &dictation_ui_clone);
                 }
@@ -595,33 +421,10 @@ fn setup_record_button(
             AppState::Recording => {
                 if is_conference {
                     conference::handle_stop(&ctx_clone, &rec_ctx_clone, &conference_ui_clone);
+                } else if ctx_clone.continuous_mode() {
+                    continuous::handle_stop(&ctx_clone, &rec_ctx_clone, &continuous_ui_clone);
                 } else {
-                    let is_continuous = {
-                        let cfg = config.lock().unwrap();
-                        cfg.continuous_mode
-                    };
-
-                    if is_continuous {
-                        handle_stop_continuous(
-                            &button_clone,
-                            &status_label_clone,
-                            &result_text_view_clone,
-                            &timer_label_clone,
-                            &level_bar_clone,
-                            &vad_indicator_clone,
-                            &segment_indicators_box_clone,
-                            &segment_row_clone,
-                            &spinner_clone,
-                            &continuous_recorder_clone,
-                            &whisper,
-                            &config,
-                            &history,
-                            &app_state_clone,
-                            &recording_start_time_clone,
-                        );
-                    } else {
-                        recording::handle_stop(&ctx_clone, &rec_ctx_clone, &dictation_ui_clone);
-                    }
+                    recording::handle_stop(&ctx_clone, &rec_ctx_clone, &dictation_ui_clone);
                 }
             }
             AppState::Processing => {
