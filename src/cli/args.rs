@@ -3,6 +3,28 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
+/// STT backend selection.
+#[derive(Clone, Copy, ValueEnum, Default, Debug)]
+pub enum SttBackend {
+    /// Whisper backend (default)
+    #[default]
+    Whisper,
+    /// Parakeet TDT backend (requires --features tdt)
+    Tdt,
+}
+
+/// Diarization method selection.
+#[derive(Clone, Copy, ValueEnum, Default, Debug)]
+pub enum DiarizationMethod {
+    /// No diarization (default)
+    #[default]
+    None,
+    /// Channel-based diarization (stereo: left=mic, right=loopback)
+    Channel,
+    /// Sortformer neural diarization (requires --features sortformer)
+    Sortformer,
+}
+
 /// Voice Dictation - Offline speech-to-text for Linux
 #[derive(Parser)]
 #[command(name = "voice-dictation")]
@@ -46,9 +68,25 @@ pub struct TranscribeArgs {
     #[arg(long, value_enum, default_value_t = ChannelMode::Mix)]
     pub channel: ChannelMode,
 
-    /// Enable speaker labels [Mic]/[Loopback] (requires --channel=both)
-    #[arg(long)]
+    /// [DEPRECATED] Use --diarization=channel instead
+    #[arg(long, hide = true)]
     pub diarize: bool,
+
+    /// STT backend (whisper or tdt)
+    #[arg(long, value_enum, default_value_t = SttBackend::Whisper)]
+    pub backend: SttBackend,
+
+    /// Diarization method (none, channel, sortformer)
+    #[arg(long, value_enum, default_value_t = DiarizationMethod::None)]
+    pub diarization: DiarizationMethod,
+
+    /// Path to Sortformer model (optional, uses default location if not specified)
+    #[arg(long)]
+    pub sortformer_model: Option<PathBuf>,
+
+    /// Path to TDT model directory (optional, uses default location if not specified)
+    #[arg(long)]
+    pub tdt_model: Option<PathBuf>,
 
     /// Output format
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
