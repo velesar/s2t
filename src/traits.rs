@@ -8,6 +8,7 @@
 
 use anyhow::Result;
 use async_channel::Receiver;
+use std::path::Path;
 
 /// Audio recording abstraction.
 ///
@@ -51,6 +52,9 @@ pub trait Transcription: Send + Sync {
 
     /// Get the name/path of the loaded model.
     fn model_name(&self) -> Option<String>;
+
+    /// Load or replace the model from the given path.
+    fn load_model(&mut self, path: &Path) -> Result<()>;
 }
 
 /// Voice activity detection abstraction.
@@ -58,21 +62,24 @@ pub trait Transcription: Send + Sync {
 /// Implementors detect speech presence in audio frames for:
 /// - Automatic recording start/stop
 /// - Continuous mode segmentation
+///
+/// Note: Uses `&self` with interior mutability pattern to allow
+/// implementations to use `RefCell` or similar for thread-local state.
 pub trait VoiceDetection {
     /// Check if audio frame contains speech.
     ///
     /// # Arguments
     /// * `samples` - Audio frame at 16kHz mono
-    fn is_speech(&mut self, samples: &[f32]) -> Result<bool>;
+    fn is_speech(&self, samples: &[f32]) -> Result<bool>;
 
     /// Detect end of speech (silence after speech).
     ///
     /// Returns true when a configurable silence duration is detected
     /// after speech activity.
-    fn detect_speech_end(&mut self, samples: &[f32]) -> Result<bool>;
+    fn detect_speech_end(&self, samples: &[f32]) -> Result<bool>;
 
     /// Reset internal state for new recording session.
-    fn reset(&mut self);
+    fn reset(&self);
 }
 
 /// History storage abstraction.
@@ -123,16 +130,16 @@ pub trait UIStateUpdater {
     fn set_status(&self, text: &str);
 
     /// Transition UI to recording state.
-    fn set_recording_state(&self, status_text: &str);
+    fn set_recording(&self, status_text: &str);
 
     /// Transition UI to processing state.
-    fn set_processing_state(&self, status_text: &str);
+    fn set_processing(&self, status_text: &str);
 
     /// Transition UI to idle state.
-    fn set_idle_state(&self);
+    fn set_idle(&self);
 
     /// Update the timer display with elapsed seconds.
-    fn update_timer_display(&self, secs: u64);
+    fn update_timer(&self, secs: u64);
 
     /// Get the current result text.
     fn get_result_text(&self) -> String;

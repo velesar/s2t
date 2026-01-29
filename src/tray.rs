@@ -1,6 +1,7 @@
 use crate::config::{save_config, Config};
 use crate::models::{get_model_path, list_downloaded_models};
 use crate::services::TranscriptionService;
+use crate::traits::Transcription;
 use async_channel::Sender;
 use ksni::{
     menu::{StandardItem, SubMenu},

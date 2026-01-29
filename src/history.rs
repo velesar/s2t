@@ -80,10 +80,6 @@ pub struct History {
 }
 
 impl History {
-    pub fn add(&mut self, entry: HistoryEntry) {
-        self.entries.insert(0, entry);
-    }
-
     pub fn remove(&mut self, id: &str) {
         self.entries.retain(|e| e.id != id);
     }

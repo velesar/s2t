@@ -5,6 +5,7 @@
 
 use crate::context::AppContext;
 use crate::history::{save_history, HistoryEntry};
+use crate::traits::{HistoryRepository, UIStateUpdater};
 use crate::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };

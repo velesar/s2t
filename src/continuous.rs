@@ -1,5 +1,6 @@
 use crate::audio::AudioRecorder;
 use crate::ring_buffer::RingBuffer;
+use crate::traits::VoiceDetection;
 use crate::types::AudioSegment;
 use crate::vad::VoiceActivityDetector;
 use anyhow::Result;

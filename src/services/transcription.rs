@@ -26,27 +26,6 @@ impl TranscriptionService {
         })
     }
 
-    /// Load or replace the Whisper model.
-    pub fn load_model(&mut self, path: &Path) -> Result<()> {
-        let path_str = path.to_string_lossy();
-        let whisper = WhisperSTT::new(&path_str)
-            .with_context(|| format!("Failed to load Whisper model from {}", path_str))?;
-        self.whisper = Some(whisper);
-        Ok(())
-    }
-
-    /// Check if a model is loaded.
-    pub fn is_loaded(&self) -> bool {
-        self.whisper.is_some()
-    }
-
-    /// Transcribe audio samples.
-    pub fn transcribe(&self, samples: &[f32], language: &str) -> Result<String> {
-        let whisper = self.whisper.as_ref().context("Модель не завантажено")?;
-
-        whisper.transcribe(samples, Some(language))
-    }
-
     /// Get reference to WhisperSTT (for conference mode diarization).
     ///
     /// Conference mode needs direct access to WhisperSTT for
@@ -69,15 +48,24 @@ use crate::traits::Transcription;
 
 impl Transcription for TranscriptionService {
     fn transcribe(&self, samples: &[f32], language: &str) -> Result<String> {
-        TranscriptionService::transcribe(self, samples, language)
+        let whisper = self.whisper.as_ref().context("Модель не завантажено")?;
+        whisper.transcribe(samples, Some(language))
     }
 
     fn is_loaded(&self) -> bool {
-        TranscriptionService::is_loaded(self)
+        self.whisper.is_some()
     }
 
     fn model_name(&self) -> Option<String> {
-        self.whisper.as_ref().map(|w| w.model_path().to_string())
+        self.whisper.as_ref().and_then(Transcription::model_name)
+    }
+
+    fn load_model(&mut self, path: &Path) -> Result<()> {
+        let path_str = path.to_string_lossy();
+        let whisper = WhisperSTT::new(&path_str)
+            .with_context(|| format!("Failed to load Whisper model from {}", path_str))?;
+        self.whisper = Some(whisper);
+        Ok(())
     }
 }
 
@@ -111,12 +99,9 @@ mod tests {
     }
 
     #[test]
-    fn test_trait_is_loaded_matches_struct() {
+    fn test_trait_is_loaded() {
         let service = TranscriptionService::new();
-        assert_eq!(
-            Transcription::is_loaded(&service),
-            TranscriptionService::is_loaded(&service)
-        );
+        assert!(!Transcription::is_loaded(&service));
     }
 
     #[test]

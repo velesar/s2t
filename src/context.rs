@@ -10,6 +10,7 @@ use crate::diarization::DiarizationEngine;
 use crate::history::History;
 use crate::services::audio::{AudioService, ContinuousConfig};
 use crate::services::TranscriptionService;
+use crate::traits::{ConfigProvider, Transcription};
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
@@ -79,25 +80,26 @@ impl AppContext {
     }
 
     // === Config convenience methods ===
+    // These use the ConfigProvider trait for polymorphism
 
     /// Get current language setting
     pub fn language(&self) -> String {
-        self.config.lock().unwrap().language.clone()
+        ConfigProvider::language(&*self.config.lock().unwrap())
     }
 
     /// Check if continuous mode is enabled
     pub fn continuous_mode(&self) -> bool {
-        self.config.lock().unwrap().continuous_mode
+        ConfigProvider::continuous_mode(&*self.config.lock().unwrap())
     }
 
     /// Check if auto-copy is enabled
     pub fn auto_copy(&self) -> bool {
-        self.config.lock().unwrap().auto_copy
+        ConfigProvider::auto_copy(&*self.config.lock().unwrap())
     }
 
     /// Check if auto-paste is enabled
     pub fn auto_paste(&self) -> bool {
-        self.config.lock().unwrap().auto_paste
+        ConfigProvider::auto_paste(&*self.config.lock().unwrap())
     }
 
     /// Get diarization method

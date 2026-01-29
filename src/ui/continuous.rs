@@ -4,8 +4,9 @@
 //! automatic segmentation, parallel transcription, and ordered results.
 
 use crate::context::AppContext;
-use crate::types::AudioSegment;
 use crate::history::{save_history, HistoryEntry};
+use crate::traits::{HistoryRepository, Transcription, UIStateUpdater};
+use crate::types::AudioSegment;
 use gtk4::prelude::*;
 use gtk4::{glib, Label};
 use std::cell::{Cell, RefCell};

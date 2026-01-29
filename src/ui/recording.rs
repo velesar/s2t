@@ -4,6 +4,7 @@
 
 use crate::context::AppContext;
 use crate::history::{save_history, HistoryEntry};
+use crate::traits::{HistoryRepository, Transcription, UIStateUpdater};
 use gtk4::glib;
 use std::sync::Arc;
 

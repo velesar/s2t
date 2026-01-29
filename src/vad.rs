@@ -40,9 +40,14 @@ impl VoiceActivityDetector {
         })
     }
 
-    /// Detect if audio frame contains speech
-    /// Returns true if speech detected, false if silence
-    pub fn is_speech(&self, samples: &[f32]) -> Result<bool> {
+}
+
+// === Trait Implementation ===
+
+use crate::traits::VoiceDetection;
+
+impl VoiceDetection for VoiceActivityDetector {
+    fn is_speech(&self, samples: &[f32]) -> Result<bool> {
         if samples.len() < FRAME_SIZE_SAMPLES {
             return Ok(false);
         }
@@ -62,9 +67,7 @@ impl VoiceActivityDetector {
         Ok(result)
     }
 
-    /// Check if speech has ended (silence detected after speech)
-    /// Analyzes recent samples in reverse to detect if we had speech followed by silence
-    pub fn detect_speech_end(&self, recent_samples: &[f32]) -> Result<bool> {
+    fn detect_speech_end(&self, recent_samples: &[f32]) -> Result<bool> {
         let silence_needed = (self.silence_threshold_ms * SAMPLE_RATE_HZ / 1000) as usize;
         let mut consecutive_silence = 0;
         let mut had_speech = false;
@@ -83,28 +86,14 @@ impl VoiceActivityDetector {
 
         Ok(had_speech && consecutive_silence >= silence_needed)
     }
-}
 
-// === Trait Implementation ===
-
-use crate::traits::VoiceDetection;
-
-impl VoiceDetection for VoiceActivityDetector {
-    fn is_speech(&mut self, samples: &[f32]) -> Result<bool> {
-        VoiceActivityDetector::is_speech(self, samples)
-    }
-
-    fn detect_speech_end(&mut self, samples: &[f32]) -> Result<bool> {
-        VoiceActivityDetector::detect_speech_end(self, samples)
-    }
-
-    fn reset(&mut self) {
+    fn reset(&self) {
         // Re-create VAD for a clean state
         use webrtc_vad::SampleRate;
-        self.vad = RefCell::new(Vad::new_with_rate_and_mode(
+        *self.vad.borrow_mut() = Vad::new_with_rate_and_mode(
             SampleRate::Rate16kHz,
             VadMode::Aggressive,
-        ));
+        );
     }
 }
 

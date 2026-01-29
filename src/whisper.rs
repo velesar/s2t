@@ -184,10 +184,6 @@ impl WhisperSTT {
         self.transcribe_with_diarization(mic_samples, loopback_samples, language)
     }
 
-    /// Get the model path
-    pub fn model_path(&self) -> &str {
-        &self.model_path
-    }
 }
 
 // === Trait Implementation ===
@@ -205,5 +201,10 @@ impl Transcription for WhisperSTT {
 
     fn model_name(&self) -> Option<String> {
         Some(self.model_path.clone())
+    }
+
+    fn load_model(&mut self, _path: &std::path::Path) -> anyhow::Result<()> {
+        // WhisperSTT is created with a model; use TranscriptionService for model management
+        anyhow::bail!("WhisperSTT does not support runtime model loading; use TranscriptionService")
     }
 }

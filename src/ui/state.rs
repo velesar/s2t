@@ -126,13 +126,14 @@ impl UIContext {
         }
     }
 
-    /// Set the status label text
-    pub fn set_status(&self, text: &str) {
+}
+
+impl UIStateUpdater for UIContext {
+    fn set_status(&self, text: &str) {
         self.status_label.set_text(text);
     }
 
-    /// Update UI to recording state
-    pub fn set_recording(&self, status_text: &str) {
+    fn set_recording(&self, status_text: &str) {
         self.button.set_label("Зупинити запис");
         self.button.remove_css_class("suggested-action");
         self.button.add_css_class("destructive-action");
@@ -142,8 +143,7 @@ impl UIContext {
         self.timer_label.set_visible(true);
     }
 
-    /// Update UI to processing state
-    pub fn set_processing(&self, status_text: &str) {
+    fn set_processing(&self, status_text: &str) {
         self.button.set_label("Обробка...");
         self.button.remove_css_class("destructive-action");
         self.button.remove_css_class("suggested-action");
@@ -154,8 +154,7 @@ impl UIContext {
         self.spinner.start();
     }
 
-    /// Update UI to idle state
-    pub fn set_idle(&self) {
+    fn set_idle(&self) {
         self.button.set_label("Почати запис");
         self.button.add_css_class("suggested-action");
         self.button.remove_css_class("destructive-action");
@@ -164,55 +163,22 @@ impl UIContext {
         self.spinner.set_visible(false);
     }
 
-    /// Update timer display
-    pub fn update_timer(&self, secs: u64) {
+    fn update_timer(&self, secs: u64) {
         let minutes = secs / 60;
         let seconds = secs % 60;
         self.timer_label
             .set_text(&format!("{:02}:{:02}", minutes, seconds));
     }
 
-    /// Get current result text
-    pub fn get_result_text(&self) -> String {
+    fn get_result_text(&self) -> String {
         let buffer = self.result_text_view.buffer();
         let start = buffer.start_iter();
         let end = buffer.end_iter();
         buffer.text(&start, &end, false).to_string()
     }
 
-    /// Set result text
-    pub fn set_result_text(&self, text: &str) {
-        self.result_text_view.buffer().set_text(text);
-    }
-}
-
-impl UIStateUpdater for UIContext {
-    fn set_status(&self, text: &str) {
-        self.set_status(text);
-    }
-
-    fn set_recording_state(&self, status_text: &str) {
-        self.set_recording(status_text);
-    }
-
-    fn set_processing_state(&self, status_text: &str) {
-        self.set_processing(status_text);
-    }
-
-    fn set_idle_state(&self) {
-        self.set_idle();
-    }
-
-    fn update_timer_display(&self, secs: u64) {
-        self.update_timer(secs);
-    }
-
-    fn get_result_text(&self) -> String {
-        UIContext::get_result_text(self)
-    }
-
     fn set_result_text(&self, text: &str) {
-        UIContext::set_result_text(self, text);
+        self.result_text_view.buffer().set_text(text);
     }
 }
 

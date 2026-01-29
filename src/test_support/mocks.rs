@@ -129,6 +129,12 @@ impl Transcription for MockTranscription {
     fn model_name(&self) -> Option<String> {
         self.model_name.clone()
     }
+
+    fn load_model(&mut self, path: &std::path::Path) -> Result<()> {
+        self.is_loaded = true;
+        self.model_name = Some(path.to_string_lossy().to_string());
+        Ok(())
+    }
 }
 
 /// Mock voice activity detector for testing.
@@ -176,15 +182,15 @@ impl MockVoiceDetector {
 }
 
 impl VoiceDetection for MockVoiceDetector {
-    fn is_speech(&mut self, _samples: &[f32]) -> anyhow::Result<bool> {
+    fn is_speech(&self, _samples: &[f32]) -> anyhow::Result<bool> {
         Ok(self.speech_result)
     }
 
-    fn detect_speech_end(&mut self, _samples: &[f32]) -> anyhow::Result<bool> {
+    fn detect_speech_end(&self, _samples: &[f32]) -> anyhow::Result<bool> {
         Ok(self.speech_end_result)
     }
 
-    fn reset(&mut self) {
+    fn reset(&self) {
         self.reset_count
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
