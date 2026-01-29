@@ -10,10 +10,10 @@ use dispatch::ModeUIs;
 use state::{ConferenceUI, ContinuousUI, DictationUI, RecordingContext, UIContext};
 use widgets::build_main_widgets;
 
-use crate::context::AppContext;
+use crate::app::context::AppContext;
 use crate::dialogs::{show_history_dialog, show_model_dialog, show_settings_dialog};
-use crate::traits::Transcription;
-use crate::types::SharedHistory;
+use crate::domain::traits::Transcription;
+use crate::domain::types::SharedHistory;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Button, TextView};
 use std::sync::{Arc, Mutex};
@@ -55,7 +55,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
             Some(2) => "conference_file".to_string(),
             _ => "dictation".to_string(),
         };
-        if let Err(e) = crate::config::save_config(&cfg) {
+        if let Err(e) = crate::app::config::save_config(&cfg) {
             eprintln!("Помилка збереження режиму: {}", e);
         }
     });

@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::app::config::Config;
 use anyhow::{Context, Result};
 use global_hotkey::{
     hotkey::{Code, HotKey, Modifiers},

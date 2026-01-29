@@ -183,7 +183,7 @@ impl Default for AudioRecorder {
 
 // === Trait Implementation ===
 
-use crate::traits::AudioRecording;
+use crate::domain::traits::AudioRecording;
 
 impl AudioRecording for AudioRecorder {
     fn start(&self) -> Result<()> {
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_audio_recording_trait_amplitude() {
-        use crate::traits::AudioRecording;
+        use crate::domain::traits::AudioRecording;
         let recorder = AudioRecorder::new();
         // Trait method should match direct method
         assert_eq!(
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_audio_recording_trait_is_recording() {
-        use crate::traits::AudioRecording;
+        use crate::domain::traits::AudioRecording;
         let recorder = AudioRecorder::new();
         assert!(!AudioRecording::is_recording(&recorder));
     }

@@ -1,27 +1,13 @@
-mod audio;
-mod channels;
+mod app;
 mod cli;
-mod conference_recorder;
-mod config;
-mod context;
-mod continuous;
-mod denoise;
 mod dialogs;
-mod diarization;
+mod domain;
 mod history;
-mod hotkeys;
-mod loopback;
-mod models;
-mod paste;
-mod recordings;
-mod ring_buffer;
-mod services;
-mod stt;
+mod infrastructure;
+mod recording;
 #[cfg(test)]
 mod test_support;
-mod traits;
-mod tray;
-mod types;
+mod transcription;
 mod ui;
 mod vad;
 
@@ -42,19 +28,19 @@ fn main() -> Result<()> {
 
 /// Initialize transcription service based on configured backend.
 fn init_transcription_service(
-    config: &std::sync::Arc<std::sync::Mutex<config::Config>>,
-) -> services::TranscriptionService {
+    config: &std::sync::Arc<std::sync::Mutex<app::config::Config>>,
+) -> transcription::TranscriptionService {
     #[cfg(feature = "tdt")]
     {
-        use services::TranscriptionService;
+        use transcription::TranscriptionService;
 
         let cfg = config.lock().unwrap();
         let stt_backend = cfg.stt_backend.clone();
         drop(cfg);
 
         // Try TDT backend if configured and model is available
-        if stt_backend == "tdt" && models::is_tdt_model_downloaded() {
-            let tdt_dir = config::tdt_models_dir();
+        if stt_backend == "tdt" && infrastructure::models::is_tdt_model_downloaded() {
+            let tdt_dir = app::config::tdt_models_dir();
             let tdt_path = tdt_dir.to_string_lossy().to_string();
             println!("Завантаження TDT моделі: {}", tdt_path);
             match TranscriptionService::with_tdt(&tdt_path) {
@@ -76,9 +62,9 @@ fn init_transcription_service(
 
 /// Load Whisper model from config or fallback locations.
 fn load_whisper_model(
-    config: &std::sync::Arc<std::sync::Mutex<config::Config>>,
-) -> services::TranscriptionService {
-    use services::TranscriptionService;
+    config: &std::sync::Arc<std::sync::Mutex<app::config::Config>>,
+) -> transcription::TranscriptionService {
+    use transcription::TranscriptionService;
 
     let cfg = config.lock().unwrap();
     if let Some(model_path) = find_model_path(&cfg) {
@@ -102,9 +88,9 @@ fn load_whisper_model(
 }
 
 /// Find Whisper model path from config or fallback locations.
-fn find_model_path(config: &config::Config) -> Option<String> {
-    use config::models_dir;
-    use models::get_model_path;
+fn find_model_path(config: &app::config::Config) -> Option<String> {
+    use app::config::models_dir;
+    use infrastructure::models::get_model_path;
     use std::path::PathBuf;
 
     let config_model_path = get_model_path(&config.default_model);
@@ -133,16 +119,16 @@ fn find_model_path(config: &config::Config) -> Option<String> {
 }
 
 fn run_gui() -> Result<()> {
-    use config::{load_config, sortformer_models_dir, Config};
-    use context::AppContext;
-    use diarization::DiarizationEngine;
+    use app::config::{load_config, sortformer_models_dir, Config};
+    use app::context::AppContext;
+    use transcription::diarization::DiarizationEngine;
     use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
     use gtk4::{glib, prelude::*, Application};
     use history::{load_history, save_history, History};
-    use hotkeys::HotkeyManager;
+    use infrastructure::hotkeys::HotkeyManager;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
-    use tray::{DictationTray, TrayAction};
+    use infrastructure::tray::{DictationTray, TrayAction};
 
     gtk4::init()?;
 
@@ -156,7 +142,7 @@ fn run_gui() -> Result<()> {
     let config = Arc::new(Mutex::new(config));
 
     // Ensure recordings directory exists
-    if let Err(e) = recordings::ensure_recordings_dir() {
+    if let Err(e) = infrastructure::recordings::ensure_recordings_dir() {
         eprintln!("Помилка створення директорії записів: {}", e);
     }
 

@@ -1,4 +1,4 @@
-use crate::config::{save_config, Config};
+use crate::app::config::{save_config, Config};
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton, Window,
@@ -102,7 +102,7 @@ pub fn show_settings_dialog(
     backend_combo.set_halign(Align::Start);
 
     // Check if TDT model is available
-    let tdt_available = crate::models::is_tdt_model_downloaded();
+    let tdt_available = crate::infrastructure::models::is_tdt_model_downloaded();
     if !tdt_available {
         // Disable TDT option if model not downloaded
         let info_label = Label::new(Some("(Завантажте модель TDT через меню 'Моделі' для активації)"));
@@ -156,7 +156,7 @@ pub fn show_settings_dialog(
     diarization_combo.set_halign(Align::Start);
 
     // Check if Sortformer model is available
-    let sortformer_available = crate::models::is_sortformer_model_downloaded();
+    let sortformer_available = crate::infrastructure::models::is_sortformer_model_downloaded();
     if !sortformer_available {
         diarization_combo.set_sensitive(false);
         let info_label = Label::new(Some("(Завантажте модель Sortformer через меню 'Моделі')"));

@@ -5,12 +5,12 @@
 //! - Continuous: Automatic segmentation with parallel transcription
 //! - Conference: Dual-channel (mic + loopback) with diarization
 
-use crate::audio::AudioRecorder;
-use crate::conference_recorder::ConferenceRecorder;
-use crate::continuous::ContinuousRecorder;
-use crate::traits::AudioRecording;
-use crate::types::AudioSegment;
-use crate::types::ConferenceRecording;
+use crate::recording::microphone::AudioRecorder;
+use crate::recording::conference::ConferenceRecorder;
+use crate::recording::continuous::ContinuousRecorder;
+use crate::domain::traits::AudioRecording;
+use crate::domain::types::AudioSegment;
+use crate::domain::types::ConferenceRecording;
 use crate::vad::VadEngine;
 use anyhow::Result;
 use async_channel::{Receiver, Sender};
@@ -184,7 +184,7 @@ impl AudioService {
 mod tests {
     use super::*;
     use crate::test_support::mocks::{MockAudioRecorder, MockTranscription};
-    use crate::traits::Transcription;
+    use crate::domain::traits::Transcription;
 
     #[test]
     fn test_audio_service_with_mock_recorder() {

@@ -1,4 +1,4 @@
-use crate::config::models_dir;
+use crate::app::config::models_dir;
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
 use std::fs;
@@ -204,7 +204,7 @@ pub fn get_sortformer_model_info() -> ModelInfo {
 }
 
 pub fn get_sortformer_model_path() -> PathBuf {
-    crate::config::sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx")
+    crate::app::config::sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx")
 }
 
 pub fn is_sortformer_model_downloaded() -> bool {
@@ -227,7 +227,7 @@ where
     // Download from HuggingFace (altunenes/parakeet-rs contains pre-converted ONNX models)
     let url =
         "https://huggingface.co/altunenes/parakeet-rs/resolve/main/diar_streaming_sortformer_4spk-v2.1.onnx";
-    let dir = crate::config::sortformer_models_dir();
+    let dir = crate::app::config::sortformer_models_dir();
     let filename = "diar_streaming_sortformer_4spk-v2.1.onnx";
 
     fs::create_dir_all(&dir)
@@ -325,12 +325,12 @@ pub fn get_tdt_total_size() -> u64 {
 /// Get TDT model directory path.
 #[allow(dead_code)]
 pub fn get_tdt_model_path() -> PathBuf {
-    crate::config::tdt_models_dir()
+    crate::app::config::tdt_models_dir()
 }
 
 /// Check if all TDT model files are downloaded.
 pub fn is_tdt_model_downloaded() -> bool {
-    let dir = crate::config::tdt_models_dir();
+    let dir = crate::app::config::tdt_models_dir();
     let info = get_tdt_model_info();
 
     dir.join(&info.encoder.filename).exists()
@@ -340,7 +340,7 @@ pub fn is_tdt_model_downloaded() -> bool {
 
 /// Delete all TDT model files.
 pub fn delete_tdt_model() -> Result<()> {
-    let dir = crate::config::tdt_models_dir();
+    let dir = crate::app::config::tdt_models_dir();
     let info = get_tdt_model_info();
 
     for filename in [
@@ -370,7 +370,7 @@ where
 {
     const BASE_URL: &str = "https://huggingface.co/altunenes/parakeet-rs/resolve/main/tdt/";
 
-    let dir = crate::config::tdt_models_dir();
+    let dir = crate::app::config::tdt_models_dir();
     fs::create_dir_all(&dir)
         .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
 

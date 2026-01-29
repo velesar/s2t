@@ -4,11 +4,11 @@
 //! and saving to a WAV file WITHOUT transcription.
 //! Use this mode when you want to record a meeting for later processing.
 
-use crate::context::AppContext;
-use crate::recordings::{
+use crate::app::context::AppContext;
+use crate::infrastructure::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };
-use crate::traits::UIStateUpdater;
+use crate::domain::traits::UIStateUpdater;
 use gtk4::glib;
 use std::sync::Arc;
 

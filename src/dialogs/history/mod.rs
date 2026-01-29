@@ -6,7 +6,7 @@
 mod export;
 mod list;
 
-use crate::types::SharedHistory;
+use crate::domain::types::SharedHistory;
 use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use gtk4::prelude::*;
 use gtk4::{

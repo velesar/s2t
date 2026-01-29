@@ -3,10 +3,10 @@
 //! This module handles start/stop recording for conference mode
 //! with dual-channel audio (microphone + system loopback) and diarization.
 
-use crate::context::AppContext;
+use crate::app::context::AppContext;
 use crate::history::{save_history, HistoryEntry};
-use crate::traits::{HistoryRepository, UIStateUpdater};
-use crate::recordings::{
+use crate::domain::traits::{HistoryRepository, UIStateUpdater};
+use crate::infrastructure::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };
 use gtk4::glib;
@@ -161,7 +161,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
                         // Auto-paste if enabled
                         if auto_paste_enabled {
                             std::thread::sleep(std::time::Duration::from_millis(100));
-                            if let Err(e) = crate::paste::paste_from_clipboard() {
+                            if let Err(e) = crate::infrastructure::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
                                 ui.base
                                     .set_status(&format!("Готово! (помилка вставки: {})", e));

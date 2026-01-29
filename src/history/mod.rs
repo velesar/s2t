@@ -9,7 +9,7 @@ pub use persistence::{load_history, save_history};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::traits::HistoryRepository;
+use crate::domain::traits::HistoryRepository;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct History {
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_trait_search_finds_matching_entries() {
-        use crate::traits::HistoryRepository;
+        use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
         history.add(HistoryEntry::new(
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_trait_search_returns_empty_on_no_match() {
-        use crate::traits::HistoryRepository;
+        use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
         history.add(HistoryEntry::new(
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_trait_cleanup_old_returns_removed_count() {
-        use crate::traits::HistoryRepository;
+        use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
         history.add(entry_at("old", Utc::now() - Duration::days(100)));
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_trait_trim_to_limit_returns_removed_count() {
-        use crate::traits::HistoryRepository;
+        use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
         for i in 0..10 {
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_trait_trim_to_limit_returns_zero_when_under() {
-        use crate::traits::HistoryRepository;
+        use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
         history.add(HistoryEntry::new(
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_trait_entries_matches_field() {
-        use crate::traits::HistoryRepository;
+        use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
         history.add(HistoryEntry::new(

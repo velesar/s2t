@@ -1,7 +1,7 @@
-use crate::audio::AudioRecorder;
-use crate::ring_buffer::RingBuffer;
-use crate::traits::VoiceDetection;
-use crate::types::AudioSegment;
+use crate::recording::microphone::AudioRecorder;
+use crate::recording::ring_buffer::RingBuffer;
+use crate::domain::traits::VoiceDetection;
+use crate::domain::types::AudioSegment;
 use crate::vad::{create_vad, VadConfig, VadEngine};
 use anyhow::Result;
 use async_channel::{Receiver, Sender};

@@ -91,7 +91,7 @@ impl ParakeetSTT {
 
 // === Trait Implementation ===
 
-use crate::traits::Transcription;
+use crate::domain::traits::Transcription;
 use std::path::Path;
 
 impl Transcription for ParakeetSTT {

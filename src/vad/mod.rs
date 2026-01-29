@@ -13,7 +13,7 @@ mod webrtc;
 pub use silero::SileroVoiceDetector;
 pub use webrtc::WebRtcVoiceDetector;
 
-use crate::traits::VoiceDetection;
+use crate::domain::traits::VoiceDetection;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 

@@ -4,7 +4,7 @@
 //! testing without real audio devices or Whisper models.
 
 use crate::history::HistoryEntry;
-use crate::traits::{
+use crate::domain::traits::{
     AudioDenoising, AudioRecording, ConfigProvider, HistoryRepository, Transcription,
     VoiceDetection,
 };

@@ -3,7 +3,7 @@
 //! Centralizes the mode selection and start/stop routing logic
 //! that was previously duplicated in the button handler and hotkey handler.
 
-use crate::context::AppContext;
+use crate::app::context::AppContext;
 use std::sync::Arc;
 
 use super::state::{

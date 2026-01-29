@@ -1,6 +1,6 @@
 //! History list population and row creation.
 
-use crate::types::SharedHistory;
+use crate::domain::types::SharedHistory;
 use chrono::{DateTime, Utc};
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Box as GtkBox, Button, Label, ListBox, ListBoxRow, Orientation};

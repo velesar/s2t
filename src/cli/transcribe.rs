@@ -2,11 +2,11 @@
 
 use crate::cli::args::{DiarizationMethod, OutputFormat, SttBackend, TranscribeArgs};
 use crate::cli::wav_reader::{prepare_for_whisper, read_wav, PreparedAudio};
-use crate::config::{load_config, models_dir, sortformer_models_dir, tdt_models_dir, Config};
-use crate::diarization::DiarizationEngine;
-use crate::models::{get_model_path, list_downloaded_models};
-use crate::services::TranscriptionService;
-use crate::traits::Transcription;
+use crate::app::config::{load_config, models_dir, sortformer_models_dir, tdt_models_dir, Config};
+use crate::transcription::diarization::DiarizationEngine;
+use crate::infrastructure::models::{get_model_path, list_downloaded_models};
+use crate::transcription::TranscriptionService;
+use crate::domain::traits::Transcription;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use std::fs;
@@ -340,7 +340,7 @@ fn transcribe_with_whisper(
 
 /// Channel-based diarization: transcribe left and right channels separately.
 fn transcribe_channel_diarization(
-    whisper: &crate::stt::WhisperSTT,
+    whisper: &crate::transcription::WhisperSTT,
     prepared: &PreparedAudio,
     language: &str,
     model_name: String,
@@ -398,7 +398,7 @@ fn transcribe_channel_diarization(
 
 /// Sortformer neural diarization: use Sortformer to identify speakers, then transcribe segments.
 fn transcribe_sortformer_diarization(
-    whisper: &crate::stt::WhisperSTT,
+    whisper: &crate::transcription::WhisperSTT,
     prepared: &PreparedAudio,
     language: &str,
     args: &TranscribeArgs,
@@ -548,7 +548,7 @@ fn output_result(
 
 /// List available models.
 pub fn list_models() -> Result<()> {
-    use crate::models::{format_size, get_available_models};
+    use crate::infrastructure::models::{format_size, get_available_models};
 
     let available = get_available_models();
     let downloaded = list_downloaded_models();

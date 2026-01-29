@@ -4,8 +4,8 @@
 //! supporting multiple backends (Whisper, Parakeet TDT).
 
 #[cfg(feature = "tdt")]
-use crate::stt::ParakeetSTT;
-use crate::stt::WhisperSTT;
+use crate::transcription::ParakeetSTT;
+use crate::transcription::WhisperSTT;
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -113,7 +113,7 @@ impl Default for TranscriptionService {
 
 // === Trait Implementation ===
 
-use crate::traits::Transcription;
+use crate::domain::traits::Transcription;
 
 impl Transcription for TranscriptionService {
     fn transcribe(&self, samples: &[f32], language: &str) -> Result<String> {

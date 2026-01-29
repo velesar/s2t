@@ -2,9 +2,9 @@
 //!
 //! This module handles start/stop recording for single dictation sessions.
 
-use crate::context::AppContext;
+use crate::app::context::AppContext;
 use crate::history::{save_history, HistoryEntry};
-use crate::traits::{HistoryRepository, Transcription, UIStateUpdater};
+use crate::domain::traits::{HistoryRepository, Transcription, UIStateUpdater};
 use gtk4::glib;
 use std::sync::Arc;
 
@@ -129,7 +129,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Dictation
                         if auto_paste_enabled {
                             // Small delay to ensure clipboard is ready
                             std::thread::sleep(std::time::Duration::from_millis(100));
-                            if let Err(e) = crate::paste::paste_from_clipboard() {
+                            if let Err(e) = crate::infrastructure::paste::paste_from_clipboard() {
                                 eprintln!("Помилка автоматичної вставки: {}", e);
                                 ui.base
                                     .set_status(&format!("Готово! (помилка вставки: {})", e));

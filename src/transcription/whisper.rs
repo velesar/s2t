@@ -1,4 +1,4 @@
-use crate::diarization::DiarizationEngine;
+use crate::transcription::diarization::DiarizationEngine;
 use anyhow::{Context, Result};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -188,7 +188,7 @@ impl WhisperSTT {
 
 // === Trait Implementation ===
 
-use crate::traits::Transcription;
+use crate::domain::traits::Transcription;
 
 impl Transcription for WhisperSTT {
     fn transcribe(&self, samples: &[f32], language: &str) -> anyhow::Result<String> {

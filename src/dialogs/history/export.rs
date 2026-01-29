@@ -1,6 +1,6 @@
 //! History export functionality.
 
-use crate::types::SharedHistory;
+use crate::domain::types::SharedHistory;
 use chrono::{DateTime, Utc};
 use gtk4::prelude::*;
 use gtk4::{FileChooserNative, Window};

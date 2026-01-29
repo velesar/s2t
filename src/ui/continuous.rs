@@ -3,10 +3,10 @@
 //! This module handles start/stop for continuous recording mode with
 //! automatic segmentation, parallel transcription, and ordered results.
 
-use crate::context::AppContext;
+use crate::app::context::AppContext;
 use crate::history::{save_history, HistoryEntry};
-use crate::traits::{HistoryRepository, Transcription, UIStateUpdater};
-use crate::types::AudioSegment;
+use crate::domain::traits::{HistoryRepository, Transcription, UIStateUpdater};
+use crate::domain::types::AudioSegment;
 use gtk4::prelude::*;
 use gtk4::{glib, Label};
 use std::cell::{Cell, RefCell};

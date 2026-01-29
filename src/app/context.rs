@@ -4,13 +4,13 @@
 //! point for dependency injection, breaking cyclic dependencies between
 //! main.rs, ui/, whisper.rs, and config.rs.
 
-use crate::channels::UIChannels;
-use crate::config::Config;
-use crate::diarization::DiarizationEngine;
+use crate::app::channels::UIChannels;
+use crate::app::config::Config;
+use crate::transcription::diarization::DiarizationEngine;
 use crate::history::History;
-use crate::services::audio::{AudioService, ContinuousConfig};
-use crate::services::TranscriptionService;
-use crate::traits::{ConfigProvider, Transcription};
+use crate::recording::service::{AudioService, ContinuousConfig};
+use crate::transcription::TranscriptionService;
+use crate::domain::traits::{ConfigProvider, Transcription};
 use crate::vad::VadEngine;
 use anyhow::Result;
 use std::sync::{Arc, Mutex};

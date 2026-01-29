@@ -3,7 +3,7 @@
 //! Uses the voice_activity_detector crate which bundles the Silero ONNX model.
 //! More accurate than WebRTC VAD, especially in noisy environments.
 
-use crate::traits::VoiceDetection;
+use crate::domain::traits::VoiceDetection;
 use anyhow::Result;
 use std::cell::RefCell;
 use voice_activity_detector::VoiceActivityDetector as SileroVad;
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_trait_is_speech() {
-        use crate::traits::VoiceDetection;
+        use crate::domain::traits::VoiceDetection;
 
         let vad = SileroVoiceDetector::new().unwrap();
         let silence = vec![0.0f32; SAMPLE_RATE_HZ as usize];
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_trait_reset() {
-        use crate::traits::VoiceDetection;
+        use crate::domain::traits::VoiceDetection;
 
         let vad = SileroVoiceDetector::new().unwrap();
         VoiceDetection::reset(&vad);

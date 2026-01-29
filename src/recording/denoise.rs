@@ -3,7 +3,7 @@
 //! This module provides noise suppression for cleaner speech recognition.
 //! nnnoiseless operates at 48kHz with 10ms frames (480 samples).
 
-use crate::traits::AudioDenoising;
+use crate::domain::traits::AudioDenoising;
 use anyhow::Result;
 use nnnoiseless::DenoiseState;
 use std::sync::Mutex;

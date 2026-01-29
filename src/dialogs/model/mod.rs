@@ -6,9 +6,9 @@
 mod download;
 mod list;
 
-use crate::config::Config;
-use crate::models::get_available_models;
-use crate::traits::Transcription;
+use crate::app::config::Config;
+use crate::infrastructure::models::get_available_models;
+use crate::domain::traits::Transcription;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, SelectionMode,

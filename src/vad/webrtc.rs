@@ -3,7 +3,7 @@
 //! Uses the webrtc-vad crate for energy-based VAD.
 //! Fast and lightweight, works well in quiet environments.
 
-use crate::traits::VoiceDetection;
+use crate::domain::traits::VoiceDetection;
 use anyhow::Result;
 use std::cell::RefCell;
 use webrtc_vad::{Vad, VadMode};
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_trait_is_speech_matches_inherent() {
-        use crate::traits::VoiceDetection;
+        use crate::domain::traits::VoiceDetection;
 
         let vad = WebRtcVoiceDetector::new().unwrap();
         let silence = vec![0.0f32; FRAME_SIZE_SAMPLES];
@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_trait_detect_speech_end_matches_inherent() {
-        use crate::traits::VoiceDetection;
+        use crate::domain::traits::VoiceDetection;
 
         let vad = WebRtcVoiceDetector::new().unwrap();
         let silence = vec![0.0f32; FRAME_SIZE_SAMPLES * 50];
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_trait_reset() {
-        use crate::traits::VoiceDetection;
+        use crate::domain::traits::VoiceDetection;
 
         let vad = WebRtcVoiceDetector::new().unwrap();
         VoiceDetection::reset(&vad);

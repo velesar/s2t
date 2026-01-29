@@ -209,7 +209,7 @@ pub fn save_config(config: &Config) -> Result<()> {
 
 // === Trait Implementation ===
 
-use crate::traits::ConfigProvider;
+use crate::domain::traits::ConfigProvider;
 
 impl ConfigProvider for Config {
     fn language(&self) -> String {
@@ -292,28 +292,28 @@ mod tests {
 
     #[test]
     fn test_trait_language_matches_field() {
-        use crate::traits::ConfigProvider;
+        use crate::domain::traits::ConfigProvider;
         let config = Config::default();
         assert_eq!(ConfigProvider::language(&config), config.language);
     }
 
     #[test]
     fn test_trait_default_model_matches_field() {
-        use crate::traits::ConfigProvider;
+        use crate::domain::traits::ConfigProvider;
         let config = Config::default();
         assert_eq!(ConfigProvider::default_model(&config), config.default_model);
     }
 
     #[test]
     fn test_trait_auto_copy_matches_field() {
-        use crate::traits::ConfigProvider;
+        use crate::domain::traits::ConfigProvider;
         let config = Config::default();
         assert_eq!(ConfigProvider::auto_copy(&config), config.auto_copy);
     }
 
     #[test]
     fn test_trait_recording_mode_matches_field() {
-        use crate::traits::ConfigProvider;
+        use crate::domain::traits::ConfigProvider;
         let config = Config::default();
         assert_eq!(ConfigProvider::recording_mode(&config), config.recording_mode);
     }

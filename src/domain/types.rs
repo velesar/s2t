@@ -4,7 +4,7 @@
 //! parts of the application to avoid duplication and circular dependencies.
 
 use crate::history::HistoryEntry;
-use crate::traits::HistoryRepository;
+use crate::domain::traits::HistoryRepository;
 use async_channel::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;

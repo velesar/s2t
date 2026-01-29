@@ -1,8 +1,8 @@
 //! Whisper model row creation and management.
 
 use super::{DownloadProgress, DownloadState, ModelRowContext, RowWidgets};
-use crate::config::save_config;
-use crate::models::{delete_model, download_model, format_size, get_model_path, is_model_downloaded};
+use crate::app::config::save_config;
+use crate::infrastructure::models::{delete_model, download_model, format_size, get_model_path, is_model_downloaded};
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Box as GtkBox, Button, Label, ListBoxRow, Orientation, ProgressBar};
 

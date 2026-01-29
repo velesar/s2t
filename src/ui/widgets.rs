@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::app::config::Config;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, Label, LevelBar, Orientation, ScrolledWindow, Spinner, TextView,

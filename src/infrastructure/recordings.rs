@@ -59,12 +59,12 @@ pub fn generate_recording_filename() -> String {
 
 /// Get full path for a recording file
 pub fn recording_path(filename: &str) -> PathBuf {
-    crate::config::recordings_dir().join(filename)
+    crate::app::config::recordings_dir().join(filename)
 }
 
 /// Ensure recordings directory exists
 pub fn ensure_recordings_dir() -> Result<()> {
-    let dir = crate::config::recordings_dir();
+    let dir = crate::app::config::recordings_dir();
     fs::create_dir_all(&dir)
         .with_context(|| format!("Не вдалося створити директорію записів: {}", dir.display()))?;
     Ok(())

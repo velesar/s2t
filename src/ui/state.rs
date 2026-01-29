@@ -3,8 +3,8 @@
 //! This module provides recording state, UI context structs, and
 //! recording mode selection logic.
 
-use crate::context::AppContext;
-use crate::traits::UIStateUpdater;
+use crate::app::context::AppContext;
+use crate::domain::traits::UIStateUpdater;
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Button, Label, LevelBar, Spinner, TextView};
 use std::cell::Cell;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 // Re-export AppState from types module (domain type, not UI-specific)
-pub use crate::types::AppState;
+pub use crate::domain::types::AppState;
 
 /// Recording mode selection.
 ///

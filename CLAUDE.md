@@ -39,15 +39,45 @@ cargo clippy
 
 ```
 src/
-├── main.rs           # Entry point, app orchestration
-├── ui.rs             # Main UI (needs refactoring - see docs/audit/)
-├── config.rs         # TOML configuration
-├── audio.rs          # Microphone recording
-├── whisper.rs        # Whisper STT integration
-├── history.rs        # Transcription history
-├── continuous.rs     # Continuous recording mode
-├── vad.rs            # Voice activity detection
-└── ...               # See full structure in docs/audit/
+├── main.rs               # Thin entry point, app orchestration
+│
+├── domain/               # Core contracts
+│   ├── traits.rs         # Trait definitions (AudioRecording, Transcription, etc.)
+│   └── types.rs          # AppState, AudioSegment, ConferenceRecording, SharedHistory
+│
+├── recording/            # Audio capture
+│   ├── microphone.rs     # AudioRecorder (CPAL mic input)
+│   ├── loopback.rs       # LoopbackRecorder (PipeWire system audio)
+│   ├── continuous.rs     # ContinuousRecorder + VAD segmentation
+│   ├── conference.rs     # ConferenceRecorder (mic + loopback)
+│   ├── ring_buffer.rs    # Circular buffer for streaming
+│   ├── denoise.rs        # RNNoise denoising
+│   └── service.rs        # AudioService (facade for all recorders)
+│
+├── transcription/        # Speech-to-text
+│   ├── whisper.rs        # WhisperSTT (whisper.cpp bindings)
+│   ├── tdt.rs            # ParakeetSTT (NVIDIA TDT, feature-gated)
+│   ├── service.rs        # TranscriptionService (backend abstraction)
+│   └── diarization.rs    # Speaker identification (Sortformer)
+│
+├── app/                  # Application orchestration
+│   ├── context.rs        # AppContext (DI container)
+│   ├── channels.rs       # UIChannels (event bus)
+│   └── config.rs         # Config + save/load + directory paths
+│
+├── infrastructure/       # External system adapters
+│   ├── hotkeys.rs        # Global hotkey registration
+│   ├── tray.rs           # System tray (ksni)
+│   ├── paste.rs          # xdotool paste
+│   ├── recordings.rs     # WAV file storage
+│   └── models.rs         # Model catalog, download, management
+│
+├── ui/                   # GTK user interface
+├── dialogs/              # Dialog windows (settings, models, history)
+├── vad/                  # Voice activity detection (WebRTC, Silero)
+├── history/              # Transcription history persistence
+├── cli/                  # CLI interface (transcribe, list-models)
+└── test_support/         # Test mocks
 ```
 
 ## Key Patterns

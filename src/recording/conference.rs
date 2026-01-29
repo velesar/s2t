@@ -1,6 +1,6 @@
-use crate::audio::AudioRecorder;
-use crate::loopback::LoopbackRecorder;
-use crate::types::ConferenceRecording;
+use crate::recording::microphone::AudioRecorder;
+use crate::recording::loopback::LoopbackRecorder;
+use crate::domain::types::ConferenceRecording;
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;

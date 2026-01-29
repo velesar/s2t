@@ -1,7 +1,7 @@
 //! Sortformer diarization and TDT STT model download and management.
 
 use super::DownloadProgress;
-use crate::models::{
+use crate::infrastructure::models::{
     delete_sortformer_model, delete_tdt_model, download_sortformer_model, download_tdt_model,
     format_size, get_sortformer_model_info, get_tdt_model_info, get_tdt_total_size,
     is_sortformer_model_downloaded, is_tdt_model_downloaded,
