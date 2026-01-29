@@ -4,6 +4,7 @@ mod conference_recorder;
 mod config;
 mod context;
 mod continuous;
+mod denoise;
 mod dialogs;
 mod diarization;
 mod history;

@@ -1,6 +1,6 @@
 [package]
 name = "voice-dictation"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "System tray voice dictation app using Whisper for offline speech-to-text on Linux"
 license = "MIT"
@@ -54,6 +54,12 @@ hound = "3.5"
 
 # Voice Activity Detection for continuous mode
 webrtc-vad = "0.4"
+
+# Silero VAD (neural network-based, more accurate)
+voice_activity_detector = "0.2"
+
+# Noise suppression (RNNoise-based)
+nnnoiseless = "0.5"
 
 # Speaker diarization with Sortformer
 # Note: Requires rustc 1.88+ and ort dependency

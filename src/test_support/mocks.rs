@@ -3,7 +3,7 @@
 //! These mocks implement the core traits from `crate::traits` to enable
 //! testing without real audio devices or Whisper models.
 
-use crate::traits::{AudioRecording, ConfigProvider, Transcription, VoiceDetection};
+use crate::traits::{AudioDenoising, AudioRecording, ConfigProvider, Transcription, VoiceDetection};
 use anyhow::Result;
 use async_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -248,6 +248,58 @@ impl ConfigProvider for MockConfigProvider {
     }
 }
 
+/// Mock audio denoiser for testing.
+///
+/// Can be configured to pass through audio unchanged or return
+/// specific output for testing denoising pipeline integration.
+pub struct MockDenoiser {
+    required_rate: u32,
+    passthrough: bool,
+}
+
+impl MockDenoiser {
+    /// Create a mock denoiser that passes audio through unchanged.
+    pub fn passthrough() -> Self {
+        Self {
+            required_rate: 48000,
+            passthrough: true,
+        }
+    }
+
+    /// Create a mock denoiser with specific sample rate.
+    pub fn with_sample_rate(rate: u32) -> Self {
+        Self {
+            required_rate: rate,
+            passthrough: true,
+        }
+    }
+}
+
+impl Default for MockDenoiser {
+    fn default() -> Self {
+        Self::passthrough()
+    }
+}
+
+impl AudioDenoising for MockDenoiser {
+    fn denoise(&self, samples: &[f32]) -> anyhow::Result<Vec<f32>> {
+        if self.passthrough {
+            Ok(samples.to_vec())
+        } else {
+            // Return attenuated samples to simulate denoising
+            Ok(samples.iter().map(|s| s * 0.8).collect())
+        }
+    }
+
+    fn required_sample_rate(&self) -> u32 {
+        self.required_rate
+    }
+
+    fn reset(&self) {
+        // Nothing to reset
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,26 +370,26 @@ mod tests {
 
     #[test]
     fn test_mock_voice_detector_detecting_speech() {
-        let mut vad = MockVoiceDetector::detecting_speech();
+        let vad = MockVoiceDetector::detecting_speech();
         assert!(vad.is_speech(&[0.0; 480]).unwrap());
         assert!(!vad.detect_speech_end(&[0.0; 480]).unwrap());
     }
 
     #[test]
     fn test_mock_voice_detector_silent() {
-        let mut vad = MockVoiceDetector::silent();
+        let vad = MockVoiceDetector::silent();
         assert!(!vad.is_speech(&[0.0; 480]).unwrap());
     }
 
     #[test]
     fn test_mock_voice_detector_speech_ended() {
-        let mut vad = MockVoiceDetector::speech_ended();
+        let vad = MockVoiceDetector::speech_ended();
         assert!(vad.detect_speech_end(&[0.0; 480]).unwrap());
     }
 
     #[test]
     fn test_mock_voice_detector_reset_count() {
-        let mut vad = MockVoiceDetector::silent();
+        let vad = MockVoiceDetector::silent();
         assert_eq!(vad.reset_count(), 0);
         vad.reset();
         vad.reset();
@@ -406,5 +458,35 @@ mod tests {
         assert_eq!(config.language(), "uk");
         assert_eq!(config.default_model(), "ggml-base.bin");
         assert!(config.auto_copy());
+    }
+
+    // === MockDenoiser Tests ===
+
+    #[test]
+    fn test_mock_denoiser_passthrough() {
+        let denoiser = MockDenoiser::passthrough();
+        let input = vec![0.1, 0.2, 0.3];
+        let output = denoiser.denoise(&input).unwrap();
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn test_mock_denoiser_sample_rate() {
+        let denoiser = MockDenoiser::with_sample_rate(16000);
+        assert_eq!(denoiser.required_sample_rate(), 16000);
+    }
+
+    #[test]
+    fn test_mock_denoiser_default_rate() {
+        let denoiser = MockDenoiser::passthrough();
+        assert_eq!(denoiser.required_sample_rate(), 48000);
+    }
+
+    #[test]
+    fn test_mock_denoiser_as_trait_object() {
+        let denoiser: Box<dyn AudioDenoising> = Box::new(MockDenoiser::passthrough());
+        let input = vec![0.5, 0.6, 0.7];
+        let output = denoiser.denoise(&input).unwrap();
+        assert_eq!(output, input);
     }
 }

@@ -35,6 +35,12 @@ pub struct Config {
     pub vad_silence_threshold_ms: u32,
     #[serde(default = "default_vad_min_speech_ms")]
     pub vad_min_speech_ms: u32,
+    #[serde(default = "default_denoise_enabled")]
+    pub denoise_enabled: bool,
+    #[serde(default = "default_vad_engine")]
+    pub vad_engine: String,
+    #[serde(default = "default_silero_threshold")]
+    pub silero_threshold: f32,
 }
 
 fn default_diarization_method() -> String {
@@ -59,6 +65,18 @@ fn default_vad_silence_threshold_ms() -> u32 {
 
 fn default_vad_min_speech_ms() -> u32 {
     500 // Minimum 500ms of speech for a valid segment
+}
+
+fn default_denoise_enabled() -> bool {
+    false // Disabled by default for backward compatibility
+}
+
+fn default_vad_engine() -> String {
+    "webrtc".to_string() // WebRTC VAD by default for backward compatibility
+}
+
+fn default_silero_threshold() -> f32 {
+    0.5 // Default speech probability threshold for Silero VAD
 }
 
 fn default_history_max_entries() -> usize {
@@ -108,6 +126,9 @@ impl Default for Config {
             use_vad: default_use_vad(),
             vad_silence_threshold_ms: default_vad_silence_threshold_ms(),
             vad_min_speech_ms: default_vad_min_speech_ms(),
+            denoise_enabled: default_denoise_enabled(),
+            vad_engine: default_vad_engine(),
+            silero_threshold: default_silero_threshold(),
         }
     }
 }

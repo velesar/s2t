@@ -8,9 +8,10 @@
 use crate::audio::AudioRecorder;
 use crate::conference_recorder::ConferenceRecorder;
 use crate::continuous::ContinuousRecorder;
-use crate::types::AudioSegment;
 use crate::traits::AudioRecording;
+use crate::types::AudioSegment;
 use crate::types::ConferenceRecording;
+use crate::vad::VadEngine;
 use anyhow::Result;
 use async_channel::{Receiver, Sender};
 use std::sync::Arc;
@@ -21,6 +22,8 @@ pub struct ContinuousConfig {
     pub segment_interval_secs: u32,
     pub vad_silence_threshold_ms: u32,
     pub vad_min_speech_ms: u32,
+    pub vad_engine: VadEngine,
+    pub silero_threshold: f32,
 }
 
 impl Default for ContinuousConfig {
@@ -30,6 +33,8 @@ impl Default for ContinuousConfig {
             segment_interval_secs: 10,
             vad_silence_threshold_ms: 1000,
             vad_min_speech_ms: 500,
+            vad_engine: VadEngine::WebRTC,
+            silero_threshold: 0.5,
         }
     }
 }
@@ -55,11 +60,13 @@ impl AudioService {
     ///
     /// Uses the default `AudioRecorder` for microphone capture.
     pub fn new(continuous_config: ContinuousConfig) -> Result<Self> {
-        let continuous = ContinuousRecorder::new(
+        let continuous = ContinuousRecorder::with_vad_engine(
             continuous_config.use_vad,
             continuous_config.segment_interval_secs,
             continuous_config.vad_silence_threshold_ms,
             continuous_config.vad_min_speech_ms,
+            continuous_config.vad_engine,
+            continuous_config.silero_threshold,
         )?;
 
         Ok(Self {
@@ -77,11 +84,13 @@ impl AudioService {
         mic: Arc<dyn AudioRecording>,
         continuous_config: ContinuousConfig,
     ) -> Result<Self> {
-        let continuous = ContinuousRecorder::new(
+        let continuous = ContinuousRecorder::with_vad_engine(
             continuous_config.use_vad,
             continuous_config.segment_interval_secs,
             continuous_config.vad_silence_threshold_ms,
             continuous_config.vad_min_speech_ms,
+            continuous_config.vad_engine,
+            continuous_config.silero_threshold,
         )?;
 
         Ok(Self {

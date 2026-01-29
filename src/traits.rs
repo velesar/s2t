@@ -108,6 +108,29 @@ pub trait HistoryRepository: Send + Sync {
     fn save(&self) -> Result<()>;
 }
 
+/// Audio denoising abstraction.
+///
+/// Implementors apply noise suppression to audio samples.
+/// Typical use case: RNNoise-based denoising for cleaner STT input.
+pub trait AudioDenoising: Send + Sync {
+    /// Apply noise suppression to audio samples.
+    ///
+    /// # Arguments
+    /// * `samples` - Audio samples at the required sample rate
+    ///
+    /// # Returns
+    /// Denoised audio samples
+    fn denoise(&self, samples: &[f32]) -> anyhow::Result<Vec<f32>>;
+
+    /// Get the sample rate required by this denoiser.
+    ///
+    /// Most denoisers (like RNNoise) work at a specific rate (e.g., 48kHz).
+    fn required_sample_rate(&self) -> u32;
+
+    /// Reset internal state for new recording session.
+    fn reset(&self);
+}
+
 /// Configuration provider abstraction.
 ///
 /// Implementors provide application configuration values.

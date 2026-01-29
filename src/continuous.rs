@@ -2,7 +2,7 @@ use crate::audio::AudioRecorder;
 use crate::ring_buffer::RingBuffer;
 use crate::traits::VoiceDetection;
 use crate::types::AudioSegment;
-use crate::vad::VoiceActivityDetector;
+use crate::vad::{create_vad, VadConfig, VadEngine};
 use anyhow::Result;
 use async_channel::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -20,8 +20,10 @@ pub(crate) struct ContinuousRecorder {
     last_segment_time: Arc<Mutex<Option<Instant>>>,
     segment_interval_secs: u32,
     use_vad: bool,
+    vad_engine: VadEngine,
     vad_silence_threshold_ms: u32,
     vad_min_speech_ms: u32,
+    silero_threshold: f32,
     /// Current VAD speech detection state (for UI display)
     is_speech_detected: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -34,6 +36,25 @@ impl ContinuousRecorder {
         vad_silence_threshold_ms: u32,
         vad_min_speech_ms: u32,
     ) -> Result<Self> {
+        Self::with_vad_engine(
+            use_vad,
+            segment_interval_secs,
+            vad_silence_threshold_ms,
+            vad_min_speech_ms,
+            VadEngine::WebRTC,
+            0.5,
+        )
+    }
+
+    /// Create a new continuous recorder with specific VAD engine
+    pub fn with_vad_engine(
+        use_vad: bool,
+        segment_interval_secs: u32,
+        vad_silence_threshold_ms: u32,
+        vad_min_speech_ms: u32,
+        vad_engine: VadEngine,
+        silero_threshold: f32,
+    ) -> Result<Self> {
         Ok(Self {
             recorder: Arc::new(AudioRecorder::new()),
             ring_buffer: Arc::new(RingBuffer::new_30s()),
@@ -43,8 +64,10 @@ impl ContinuousRecorder {
             last_segment_time: Arc::new(Mutex::new(None)),
             segment_interval_secs,
             use_vad,
+            vad_engine,
             vad_silence_threshold_ms,
             vad_min_speech_ms,
+            silero_threshold,
             is_speech_detected: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     }
@@ -66,8 +89,10 @@ impl ContinuousRecorder {
         let segment_counter = self.segment_counter.clone();
         let last_segment_time = self.last_segment_time.clone();
         let use_vad = self.use_vad;
+        let vad_engine = self.vad_engine;
         let vad_silence_threshold_ms = self.vad_silence_threshold_ms;
         let vad_min_speech_ms = self.vad_min_speech_ms;
+        let silero_threshold = self.silero_threshold;
         let segment_interval = Duration::from_secs(self.segment_interval_secs as u64);
         let is_speech_detected = self.is_speech_detected.clone();
 
@@ -78,10 +103,15 @@ impl ContinuousRecorder {
             let mut last_samples_len = 0;
 
             // Create VAD INSIDE thread - solves Send trait issue
-            // (webrtc_vad::Vad is not Send, so we can't pass it across thread boundaries)
-            let vad = if use_vad {
-                VoiceActivityDetector::with_thresholds(vad_silence_threshold_ms, vad_min_speech_ms)
-                    .ok()
+            // (VAD implementations are not Send, so we can't pass them across thread boundaries)
+            let vad: Option<Box<dyn VoiceDetection>> = if use_vad {
+                let config = VadConfig {
+                    engine: vad_engine,
+                    silence_threshold_ms: vad_silence_threshold_ms,
+                    min_speech_ms: vad_min_speech_ms,
+                    silero_threshold,
+                };
+                create_vad(&config).ok()
             } else {
                 None
             };

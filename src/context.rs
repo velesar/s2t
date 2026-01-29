@@ -11,6 +11,7 @@ use crate::history::History;
 use crate::services::audio::{AudioService, ContinuousConfig};
 use crate::services::TranscriptionService;
 use crate::traits::{ConfigProvider, Transcription};
+use crate::vad::VadEngine;
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
@@ -63,6 +64,8 @@ impl AppContext {
                 segment_interval_secs: cfg.segment_interval_secs,
                 vad_silence_threshold_ms: cfg.vad_silence_threshold_ms,
                 vad_min_speech_ms: cfg.vad_min_speech_ms,
+                vad_engine: VadEngine::from_str(&cfg.vad_engine),
+                silero_threshold: cfg.silero_threshold,
             }
         };
 
