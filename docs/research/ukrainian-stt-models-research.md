@@ -47,15 +47,17 @@
 |--------|-----|-----|-----------|--------|----------|
 | **NVIDIA Citrinet-1024** | 3.52-5.02% | - | 141M | NeMo | CC-BY-4.0 |
 | **FastConformer Hybrid** | 4-7.1% | - | 120M | NeMo | MIT |
+| **Parakeet TDT v3** | 5.1-6.8%* | - | 600M | ONNX | CC-BY-4.0 |
 | **W2V-BERT uk v1** | 6.6% | 1.34% | 600M | Transformers | Apache 2.0 |
 | **Whisper large-v2 uk** | ~13.72% | - | 1.5B | GGUF | Apache 2.0 |
 | **W2V-BERT uk v2.1** | 17.34% | 3.33% | 600M | Transformers | Apache 2.0 |
-| **Moonshine tiny uk** | 18.25%* | - | 27M | Transformers | MIT |
+| **Moonshine tiny uk** | 18.25%** | - | 27M | Transformers | MIT |
 | **Whisper small uk** | 27% | - | 244M | GGUF | Apache 2.0 |
 | **Whisper base (vanilla)** | 35-40% | - | 74M | GGUF | MIT |
 | **VOSK uk** | - | - | 73-345MB | Kaldi | Apache 2.0 |
 
-*Moonshine WER на FLEURS; на CV17: 26.11%
+*Parakeet TDT v3 WER: 5.10% (CoVoST), 6.79% (FLEURS)
+**Moonshine WER на FLEURS; на CV17: 26.11%
 
 ### Візуалізація WER vs Розмір
 
@@ -283,15 +285,16 @@ pub fn new(model_path: &str) -> Result<Self> {
 
 ### Матриця сумісності
 
-| Модель | whisper-rs | Transformers | NeMo | ONNX |
-|--------|------------|--------------|------|------|
-| Whisper (vanilla) | ✅ | ✅ | ❌ | ✅ |
-| Whisper fine-tuned uk | ⚠️* | ✅ | ❌ | ⚠️* |
-| W2V-BERT | ❌ | ✅ | ❌ | ⚠️ |
-| FastConformer | ❌ | ❌ | ✅ | ✅ |
-| Citrinet | ❌ | ❌ | ✅ | ✅ |
-| Moonshine | ❌ | ✅ | ❌ | ✅ |
-| VOSK | ❌ | ❌ | ❌ | ❌ (Kaldi) |
+| Модель | whisper-rs | parakeet-rs | Transformers | NeMo | ONNX |
+|--------|------------|-------------|--------------|------|------|
+| Whisper (vanilla) | ✅ | ❌ | ✅ | ❌ | ✅ |
+| Whisper fine-tuned uk | ⚠️* | ❌ | ✅ | ❌ | ⚠️* |
+| **Parakeet TDT v3** | ❌ | **✅** | ❌ | ✅ | ✅ |
+| W2V-BERT | ❌ | ❌ | ✅ | ❌ | ⚠️ |
+| FastConformer | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Citrinet | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Moonshine | ❌ | ❌ | ✅ | ❌ | ✅ |
+| VOSK | ❌ | ❌ | ❌ | ❌ | ❌ (Kaldi) |
 
 *Потребує конвертації в GGUF/GGML формат
 
@@ -363,23 +366,26 @@ use candle_transformers::models::whisper;
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    РЕКОМЕНДАЦІЯ                              │
+│                    РЕКОМЕНДАЦІЯ (оновлено 2026-01-29)        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Короткострокова перспектива (без змін архітектури):        │
+│  НАЙКРАЩИЙ ВИБІР: Parakeet TDT v3 через parakeet-rs         │
+│  → WER: 5-7% (краще ніж Whisper large-v2 uk!)               │
+│  → Punctuation + capitalization + word timestamps           │
+│  → parakeet-rs вже в проекті (Sortformer)                   │
+│  → Зміни: додати TDT feature, новий backend                 │
+│                                                             │
+│  Альтернатива (мінімальні зміни):                           │
 │  → Whisper large-v2 uk (GGML конвертований)                 │
 │  → WER: ~13.72% (vs 35-40% vanilla)                         │
 │  → Зміни: тільки замінити модель                            │
 │                                                             │
-│  Середньострокова перспектива (ONNX інтеграція):            │
-│  → W2V-BERT uk v1                                           │
-│  → WER: 6.6%                                                │
-│  → Зміни: додати ort, новий STT backend                     │
-│                                                             │
-│  Довгострокова перспектива (edge optimization):             │
+│  Для edge devices:                                          │
 │  → Moonshine tiny uk                                        │
 │  → WER: 18.25%, але 5-15x швидше                            │
 │  → Зміни: ONNX + custom preprocessing                       │
+│                                                             │
+│  Див. docs/research/parakeet-rs-models-research.md          │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```

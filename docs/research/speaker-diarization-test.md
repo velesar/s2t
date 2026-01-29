@@ -157,9 +157,12 @@ parakeet-rs = { version = "0.3", features = ["sortformer", "cuda"] }
 ```
 
 **Моделі (HuggingFace):**
-- `nvidia/diar_streaming_sortformer_4spk-v2` — streaming, 4 speakers
-- `nvidia/diar_streaming_sortformer_4spk-v2.1` — покращена версія
+- ONNX версії: [altunenes/parakeet-rs](https://huggingface.co/altunenes/parakeet-rs)
+  - `diar_streaming_sortformer_4spk-v2.onnx` (492 MB)
+  - `diar_streaming_sortformer_4spk-v2.1.onnx` (492 MB)
 - Ліцензія моделей: **CC-BY-4.0** (NVIDIA)
+
+**Примітка:** NVIDIA репозиторій містить тільки NeMo формат, ONNX версії доступні в altunenes/parakeet-rs.
 
 **Код для тестування:**
 ```rust
