@@ -1,5 +1,6 @@
 mod audio;
 mod channels;
+mod cli;
 mod conference_recorder;
 mod config;
 mod context;
@@ -25,22 +26,26 @@ mod vad;
 mod whisper;
 
 use anyhow::Result;
-use config::{load_config, models_dir, sortformer_models_dir, Config};
-use context::AppContext;
-use diarization::DiarizationEngine;
-use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
-use gtk4::{glib, prelude::*, Application};
-use history::{load_history, save_history, History};
-use hotkeys::HotkeyManager;
-use models::get_model_path;
-use services::TranscriptionService;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use tray::{DictationTray, TrayAction};
+use clap::Parser;
 
 const APP_ID: &str = "ua.voice.dictation";
 
-fn find_model_path(config: &Config) -> Option<String> {
+fn main() -> Result<()> {
+    let cli = cli::Cli::parse();
+
+    match cli.command {
+        Some(cli::Commands::Transcribe(args)) => cli::transcribe::run(args),
+        Some(cli::Commands::Models) => cli::transcribe::list_models(),
+        None => run_gui(),
+    }
+}
+
+/// Find Whisper model path from config or fallback locations.
+fn find_model_path(config: &config::Config) -> Option<String> {
+    use config::models_dir;
+    use models::get_model_path;
+    use std::path::PathBuf;
+
     let config_model_path = get_model_path(&config.default_model);
     if config_model_path.exists() {
         return Some(config_model_path.to_string_lossy().to_string());
@@ -51,10 +56,10 @@ fn find_model_path(config: &Config) -> Option<String> {
         dirs::home_dir()
             .map(|p| p.join(".local/share/whisper/ggml-base.bin"))
             .unwrap_or_default(),
-        std::path::PathBuf::from("ggml-base.bin"),
-        std::path::PathBuf::from("models/ggml-base.bin"),
-        std::path::PathBuf::from("/usr/share/whisper/ggml-base.bin"),
-        std::path::PathBuf::from("/usr/local/share/whisper/ggml-base.bin"),
+        PathBuf::from("ggml-base.bin"),
+        PathBuf::from("models/ggml-base.bin"),
+        PathBuf::from("/usr/share/whisper/ggml-base.bin"),
+        PathBuf::from("/usr/local/share/whisper/ggml-base.bin"),
     ];
 
     for path in fallback_paths {
@@ -66,7 +71,19 @@ fn find_model_path(config: &Config) -> Option<String> {
     None
 }
 
-fn main() -> Result<()> {
+fn run_gui() -> Result<()> {
+    use config::{load_config, sortformer_models_dir, Config};
+    use context::AppContext;
+    use diarization::DiarizationEngine;
+    use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
+    use gtk4::{glib, prelude::*, Application};
+    use history::{load_history, save_history, History};
+    use hotkeys::HotkeyManager;
+    use services::TranscriptionService;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+    use tray::{DictationTray, TrayAction};
+
     gtk4::init()?;
 
     let config = load_config().unwrap_or_else(|e| {
