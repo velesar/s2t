@@ -684,6 +684,7 @@ mod conference_recorder;
 | P1 | Tame UI state hotspot | ✅ `UIStateUpdater` trait + `AppState` moved |
 | P2 | Fix tray duplication | ✅ Uses `ctx.transcription.clone()` |
 | P3 | Decompose oversized dialog modules | ✅ Split into subdirectories |
+| P3 | AudioRecording trait for AudioService | ✅ `Arc<dyn AudioRecording>` + `with_recorder()` |
 
 ### Remaining Recommendations
 
@@ -705,14 +706,14 @@ mod conference_recorder;
 2. Change `show_model_dialog(Arc<Mutex<TranscriptionService>>)` to accept `Arc<Mutex<dyn Transcription>>`
 3. Update `show_settings_dialog` to accept `dyn ConfigProvider`
 
-#### Priority 3: AudioRecording Trait for AudioService
+#### ~~Priority 3: AudioRecording Trait for AudioService~~ ✅ DONE
 
-**Goal:** Enable audio service testing with mocks.
-
-**Steps:**
-1. Create `impl AudioRecording for AudioRecorder`
-2. Update `AudioService` to use `Box<dyn AudioRecording>` internally
-3. Add constructor accepting trait object for testing
+**Status:** Already implemented:
+- `impl AudioRecording for AudioRecorder` — `audio.rs:188-204`
+- `AudioService.mic: Arc<dyn AudioRecording>` — `services/audio.rs:46`
+- `AudioService::with_recorder()` constructor — `services/audio.rs:76-92`
+- `MockAudioRecorder` — `test_support/mocks.rs:15-78`
+- Tests using mock injection — `services/audio.rs:181-241`
 
 #### Priority 4: Enforce Layer Boundaries (Long-term)
 
@@ -770,7 +771,7 @@ The Voice Dictation application (v0.2.0) has achieved a significant architectura
 |----------|------|--------|
 | P1 | Decompose history.rs (689 LOC) | Medium |
 | P2 | Trait-ify dialog dependencies | Medium |
-| P3 | AudioRecording trait for AudioService | Low |
+| P3 | ~~AudioRecording trait for AudioService~~ | ✅ Done |
 | P4 | Layer boundary enforcement | High (optional) |
 | P5 | Split settings.rs | Low |
 
