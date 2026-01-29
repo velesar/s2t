@@ -4,7 +4,7 @@ use crate::services::TranscriptionService;
 use async_channel::Sender;
 use ksni::{
     menu::{StandardItem, SubMenu},
-    MenuItem, Tray, TrayService,
+    MenuItem, Tray, TrayMethods,
 };
 use std::sync::{Arc, Mutex};
 
@@ -36,15 +36,12 @@ impl DictationTray {
         }
     }
 
-    pub fn spawn_service(
+    pub async fn spawn_service(
         tx: Sender<TrayAction>,
         config: Arc<Mutex<Config>>,
         transcription: Arc<Mutex<TranscriptionService>>,
-    ) -> ksni::Handle<Self> {
-        let tray_service = TrayService::new(Self::new(tx, config, transcription));
-        let handle = tray_service.handle();
-        tray_service.spawn();
-        handle
+    ) -> Result<ksni::Handle<Self>, ksni::Error> {
+        Self::new(tx, config, transcription).spawn().await
     }
 
     fn select_model(&mut self, filename: &str) {

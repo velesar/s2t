@@ -156,8 +156,24 @@ fn main() -> Result<()> {
     );
 
     let (tray_tx, tray_rx) = async_channel::unbounded();
-    let tray_handle =
-        DictationTray::spawn_service(tray_tx, config.clone(), ctx.transcription.clone());
+
+    // Spawn tray in background thread with its own tokio runtime (ksni 0.3 is async)
+    let config_for_tray = config.clone();
+    let transcription_for_tray = ctx.transcription.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime for tray");
+        rt.block_on(async {
+            match DictationTray::spawn_service(tray_tx, config_for_tray, transcription_for_tray)
+                .await
+            {
+                Ok(_handle) => {
+                    // Keep running until app exits
+                    std::future::pending::<()>().await;
+                }
+                Err(e) => eprintln!("Failed to start system tray: {}", e),
+            }
+        });
+    });
 
     let app = Application::builder().application_id(APP_ID).build();
 
@@ -263,7 +279,6 @@ fn main() -> Result<()> {
     });
 
     app.run();
-    tray_handle.shutdown();
 
     Ok(())
 }
