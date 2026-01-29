@@ -1,13 +1,12 @@
 pub mod conference;
 pub mod conference_file;
-pub mod continuous;
+pub mod mic;
 mod dispatch;
-pub mod recording;
 pub mod state;
 mod widgets;
 
 use dispatch::ModeUIs;
-use state::{ConferenceUI, ContinuousUI, DictationUI, RecordingContext, UIContext};
+use state::{ConferenceUI, MicUI, RecordingContext, UIContext};
 use widgets::build_main_widgets;
 
 use crate::app::context::AppContext;
@@ -69,23 +68,21 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
         w.timer_label.clone(),
         w.spinner.clone(),
     );
-    let dictation_ui = DictationUI::new(ui_ctx.clone(), w.level_bar.clone());
-    let conference_ui = ConferenceUI::new(
+    let mic_ui = MicUI::new(
         ui_ctx.clone(),
-        w.mic_level_bar.clone(),
-        w.loopback_level_bar.clone(),
-    );
-    let continuous_ui = ContinuousUI::new(
-        ui_ctx,
         w.level_bar.clone(),
         w.vad_indicator.clone(),
         w.segment_indicators_box.clone(),
         w.segment_row.clone(),
     );
+    let conference_ui = ConferenceUI::new(
+        ui_ctx,
+        w.mic_level_bar.clone(),
+        w.loopback_level_bar.clone(),
+    );
 
     let mode_uis = ModeUIs {
-        dictation: dictation_ui.clone(),
-        continuous: continuous_ui.clone(),
+        mic: mic_ui.clone(),
         conference: conference_ui.clone(),
     };
 
@@ -189,8 +186,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let ctx_for_hotkey = ctx.clone();
     let rec_ctx_for_hotkey = rec_ctx.clone();
     let mode_uis_for_hotkey = ModeUIs {
-        dictation: dictation_ui.clone(),
-        continuous: continuous_ui.clone(),
+        mic: mic_ui.clone(),
         conference: conference_ui.clone(),
     };
     let mode_combo_for_hotkey = w.mode_combo.clone();
@@ -214,7 +210,7 @@ fn setup_record_button(
     mode_uis: ModeUIs,
     mode_combo: gtk4::ComboBoxText,
 ) {
-    let button = mode_uis.dictation.base.button.clone();
+    let button = mode_uis.mic.base.button.clone();
     button.connect_clicked(move |_| {
         dispatch::toggle_recording(&ctx, &rec_ctx, &mode_uis, &mode_combo);
     });

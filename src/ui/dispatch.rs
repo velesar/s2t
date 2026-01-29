@@ -6,16 +6,13 @@
 use crate::app::context::AppContext;
 use std::sync::Arc;
 
-use super::state::{
-    AppState, ConferenceUI, ContinuousUI, DictationUI, RecordingContext, RecordingMode,
-};
-use super::{conference, conference_file, continuous, recording};
+use super::state::{AppState, ConferenceUI, MicUI, RecordingContext, RecordingMode};
+use super::{conference, conference_file, mic};
 
 /// All mode-specific UI types bundled for dispatch.
 #[derive(Clone)]
 pub struct ModeUIs {
-    pub dictation: DictationUI,
-    pub continuous: ContinuousUI,
+    pub mic: MicUI,
     pub conference: ConferenceUI,
 }
 
@@ -48,8 +45,7 @@ fn start_recording(
     mode: RecordingMode,
 ) {
     match mode {
-        RecordingMode::Dictation => recording::handle_start(ctx, rec, &uis.dictation),
-        RecordingMode::Continuous => continuous::handle_start(ctx, rec, &uis.continuous),
+        RecordingMode::Mic => mic::handle_start(ctx, rec, &uis.mic),
         RecordingMode::Conference => conference::handle_start(ctx, rec, &uis.conference),
         RecordingMode::ConferenceFile => conference_file::handle_start(ctx, rec, &uis.conference),
     }
@@ -62,8 +58,7 @@ fn stop_recording(
     mode: RecordingMode,
 ) {
     match mode {
-        RecordingMode::Dictation => recording::handle_stop(ctx, rec, &uis.dictation),
-        RecordingMode::Continuous => continuous::handle_stop(ctx, rec, &uis.continuous),
+        RecordingMode::Mic => mic::handle_stop(ctx, rec, &uis.mic),
         RecordingMode::Conference => conference::handle_stop(ctx, rec, &uis.conference),
         RecordingMode::ConferenceFile => conference_file::handle_stop(ctx, rec, &uis.conference),
     }

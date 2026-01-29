@@ -11,15 +11,17 @@ use crate::domain::traits::{
 use anyhow::Result;
 use async_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Mock audio recorder for testing.
 ///
 /// Returns predefined samples and tracks recording state.
+/// Provides a shared samples buffer for service-level testing.
 pub struct MockAudioRecorder {
     is_recording: AtomicBool,
     samples_to_return: Mutex<Vec<f32>>,
     amplitude: f32,
+    samples_buffer: Arc<Mutex<Vec<f32>>>,
 }
 
 impl MockAudioRecorder {
@@ -29,6 +31,7 @@ impl MockAudioRecorder {
             is_recording: AtomicBool::new(false),
             samples_to_return: Mutex::new(vec![0.0; 16000]),
             amplitude: 0.5,
+            samples_buffer: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -38,6 +41,7 @@ impl MockAudioRecorder {
             is_recording: AtomicBool::new(false),
             samples_to_return: Mutex::new(samples),
             amplitude: 0.5,
+            samples_buffer: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -47,7 +51,13 @@ impl MockAudioRecorder {
             is_recording: AtomicBool::new(false),
             samples_to_return: Mutex::new(vec![0.0; 16000]),
             amplitude,
+            samples_buffer: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+
+    /// Get the shared samples buffer (for AudioService test constructor).
+    pub fn samples_buffer(&self) -> Arc<Mutex<Vec<f32>>> {
+        self.samples_buffer.clone()
     }
 
     /// Set samples to be returned on next stop().

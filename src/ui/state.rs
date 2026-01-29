@@ -18,12 +18,12 @@ pub use crate::domain::types::AppState;
 /// Recording mode selection.
 ///
 /// Determines which recording handler and UI widgets to use.
+/// Mic mode covers both dictation and segmented (continuous) recording —
+/// segmentation is a configuration option, not a separate mode.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum RecordingMode {
-    /// Single recording session with transcription
-    Dictation,
-    /// Automatic segmentation with parallel transcription
-    Continuous,
+    /// Microphone recording (dictation or segmented depending on config)
+    Mic,
     /// Dual-channel (mic + loopback) with diarization
     Conference,
     /// Dual-channel recording to file only (no transcription)
@@ -31,22 +31,12 @@ pub enum RecordingMode {
 }
 
 impl RecordingMode {
-    /// Resolve the current recording mode from UI state and config.
-    ///
-    /// The mode combo selects between Dictation, Conference, and ConferenceFile.
-    /// When Dictation is selected but continuous mode is enabled in config,
-    /// Continuous mode is used instead.
-    pub fn resolve(mode_combo: &gtk4::ComboBoxText, ctx: &Arc<AppContext>) -> Self {
+    /// Resolve the current recording mode from UI combo box.
+    pub fn resolve(mode_combo: &gtk4::ComboBoxText, _ctx: &Arc<AppContext>) -> Self {
         match mode_combo.active() {
             Some(1) => RecordingMode::Conference,
             Some(2) => RecordingMode::ConferenceFile,
-            _ => {
-                if ctx.continuous_mode() {
-                    RecordingMode::Continuous
-                } else {
-                    RecordingMode::Dictation
-                }
-            }
+            _ => RecordingMode::Mic,
         }
     }
 }
@@ -187,43 +177,21 @@ impl UIStateUpdater for UIContext {
     }
 }
 
-/// Dictation mode specific UI widgets
+/// Microphone mode UI widgets (covers both dictation and segmented recording).
+///
+/// Segmentation-specific widgets (VAD indicator, segment indicators) are
+/// hidden when not in segmented mode.
 #[derive(Clone)]
-pub struct DictationUI {
+pub struct MicUI {
     pub base: UIContext,
     pub level_bar: LevelBar,
-}
-
-impl DictationUI {
-    pub fn new(base: UIContext, level_bar: LevelBar) -> Self {
-        Self { base, level_bar }
-    }
-
-    pub fn show_level_bar(&self) {
-        self.level_bar.set_value(0.0);
-        self.level_bar.set_visible(true);
-    }
-
-    pub fn hide_level_bar(&self) {
-        self.level_bar.set_visible(false);
-    }
-
-    pub fn update_level(&self, amplitude: f64) {
-        self.level_bar.set_value(amplitude);
-    }
-}
-
-/// Continuous mode specific UI widgets
-#[derive(Clone)]
-pub struct ContinuousUI {
-    pub base: UIContext,
-    pub level_bar: LevelBar,
+    // Segmentation-specific (hidden when not segmenting)
     pub vad_indicator: Label,
     pub segment_indicators_box: GtkBox,
     pub segment_row: GtkBox,
 }
 
-impl ContinuousUI {
+impl MicUI {
     pub fn new(
         base: UIContext,
         level_bar: LevelBar,
@@ -240,17 +208,29 @@ impl ContinuousUI {
         }
     }
 
-    pub fn show_recording_ui(&self) {
+    pub fn show_level_bar(&self) {
         self.level_bar.set_value(0.0);
         self.level_bar.set_visible(true);
+    }
+
+    pub fn hide_level_bar(&self) {
+        self.level_bar.set_visible(false);
+    }
+
+    pub fn update_level(&self, amplitude: f64) {
+        self.level_bar.set_value(amplitude);
+    }
+
+    /// Show segmentation-specific UI (VAD indicator + segment row).
+    pub fn show_segmentation_ui(&self) {
         self.vad_indicator.set_text("🔇 Тиша");
         self.vad_indicator.set_visible(true);
         self.clear_segment_indicators();
         self.segment_row.set_visible(true);
     }
 
-    pub fn hide_recording_ui(&self) {
-        self.level_bar.set_visible(false);
+    /// Hide segmentation-specific UI.
+    pub fn hide_segmentation_ui(&self) {
         self.vad_indicator.set_visible(false);
     }
 
@@ -258,10 +238,6 @@ impl ContinuousUI {
         while let Some(child) = self.segment_indicators_box.first_child() {
             self.segment_indicators_box.remove(&child);
         }
-    }
-
-    pub fn update_level(&self, amplitude: f64) {
-        self.level_bar.set_value(amplitude);
     }
 
     pub fn update_vad_indicator(&self, is_speech: bool) {

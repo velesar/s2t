@@ -8,7 +8,8 @@ use crate::app::channels::UIChannels;
 use crate::app::config::Config;
 use crate::transcription::diarization::DiarizationEngine;
 use crate::history::History;
-use crate::recording::service::{AudioService, ContinuousConfig};
+use crate::recording::service::AudioService;
+use crate::recording::segmentation::SegmentationConfig;
 use crate::transcription::TranscriptionService;
 use crate::domain::traits::{ConfigProvider, Transcription};
 use crate::vad::VadEngine;
@@ -57,9 +58,9 @@ impl AppContext {
         transcription: TranscriptionService,
         diarization: DiarizationEngine,
     ) -> Result<Self> {
-        let continuous_config = {
+        let seg_config = {
             let cfg = config.lock().unwrap();
-            ContinuousConfig {
+            SegmentationConfig {
                 use_vad: cfg.use_vad,
                 segment_interval_secs: cfg.segment_interval_secs,
                 vad_silence_threshold_ms: cfg.vad_silence_threshold_ms,
@@ -70,7 +71,7 @@ impl AppContext {
         };
 
         let audio =
-            AudioService::new(continuous_config).unwrap_or_else(|_| AudioService::new_default());
+            AudioService::new(seg_config).unwrap_or_else(|_| AudioService::new_default());
 
         Ok(Self {
             audio: Arc::new(audio),
