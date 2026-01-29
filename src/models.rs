@@ -197,7 +197,7 @@ pub fn get_sortformer_model_info() -> ModelInfo {
     ModelInfo {
         filename: "diar_streaming_sortformer_4spk-v2.1.onnx".to_string(),
         display_name: "Sortformer v2.1 (4 speakers)".to_string(),
-        size_bytes: 50_000_000, // ~50MB
+        size_bytes: 492_000_000, // ~492MB
         description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)"
             .to_string(),
     }
@@ -224,9 +224,9 @@ pub async fn download_sortformer_model<F>(progress_callback: F) -> Result<()>
 where
     F: Fn(u64, u64) + Send + 'static,
 {
-    // Download from HuggingFace
+    // Download from HuggingFace (altunenes/parakeet-rs contains pre-converted ONNX models)
     let url =
-        "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1/resolve/main/model.onnx";
+        "https://huggingface.co/altunenes/parakeet-rs/resolve/main/diar_streaming_sortformer_4spk-v2.1.onnx";
     let dir = crate::config::sortformer_models_dir();
     let filename = "diar_streaming_sortformer_4spk-v2.1.onnx";
 
