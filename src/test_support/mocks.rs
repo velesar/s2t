@@ -3,7 +3,11 @@
 //! These mocks implement the core traits from `crate::traits` to enable
 //! testing without real audio devices or Whisper models.
 
-use crate::traits::{AudioDenoising, AudioRecording, ConfigProvider, Transcription, VoiceDetection};
+use crate::history::HistoryEntry;
+use crate::traits::{
+    AudioDenoising, AudioRecording, ConfigProvider, HistoryRepository, Transcription,
+    VoiceDetection,
+};
 use anyhow::Result;
 use async_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -297,6 +301,92 @@ impl AudioDenoising for MockDenoiser {
 
     fn reset(&self) {
         // Nothing to reset
+    }
+}
+
+/// Mock history repository for testing.
+///
+/// Stores entries in-memory without persistence.
+pub struct MockHistoryRepository {
+    entries: Vec<HistoryEntry>,
+}
+
+impl MockHistoryRepository {
+    /// Create an empty mock history.
+    pub fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+}
+
+impl Default for MockHistoryRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HistoryRepository for MockHistoryRepository {
+    type Entry = HistoryEntry;
+
+    fn add(&mut self, entry: HistoryEntry) {
+        self.entries.insert(0, entry);
+    }
+
+    fn entries(&self) -> &[HistoryEntry] {
+        &self.entries
+    }
+
+    fn search(&self, query: &str) -> Vec<&HistoryEntry> {
+        let query_lower = query.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|e| e.text.to_lowercase().contains(&query_lower))
+            .collect()
+    }
+
+    fn cleanup_old(&mut self, _max_age_days: u32) -> usize {
+        0
+    }
+
+    fn trim_to_limit(&mut self, max_entries: usize) -> usize {
+        if self.entries.len() <= max_entries {
+            return 0;
+        }
+        let removed = self.entries.len() - max_entries;
+        self.entries.truncate(max_entries);
+        removed
+    }
+
+    fn save(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn remove(&mut self, id: &str) {
+        self.entries.retain(|e| e.id != id);
+    }
+
+    fn filter_by_date_range(
+        &self,
+        from: Option<chrono::DateTime<chrono::Utc>>,
+        to: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Vec<&HistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| {
+                if let Some(start) = from {
+                    if e.timestamp < start {
+                        return false;
+                    }
+                }
+                if let Some(end) = to {
+                    if e.timestamp > end {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect()
     }
 }
 

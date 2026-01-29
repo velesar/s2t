@@ -1,23 +1,22 @@
 //! History list population and row creation.
 
-use crate::history::{save_history, History};
+use crate::types::SharedHistory;
 use chrono::{DateTime, Utc};
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Box as GtkBox, Button, Label, ListBox, ListBoxRow, Orientation};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 
 /// Context for creating history rows, reducing parameter count
 struct HistoryRowContext {
-    history: Arc<Mutex<History>>,
+    history: SharedHistory,
     list_box: ListBox,
     search_query: Rc<RefCell<String>>,
 }
 
 pub fn populate_list(
     list_box: &ListBox,
-    history: Arc<Mutex<History>>,
+    history: SharedHistory,
     search_query: &Rc<RefCell<String>>,
     date_from: &Rc<RefCell<Option<DateTime<Utc>>>>,
     date_to: &Rc<RefCell<Option<DateTime<Utc>>>>,
@@ -135,7 +134,7 @@ fn create_history_row(
         {
             let mut h = history_for_delete.lock().unwrap();
             h.remove(&id_owned);
-            if let Err(e) = save_history(&h) {
+            if let Err(e) = h.save() {
                 eprintln!("Помилка збереження історії: {}", e);
             }
         }

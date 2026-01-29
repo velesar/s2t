@@ -1,16 +1,15 @@
 //! History export functionality.
 
-use crate::history::History;
+use crate::types::SharedHistory;
 use chrono::{DateTime, Utc};
 use gtk4::prelude::*;
 use gtk4::{FileChooserNative, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 
 pub fn export_history(
     parent: &Window,
-    history: Arc<Mutex<History>>,
+    history: SharedHistory,
     search_query: &Rc<RefCell<String>>,
     date_from: &Rc<RefCell<Option<DateTime<Utc>>>>,
     date_to: &Rc<RefCell<Option<DateTime<Utc>>>>,

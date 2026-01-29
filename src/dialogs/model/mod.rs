@@ -8,7 +8,7 @@ mod list;
 
 use crate::config::Config;
 use crate::models::get_available_models;
-use crate::services::TranscriptionService;
+use crate::traits::Transcription;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, SelectionMode,
@@ -30,7 +30,7 @@ type RowWidgetsMap = Rc<RefCell<HashMap<String, RowWidgets>>>;
 /// Context for creating model rows, reducing parameter count
 struct ModelRowContext {
     config: Arc<Mutex<Config>>,
-    transcription: Arc<Mutex<TranscriptionService>>,
+    transcription: Arc<Mutex<dyn Transcription>>,
     download_states: Rc<RefCell<HashMap<String, DownloadState>>>,
     row_widgets: RowWidgetsMap,
 }
@@ -50,7 +50,7 @@ enum DownloadProgress {
 pub fn show_model_dialog(
     parent: &impl IsA<Window>,
     config: Arc<Mutex<Config>>,
-    transcription: Arc<Mutex<TranscriptionService>>,
+    transcription: Arc<Mutex<dyn Transcription>>,
 ) {
     let dialog = Window::builder()
         .title("Керування моделями")

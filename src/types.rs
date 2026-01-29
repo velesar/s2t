@@ -3,8 +3,17 @@
 //! This module contains common data structures that are used by multiple
 //! parts of the application to avoid duplication and circular dependencies.
 
+use crate::history::HistoryEntry;
+use crate::traits::HistoryRepository;
 use async_channel::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+/// Shared history storage as a trait object.
+///
+/// Used by dialogs and UI components that need access to history
+/// through the `HistoryRepository` trait abstraction.
+pub type SharedHistory = Arc<Mutex<dyn HistoryRepository<Entry = HistoryEntry>>>;
 
 /// Application state for recording modes.
 ///

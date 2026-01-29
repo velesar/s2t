@@ -8,6 +8,7 @@
 
 use anyhow::Result;
 use async_channel::Receiver;
+use chrono::{DateTime, Utc};
 use std::path::Path;
 
 /// Audio recording abstraction.
@@ -106,6 +107,16 @@ pub trait HistoryRepository: Send + Sync {
 
     /// Persist to storage.
     fn save(&self) -> Result<()>;
+
+    /// Remove an entry by its ID.
+    fn remove(&mut self, id: &str);
+
+    /// Filter entries by date range (inclusive).
+    fn filter_by_date_range(
+        &self,
+        from: Option<DateTime<Utc>>,
+        to: Option<DateTime<Utc>>,
+    ) -> Vec<&Self::Entry>;
 }
 
 /// Audio denoising abstraction.

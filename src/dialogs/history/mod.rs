@@ -6,7 +6,7 @@
 mod export;
 mod list;
 
-use crate::history::History;
+use crate::types::SharedHistory;
 use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use gtk4::prelude::*;
 use gtk4::{
@@ -15,9 +15,8 @@ use gtk4::{
 };
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 
-pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History>>) {
+pub fn show_history_dialog(parent: &impl IsA<Window>, history: SharedHistory) {
     let dialog = Window::builder()
         .title("Історія диктовок")
         .modal(true)

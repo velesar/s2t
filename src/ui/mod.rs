@@ -12,14 +12,16 @@ use widgets::build_main_widgets;
 
 use crate::context::AppContext;
 use crate::dialogs::{show_history_dialog, show_model_dialog, show_settings_dialog};
+use crate::traits::Transcription;
+use crate::types::SharedHistory;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Button, TextView};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let config = ctx.config.clone();
-    let history = ctx.history.clone();
-    let transcription = ctx.transcription.clone();
+    let history: SharedHistory = ctx.history.clone();
+    let transcription: Arc<Mutex<dyn Transcription>> = ctx.transcription.clone();
 
     let open_models_rx = ctx.channels.open_models_rx().clone();
     let open_history_rx = ctx.channels.open_history_rx().clone();

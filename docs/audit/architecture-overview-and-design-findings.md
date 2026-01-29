@@ -679,27 +679,27 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 | V1 | Traits defined but not implemented | ✅ **RESOLVED** | All 6 traits now have production + mock impls |
 | V2 | Tray bypasses AppContext | ✅ **RESOLVED** | Uses `ctx.transcription.clone()` now |
 | V3 | AppContext leaks internals (`config_arc()`, `history_arc()`) | ✅ **RESOLVED** | Removed; uses trait convenience methods |
-| V4 | Dialogs use concrete types | ⚠️ REMAINING | dialogs/* → `Config`, `History`, `TranscriptionService` directly |
+| V4 | Dialogs use concrete types | ✅ **PARTIAL** | history → `dyn HistoryRepository` ✅; model → `dyn Transcription` ✅; settings → `Config` (acceptable) |
 | V5 | AudioService partial concrete deps | ✅ **PARTIAL** | `mic: Arc<dyn AudioRecording>` ✅; `conference`/`continuous` still concrete |
 | V6 | No layer enforcement | ⚠️ REMAINING | 26 flat `mod` in main.rs, no crate boundaries |
-| V7 | CLI inner functions use concrete types | ⚠️ NEW | `transcribe_with_whisper(&TranscriptionService)`, not `&dyn Transcription` |
+| V7 | CLI inner functions use concrete types | ✅ **ACCEPTABLE** | Composition root + Whisper-specific API (diarization needs `WhisperSTT` directly) |
 
-#### V4 Detail: Dialog Concrete Types
+#### V4 Detail: Dialog Concrete Types (Partially Resolved)
 
-All three dialog entry points accept concrete types:
+Two of three dialog entry points now use trait objects:
 
 ```rust
-// dialogs/history/mod.rs:20
-pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History>>)
+// dialogs/history/mod.rs — ✅ RESOLVED: uses SharedHistory (dyn HistoryRepository)
+pub fn show_history_dialog(parent: &impl IsA<Window>, history: SharedHistory)
 
-// dialogs/model/mod.rs:50-54
+// dialogs/model/mod.rs — ✅ RESOLVED: uses dyn Transcription
 pub fn show_model_dialog(
     parent: &impl IsA<Window>,
     config: Arc<Mutex<Config>>,
-    transcription: Arc<Mutex<TranscriptionService>>,
+    transcription: Arc<Mutex<dyn Transcription>>,
 )
 
-// dialogs/settings.rs:8-12
+// dialogs/settings.rs — ACCEPTABLE: Config has 12+ field read/write + save
 pub fn show_settings_dialog(
     parent: &impl IsA<Window>,
     config: Arc<Mutex<Config>>,
@@ -707,7 +707,8 @@ pub fn show_settings_dialog(
 )
 ```
 
-**Impact:** Dialogs cannot be tested with mock implementations.
+**History and Model dialogs** can now be tested with mock implementations.
+**Settings dialog** remains concrete because it reads/writes 12+ Config fields directly. A `ConfigProvider` trait with 30+ getters/setters + save would be over-engineering.
 
 #### V5 Detail: AudioService (Partially Resolved)
 
@@ -724,21 +725,20 @@ pub struct AudioService {
 
 **Status:** ✅ Resolved for practical purposes. No further action needed.
 
-#### V7 Detail: CLI Inner Functions
+#### V7 Detail: CLI Inner Functions (Acceptable)
 
-CLI `run()` is a valid **composition root** — creating concrete types there is correct. However, inner helper functions should accept trait bounds:
+CLI `run()` is a valid **composition root** — creating concrete types there is correct. Inner helper functions use concrete types:
 
 ```rust
-// cli/transcribe.rs — CURRENT (concrete types)
+// cli/transcribe.rs — concrete types (acceptable)
 fn transcribe_with_whisper(service: &TranscriptionService, ...) -> Result<TranscriptionResult>
 fn transcribe_channel_diarization(whisper: &crate::whisper::WhisperSTT, ...) -> Result<TranscriptionResult>
-
-// SHOULD BE (trait bounds)
-fn transcribe_with_whisper(service: &dyn Transcription, ...) -> Result<TranscriptionResult>
-fn transcribe_channel_diarization(service: &dyn Transcription, ...) -> Result<TranscriptionResult>
 ```
 
-**Impact:** CLI helper functions are tightly coupled to concrete implementations, preventing unit testing.
+**Why this is acceptable:**
+- `transcribe_with_whisper` calls `service.whisper()` to get a `WhisperSTT` with its own `transcribe(samples, Option<&str>)` signature (different from the `Transcription` trait's `transcribe(samples, &str)`)
+- Diarization functions genuinely need the concrete `WhisperSTT` API for channel splitting and Sortformer integration
+- `run()` is a composition root where concrete types are expected
 
 ### Target Layer Flow
 
@@ -754,7 +754,7 @@ Presentation → Application → Domain ← Infrastructure
 
 ## Architecture Fitness Assessment
 
-### Overall Score: 4.2 / 5.0 (↑ from 4.0)
+### Overall Score: 4.4 / 5.0 (↑ from 4.2)
 
 | Fitness Function | Score | Status | Details |
 |-----------------|-------|--------|---------|
@@ -946,9 +946,11 @@ pub fn is_model_loaded(&self) -> bool {
 | `AudioRecording` | — | — | `TestRecorder` |
 | `Transcription` | `WhisperSTT`, `ParakeetSTT`, `TranscriptionService` | `MockTranscription` | — |
 | `VoiceDetection` | `VoiceActivityDetector` | `MockVoiceDetector` | — |
-| `HistoryRepository` | `History` | — | — |
+| `HistoryRepository` | `History` | `MockHistoryRepository` | — |
 | `ConfigProvider` | `Config` | `MockConfigProvider` | — |
 | `UIStateUpdater` | `UIContext` | — | — |
+
+**Dialog trait adoption:** History and Model dialogs now accept trait objects (`SharedHistory`, `Arc<Mutex<dyn Transcription>>`), enabling mock-based testing.
 
 ### 4. UI Module Split + Dispatch Pattern
 
@@ -1014,29 +1016,23 @@ Consistent use of `anyhow::Result` with `.context()` for error propagation throu
 
 ### Remaining Issues
 
-#### 1. Dialogs Use Concrete Types (V4) — High Priority
+#### ~~1. Dialogs Use Concrete Types (V4)~~ — Partially Resolved ✅
 
-**Problem:** All three dialog entry points accept concrete infrastructure types instead of trait bounds. This is the most significant remaining architectural violation.
+**Resolved:**
+- `dialogs/history/mod.rs` → `SharedHistory` (= `Arc<Mutex<dyn HistoryRepository<Entry = HistoryEntry>>>`) ✅
+- `dialogs/model/mod.rs` → `Arc<Mutex<dyn Transcription>>` ✅
+- `ModelRowContext` in `model/list.rs` → `Arc<Mutex<dyn Transcription>>` ✅
 
-**Affected files:**
-- `dialogs/history/mod.rs` → `Arc<Mutex<History>>` (should be `Arc<Mutex<dyn HistoryRepository>>`)
-- `dialogs/model/mod.rs` → `Arc<Mutex<Config>>`, `Arc<Mutex<TranscriptionService>>` (should be `dyn ConfigProvider`, `dyn Transcription`)
-- `dialogs/settings.rs` → `Arc<Mutex<Config>>` (should be `dyn ConfigProvider`)
+**Acceptable (not changed):**
+- `dialogs/settings.rs` → `Arc<Mutex<Config>>` — reads/writes 12+ fields directly plus `save_config()`. A trait with 30+ getters/setters would be over-engineering.
 
-**Impact:** Dialogs cannot be tested with mock implementations. All dialog tests require real `History`, `Config`, and `TranscriptionService` instances.
+**New type alias:** `SharedHistory` defined in `types.rs` for cleaner signatures.
 
-**Note:** `ModelRowContext` internal struct in `model/list.rs` also holds concrete types, propagating the violation deeper.
+**Mock support:** `MockHistoryRepository` added to `test_support/mocks.rs`.
 
-#### 2. CLI Inner Functions Use Concrete Types (V7) — Medium Priority
+#### ~~2. CLI Inner Functions Use Concrete Types (V7)~~ — Reclassified as Acceptable ✅
 
-**Problem:** While `cli/transcribe.rs::run()` is a valid composition root, its helper functions accept concrete types:
-
-```rust
-fn transcribe_with_whisper(service: &TranscriptionService, ...) -> Result<TranscriptionResult>
-fn transcribe_channel_diarization(whisper: &crate::whisper::WhisperSTT, ...) -> Result<TranscriptionResult>
-```
-
-**Impact:** CLI pipeline stages cannot be unit-tested with mock STT backends.
+**Status:** Acceptable. CLI inner functions genuinely need Whisper-specific API for diarization (channel splitting, Sortformer integration). `run()` is a valid composition root.
 
 #### 3. history.rs Size (689 LOC) — Medium Priority
 
@@ -1078,37 +1074,16 @@ mod conference_recorder;
 |----------|------|--------|
 | P0 | Complete trait adoption | ✅ All 6 traits implemented |
 | P1 | Tame UI state hotspot | ✅ `UIStateUpdater` trait + `AppState` moved |
+| P1 | Trait-ify dialog dependencies (V4) | ✅ History → `SharedHistory`, Model → `dyn Transcription`; Settings acceptable |
 | P2 | Fix tray duplication | ✅ Uses `ctx.transcription.clone()` |
+| P2 | Reclassify CLI inner functions (V7) | ✅ Acceptable — composition root + Whisper-specific API |
 | P3 | Decompose oversized dialog modules | ✅ Split into subdirectories |
 | P3 | AudioRecording trait for AudioService | ✅ `Arc<dyn AudioRecording>` + `with_recorder()` |
 | P4 | Capability-based architecture | ✅ Multi-backend STT, CLI pipeline, constraint validation |
 
 ### Remaining Recommendations
 
-#### Priority 1: Trait-ify Dialog Dependencies (V4)
-
-**Goal:** Enable dialog testing with mocks. Addresses the most impactful remaining violation.
-
-**Steps:**
-1. Change `show_history_dialog(Arc<Mutex<History>>)` to accept `Arc<Mutex<dyn HistoryRepository>>`
-2. Change `show_model_dialog(Arc<Mutex<TranscriptionService>>)` to accept `Arc<Mutex<dyn Transcription>>`
-3. Change `show_settings_dialog(Arc<Mutex<Config>>)` to accept `Arc<Mutex<dyn ConfigProvider>>`
-4. Update `ModelRowContext` internal struct in `model/list.rs` to use trait objects
-
-**Challenge:** GTK4 dialog code often needs concrete methods not on the trait (e.g., `Config::save()`). May require extending trait surfaces or using a **dialog context** pattern that bundles both read (trait) and write (concrete) access.
-
-#### Priority 2: Trait-ify CLI Inner Functions (V7)
-
-**Goal:** Enable unit testing of CLI pipeline stages with mock STT backends.
-
-**Steps:**
-1. Change `transcribe_with_whisper(service: &TranscriptionService)` → `transcribe_with_backend(service: &dyn Transcription)`
-2. Change `transcribe_channel_diarization(whisper: &WhisperSTT)` → accept `&dyn Transcription`
-3. Keep `run()` as composition root creating concrete types (correct pattern)
-
-**Benefit:** Enables testing CLI pipeline logic without loading actual Whisper/TDT models.
-
-#### Priority 3: Decompose history.rs (689 LOC)
+#### Priority 1: Decompose history.rs (689 LOC)
 
 **Goal:** Keep modules under 500 LOC guideline.
 
@@ -1117,7 +1092,7 @@ mod conference_recorder;
 2. Keep core `History` struct and `HistoryRepository` impl in `history.rs`
 3. Consider `history_export.rs` for serialization logic
 
-#### Priority 4: Group Infrastructure Modules (V6)
+#### Priority 2: Group Infrastructure Modules (V6)
 
 **Goal:** Organize flat modules into capability-aligned directories.
 
@@ -1142,7 +1117,7 @@ src/
 
 **Risk:** Module renames break imports across the crate. This is a refactoring-only change with high churn and should only be done when the module set stabilizes.
 
-#### Priority 5: Split settings.rs (374 LOC)
+#### Priority 3: Split settings.rs (374 LOC)
 
 **Goal:** Improve maintainability as capability options grow.
 
@@ -1205,19 +1180,19 @@ The Voice Dictation application (v0.3.0) has evolved into a **Capability-Based A
 
 | Priority | Task | Violation | Effort |
 |----------|------|-----------|--------|
-| P1 | Trait-ify dialog dependencies | V4 | Medium |
-| P2 | Trait-ify CLI inner functions | V7 | Low |
-| P3 | Decompose history.rs (689 LOC) | — | Medium |
-| P4 | Group infrastructure modules | V6 | High (churn risk) |
-| P5 | Split settings.rs | — | Low |
-| P6 | Post-processing capability (punctuation, caps) | — | Medium |
+| ~~P1~~ | ~~Trait-ify dialog dependencies~~ | ~~V4~~ | ✅ Done (history + model); settings acceptable |
+| ~~P2~~ | ~~Trait-ify CLI inner functions~~ | ~~V7~~ | ✅ Reclassified as acceptable |
+| P1 | Decompose history.rs (689 LOC) | — | Medium |
+| P2 | Group infrastructure modules | V6 | High (churn risk) |
+| P3 | Split settings.rs | — | Low |
+| P4 | Post-processing capability (punctuation, caps) | — | Medium |
 
-**Overall Architecture Rating:** 8.0/10 (up from 7.5)
+**Overall Architecture Rating:** 8.5/10 (up from 8.0)
 
 The architecture now provides:
 - **Flexibility** — Mix and match capabilities via CLI or config
 - **Extensibility** — New backends/capabilities can be added without modifying core
-- **Testability** — All traits have mock implementations
+- **Testability** — All traits have mock implementations; dialogs accept trait objects
 - **Performance visibility** — JSON metrics enable systematic comparison
 
-The main remaining technical debt is module size (history.rs) and concrete type dependencies in dialogs. The capability model provides a clear path for future extensions like post-processing.
+The main remaining technical debt is module size (history.rs at 689 LOC). Dialog concrete type violations are resolved (history, model) or accepted as pragmatic (settings). The capability model provides a clear path for future extensions like post-processing.

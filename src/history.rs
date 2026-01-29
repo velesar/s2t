@@ -80,10 +80,6 @@ pub struct History {
 }
 
 impl History {
-    pub fn remove(&mut self, id: &str) {
-        self.entries.retain(|e| e.id != id);
-    }
-
     /// Trim history to max_entries, keeping newest
     pub fn trim_to_limit(&mut self, max_entries: usize) {
         if self.entries.len() > max_entries {
@@ -95,30 +91,6 @@ impl History {
     pub fn cleanup_old_entries(&mut self, max_age_days: i64) {
         let cutoff = Utc::now() - Duration::days(max_age_days);
         self.entries.retain(|e| e.timestamp > cutoff);
-    }
-
-    /// Filter entries by date range (inclusive)
-    pub fn filter_by_date_range(
-        &self,
-        start_date: Option<DateTime<Utc>>,
-        end_date: Option<DateTime<Utc>>,
-    ) -> Vec<&HistoryEntry> {
-        self.entries
-            .iter()
-            .filter(|e| {
-                if let Some(start) = start_date {
-                    if e.timestamp < start {
-                        return false;
-                    }
-                }
-                if let Some(end) = end_date {
-                    if e.timestamp > end {
-                        return false;
-                    }
-                }
-                true
-            })
-            .collect()
     }
 }
 
@@ -237,6 +209,33 @@ impl HistoryRepository for History {
 
     fn save(&self) -> Result<()> {
         save_history(self)
+    }
+
+    fn remove(&mut self, id: &str) {
+        self.entries.retain(|e| e.id != id);
+    }
+
+    fn filter_by_date_range(
+        &self,
+        from: Option<DateTime<Utc>>,
+        to: Option<DateTime<Utc>>,
+    ) -> Vec<&HistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| {
+                if let Some(start) = from {
+                    if e.timestamp < start {
+                        return false;
+                    }
+                }
+                if let Some(end) = to {
+                    if e.timestamp > end {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect()
     }
 }
 
