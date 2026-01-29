@@ -16,7 +16,7 @@ mod paste;
 mod recordings;
 mod ring_buffer;
 mod services;
-mod tdt;
+mod stt;
 #[cfg(test)]
 mod test_support;
 mod traits;
@@ -24,7 +24,6 @@ mod tray;
 mod types;
 mod ui;
 mod vad;
-mod whisper;
 
 use anyhow::Result;
 use clap::Parser;

@@ -307,7 +307,7 @@ pub struct UIChannels {
 
 ## Module Structure
 
-### Module Overview (52 files, ~9,000 LOC)
+### Module Overview (53 files, ~9,000 LOC)
 
 ```
 src/
@@ -365,11 +365,14 @@ src/
 │   ├── persistence.rs        (120 LOC)   load/save/path functions
 │   └── export.rs             ( 88 LOC)   export_to_text function
 │
+├── stt/                      STT backends (grouped from flat whisper.rs + tdt.rs)
+│   ├── mod.rs                ( 13 LOC)   Re-exports WhisperSTT, ParakeetSTT
+│   ├── whisper.rs            (210 LOC)   Whisper STT (impl Transcription)
+│   └── tdt.rs                (124 LOC)   Parakeet TDT STT (impl Transcription)
+│
 ├── config.rs                 (282 LOC)   TOML config (impl ConfigProvider)
 ├── audio.rs                  (279 LOC)   Microphone recording (CPAL)
-├── whisper.rs                (210 LOC)   Whisper STT (impl Transcription)
-├── tdt.rs                    (124 LOC)   Parakeet TDT STT (impl Transcription) ← NEW
-├── denoise.rs                (211 LOC)   nnnoiseless audio denoising ← NEW
+├── denoise.rs                (211 LOC)   nnnoiseless audio denoising
 ├── continuous.rs             (247 LOC)   Continuous recording mode
 ├── conference_recorder.rs    ( 69 LOC)   Conference mode coordinator
 ├── diarization.rs            (111 LOC)   Speaker diarization (Sortformer)
@@ -393,7 +396,7 @@ src/
 | **Services** | services/* (3 files) | ~370 | Service facades (audio, transcription) |
 | **Audio** | audio.rs, continuous.rs, conference_recorder.rs, ring_buffer.rs, loopback.rs, recordings.rs, denoise.rs | ~1,140 | Audio capture and processing |
 | **VAD** | vad/* (3 files) | ~560 | Voice activity detection (WebRTC + Silero) ← RESTRUCTURED |
-| **Speech** | whisper.rs, tdt.rs, diarization.rs | ~445 | STT backends (Whisper, TDT) + diarization |
+| **Speech** | stt/* (3 files), diarization.rs | ~445 | STT backends (Whisper, TDT) + diarization |
 | **System** | tray.rs, hotkeys.rs, paste.rs | ~350 | OS integration |
 | **Data** | history/*, config.rs, models.rs | ~1,430 | Persistence, model management |
 | **Test** | test_support/* (2 files) | ~415 | Mock implementations for all 6 traits |
@@ -590,7 +593,7 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 | traits.rs | 1 | 10+ | 0.09 | **Maximally Stable** | 6 traits, widely used |
 | types.rs | 0 | 8+ | 0.00 | Stable | AppState enum |
 | history.rs | 2 | 8 | 0.20 | Stable | impl HistoryRepository |
-| whisper.rs | 2 | 6 | 0.25 | Stable | impl Transcription |
+| stt/whisper.rs | 2 | 6 | 0.25 | Stable | impl Transcription |
 | vad.rs | 2 | 4 | 0.33 | Stable | impl VoiceDetection |
 | context.rs | 6 | 10+ | 0.38 | Moderate | Uses trait methods |
 | services/transcription.rs | 3 | 4 | 0.43 | Moderate | impl Transcription |
@@ -654,9 +657,10 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 ├─────────────────────────────────────────────────────────────────────────┤
 │                       INFRASTRUCTURE LAYER                              │
 │                                                                         │
-│  STT Backends (Capability: STT)                                         │
-│  ├── whisper.rs — WhisperSTT (impl Transcription)                      │
-│  └── tdt.rs — ParakeetSTT (impl Transcription) ← NEW                   │
+│  STT Backends (Capability: STT) — grouped in stt/                       │
+│  ├── stt/mod.rs — Re-exports WhisperSTT, ParakeetSTT                   │
+│  ├── stt/whisper.rs — WhisperSTT (impl Transcription)                  │
+│  └── stt/tdt.rs — ParakeetSTT (impl Transcription)                     │
 │                                                                         │
 │  Audio Processing (Capabilities: VAD, Denoising)                        │
 │  ├── audio.rs — AudioRecorder (CPAL)                                    │
@@ -686,7 +690,7 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 | V3 | AppContext leaks internals (`config_arc()`, `history_arc()`) | ✅ **RESOLVED** | Removed; uses trait convenience methods |
 | V4 | Dialogs use concrete types | ✅ **PARTIAL** | history → `dyn HistoryRepository` ✅; model → `dyn Transcription` ✅; settings → `Config` (acceptable) |
 | V5 | AudioService partial concrete deps | ✅ **PARTIAL** | `mic: Arc<dyn AudioRecording>` ✅; `conference`/`continuous` still concrete |
-| V6 | No layer enforcement | ⚠️ REMAINING | 26 flat `mod` in main.rs, no crate boundaries |
+| V6 | No layer enforcement | ⚠️ PARTIAL | 25 flat `mod` in main.rs (STT grouped into stt/), no crate boundaries |
 | V7 | CLI inner functions use concrete types | ✅ **ACCEPTABLE** | Composition root + Whisper-specific API (diarization needs `WhisperSTT` directly) |
 
 #### V4 Detail: Dialog Concrete Types (Partially Resolved)
@@ -737,7 +741,7 @@ CLI `run()` is a valid **composition root** — creating concrete types there is
 ```rust
 // cli/transcribe.rs — concrete types (acceptable)
 fn transcribe_with_whisper(service: &TranscriptionService, ...) -> Result<TranscriptionResult>
-fn transcribe_channel_diarization(whisper: &crate::whisper::WhisperSTT, ...) -> Result<TranscriptionResult>
+fn transcribe_channel_diarization(whisper: &crate::stt::WhisperSTT, ...) -> Result<TranscriptionResult>
 ```
 
 **Why this is acceptable:**
@@ -881,8 +885,8 @@ if matches!(args.backend, SttBackend::Tdt)
 | `AppContext` | context.rs | Low | Central DI, uses trait polymorphism |
 | `UIContext` | ui/state.rs | Low (improved) | Implements `UIStateUpdater` trait |
 | `TranscriptionService` | services/transcription.rs | Low | Implements `Transcription` trait |
-| `WhisperSTT` | whisper.rs | Low | Implements `Transcription` trait |
-| `ParakeetSTT` | tdt.rs | Low | Implements `Transcription` trait ← NEW |
+| `WhisperSTT` | stt/whisper.rs | Low | Implements `Transcription` trait |
+| `ParakeetSTT` | stt/tdt.rs | Low | Implements `Transcription` trait |
 
 ### Complexity Hotspots (Current)
 
@@ -1045,19 +1049,13 @@ Consistent use of `anyhow::Result` with `.context()` for error propagation throu
 
 **Status:** Decomposed into `src/history/` directory module with 4 files (mod.rs: 427, entry.rs: 145, persistence.rs: 120, export.rs: 88). All files under 500 LOC guideline.
 
-#### 4. Flat Module Hierarchy (V6) — Low Priority
+#### 4. Flat Module Hierarchy (V6) — Partially Resolved
 
-**Problem:** 26 modules declared as flat siblings in `main.rs`. Rust's module system prevents import cycles, but semantic layer boundaries are not enforced.
+**Problem:** 25 modules declared as flat siblings in `main.rs` (was 26). Rust's module system prevents import cycles, but semantic layer boundaries are not enforced.
 
-```rust
-mod audio;
-mod channels;
-mod cli;
-mod conference_recorder;
-// ... 22 more flat mods
-```
+**Resolved:** STT backends (`whisper.rs`, `tdt.rs`) grouped into `stt/` directory module.
 
-**Mitigation:** Some natural grouping exists (`cli/`, `ui/`, `dialogs/`, `vad/`, `services/`), but infrastructure modules (`whisper.rs`, `tdt.rs`, `denoise.rs`, `diarization.rs`) are ungrouped.
+**Remaining:** Infrastructure modules (`denoise.rs`, `diarization.rs`) are still ungrouped. Further grouping (e.g., audio/) should wait until the module set stabilizes — see architecture doc recommendations.
 
 #### 5. settings.rs Growing (374 LOC) — Low Priority
 
@@ -1099,30 +1097,30 @@ mod conference_recorder;
 
 All files under 500 LOC guideline. All 139 tests pass.
 
-#### Priority 2: Group Infrastructure Modules (V6)
+#### Priority 2: Group Infrastructure Modules (V6) — Partially Done
 
 **Goal:** Organize flat modules into capability-aligned directories.
 
-**Current:** 26 flat modules in `main.rs`.
+**Done:** STT backends grouped into `stt/` directory (whisper.rs, tdt.rs → stt/whisper.rs, stt/tdt.rs). Flat module count: 26 → 25.
 
-**Proposed grouping:**
+**Remaining grouping (when module set stabilizes):**
 ```
 src/
-├── stt/                    # STT capability providers
+├── stt/                    # ✅ Done
 │   ├── whisper.rs
 │   ├── tdt.rs
 │   └── mod.rs
-├── audio/                  # Audio capability providers
+├── audio/                  # Future — high churn (7+ files)
 │   ├── capture.rs          # (was audio.rs)
 │   ├── denoise.rs
 │   ├── loopback.rs
 │   └── mod.rs
-├── diarization/            # Diarization capability
+├── diarization/            # Future — single file, low value
 │   ├── sortformer.rs       # (was diarization.rs)
 │   └── mod.rs
 ```
 
-**Risk:** Module renames break imports across the crate. This is a refactoring-only change with high churn and should only be done when the module set stabilizes.
+**Risk:** Further module renames break imports across the crate. Audio grouping touches 7+ files with cross-dependencies — should only be done when the module set stabilizes.
 
 #### Priority 3: Split settings.rs (374 LOC)
 
@@ -1171,7 +1169,7 @@ The Voice Dictation application (v0.3.0) has evolved into a **Capability-Based A
 | Domain traits wired | ✅ All 6 traits implemented |
 | Constraint validation | ✅ **NEW** (TDT + diarization blocked) |
 | VAD module restructure | ✅ **NEW** (webrtc.rs + silero.rs) |
-| Layer enforcement | ⚠️ Partial (flat hierarchy, but traits reduce coupling) |
+| Layer enforcement | ⚠️ Partial (STT grouped into stt/; remaining flat modules, but traits reduce coupling) |
 
 ### Performance Benchmarks (v0.3.0)
 
@@ -1190,7 +1188,7 @@ The Voice Dictation application (v0.3.0) has evolved into a **Capability-Based A
 | ~~P1~~ | ~~Trait-ify dialog dependencies~~ | ~~V4~~ | ✅ Done (history + model); settings acceptable |
 | ~~P2~~ | ~~Trait-ify CLI inner functions~~ | ~~V7~~ | ✅ Reclassified as acceptable |
 | ~~P1~~ | ~~Decompose history.rs (689 LOC)~~ | — | ✅ Done (split into history/ directory) |
-| P1 | Group infrastructure modules | V6 | High (churn risk) |
+| P1 | Group infrastructure modules | V6 | ✅ Partial (STT grouped); remaining: audio, diarization |
 | P3 | Split settings.rs | — | Low |
 | P4 | Post-processing capability (punctuation, caps) | — | Medium |
 
@@ -1202,4 +1200,4 @@ The architecture now provides:
 - **Testability** — All traits have mock implementations; dialogs accept trait objects
 - **Performance visibility** — JSON metrics enable systematic comparison
 
-The main remaining technical debt is the flat module hierarchy (V6). Module size issues are resolved — `history.rs` (689 LOC) has been decomposed into the `history/` directory module. Dialog concrete type violations are resolved (history, model) or accepted as pragmatic (settings). The capability model provides a clear path for future extensions like post-processing.
+The main remaining technical debt is the partially flat module hierarchy (V6). STT backends have been grouped into the `stt/` directory module (25 flat mods, down from 26). Module size issues are resolved — `history.rs` (689 LOC) has been decomposed into the `history/` directory module. Dialog concrete type violations are resolved (history, model) or accepted as pragmatic (settings). The capability model provides a clear path for future extensions like post-processing.

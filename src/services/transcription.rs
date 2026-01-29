@@ -4,8 +4,8 @@
 //! supporting multiple backends (Whisper, Parakeet TDT).
 
 #[cfg(feature = "tdt")]
-use crate::tdt::ParakeetSTT;
-use crate::whisper::WhisperSTT;
+use crate::stt::ParakeetSTT;
+use crate::stt::WhisperSTT;
 use anyhow::{Context, Result};
 use std::path::Path;
 

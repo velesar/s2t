@@ -340,7 +340,7 @@ fn transcribe_with_whisper(
 
 /// Channel-based diarization: transcribe left and right channels separately.
 fn transcribe_channel_diarization(
-    whisper: &crate::whisper::WhisperSTT,
+    whisper: &crate::stt::WhisperSTT,
     prepared: &PreparedAudio,
     language: &str,
     model_name: String,
@@ -398,7 +398,7 @@ fn transcribe_channel_diarization(
 
 /// Sortformer neural diarization: use Sortformer to identify speakers, then transcribe segments.
 fn transcribe_sortformer_diarization(
-    whisper: &crate::whisper::WhisperSTT,
+    whisper: &crate::stt::WhisperSTT,
     prepared: &PreparedAudio,
     language: &str,
     args: &TranscribeArgs,
