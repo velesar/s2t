@@ -1,4 +1,5 @@
 pub mod conference;
+pub mod conference_file;
 pub mod continuous;
 mod dispatch;
 pub mod recording;
@@ -41,15 +42,16 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let level_bars_box_clone = w.level_bars_box.clone();
     let config_for_mode = config.clone();
     w.mode_combo.connect_changed(move |combo| {
-        let is_conference = combo.active() == Some(1);
-        level_bar_clone.set_visible(!is_conference);
-        level_bars_box_clone.set_visible(is_conference);
+        // Conference modes (1 and 2) show dual level bars, dictation (0) shows single
+        let is_conference_mode = matches!(combo.active(), Some(1) | Some(2));
+        level_bar_clone.set_visible(!is_conference_mode);
+        level_bars_box_clone.set_visible(is_conference_mode);
 
         let mut cfg = config_for_mode.lock().unwrap();
-        cfg.recording_mode = if is_conference {
-            "conference".to_string()
-        } else {
-            "dictation".to_string()
+        cfg.recording_mode = match combo.active() {
+            Some(1) => "conference".to_string(),
+            Some(2) => "conference_file".to_string(),
+            _ => "dictation".to_string(),
         };
         if let Err(e) = crate::config::save_config(&cfg) {
             eprintln!("Помилка збереження режиму: {}", e);

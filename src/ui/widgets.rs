@@ -58,13 +58,16 @@ pub fn build_main_widgets(config: &Arc<Mutex<Config>>) -> MainWidgets {
     let mode_combo = gtk4::ComboBoxText::new();
     mode_combo.append_text("Диктовка");
     mode_combo.append_text("Конференція");
+    mode_combo.append_text("Запис у файл");
     mode_combo.set_active(Some(0));
     mode_combo.set_halign(Align::Start);
 
     let current_mode = {
         let cfg = config.lock().unwrap();
-        if cfg.recording_mode == "conference" {
-            mode_combo.set_active(Some(1));
+        match cfg.recording_mode.as_str() {
+            "conference" => mode_combo.set_active(Some(1)),
+            "conference_file" => mode_combo.set_active(Some(2)),
+            _ => {}
         }
         cfg.recording_mode.clone()
     };
@@ -155,8 +158,10 @@ pub fn build_main_widgets(config: &Arc<Mutex<Config>>) -> MainWidgets {
     record_button.add_css_class("pill");
 
     // Set initial visibility based on saved mode
-    level_bar.set_visible(current_mode != "conference");
-    level_bars_box.set_visible(current_mode == "conference");
+    // Both conference modes use dual level bars
+    let is_conference_mode = current_mode == "conference" || current_mode == "conference_file";
+    level_bar.set_visible(!is_conference_mode);
+    level_bars_box.set_visible(is_conference_mode);
 
     // Action buttons (signal wiring done by caller)
     let copy_button = Button::with_label("Копіювати");

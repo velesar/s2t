@@ -26,22 +26,27 @@ pub enum RecordingMode {
     Continuous,
     /// Dual-channel (mic + loopback) with diarization
     Conference,
+    /// Dual-channel recording to file only (no transcription)
+    ConferenceFile,
 }
 
 impl RecordingMode {
     /// Resolve the current recording mode from UI state and config.
     ///
-    /// The mode combo selects between Dictation and Conference.
+    /// The mode combo selects between Dictation, Conference, and ConferenceFile.
     /// When Dictation is selected but continuous mode is enabled in config,
     /// Continuous mode is used instead.
     pub fn resolve(mode_combo: &gtk4::ComboBoxText, ctx: &Arc<AppContext>) -> Self {
-        let is_conference = mode_combo.active() == Some(1);
-        if is_conference {
-            RecordingMode::Conference
-        } else if ctx.continuous_mode() {
-            RecordingMode::Continuous
-        } else {
-            RecordingMode::Dictation
+        match mode_combo.active() {
+            Some(1) => RecordingMode::Conference,
+            Some(2) => RecordingMode::ConferenceFile,
+            _ => {
+                if ctx.continuous_mode() {
+                    RecordingMode::Continuous
+                } else {
+                    RecordingMode::Dictation
+                }
+            }
         }
     }
 }

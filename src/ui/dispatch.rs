@@ -9,7 +9,7 @@ use std::sync::Arc;
 use super::state::{
     AppState, ConferenceUI, ContinuousUI, DictationUI, RecordingContext, RecordingMode,
 };
-use super::{conference, continuous, recording};
+use super::{conference, conference_file, continuous, recording};
 
 /// All mode-specific UI types bundled for dispatch.
 #[derive(Clone)]
@@ -51,6 +51,7 @@ fn start_recording(
         RecordingMode::Dictation => recording::handle_start(ctx, rec, &uis.dictation),
         RecordingMode::Continuous => continuous::handle_start(ctx, rec, &uis.continuous),
         RecordingMode::Conference => conference::handle_start(ctx, rec, &uis.conference),
+        RecordingMode::ConferenceFile => conference_file::handle_start(ctx, rec, &uis.conference),
     }
 }
 
@@ -64,5 +65,6 @@ fn stop_recording(
         RecordingMode::Dictation => recording::handle_stop(ctx, rec, &uis.dictation),
         RecordingMode::Continuous => continuous::handle_stop(ctx, rec, &uis.continuous),
         RecordingMode::Conference => conference::handle_stop(ctx, rec, &uis.conference),
+        RecordingMode::ConferenceFile => conference_file::handle_stop(ctx, rec, &uis.conference),
     }
 }
