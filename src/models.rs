@@ -277,6 +277,153 @@ where
     Ok(())
 }
 
+// TDT model management
+
+/// TDT model file information.
+#[derive(Debug, Clone)]
+pub struct TdtModelFiles {
+    pub encoder: ModelInfo,
+    pub decoder: ModelInfo,
+    pub vocab: ModelInfo,
+}
+
+/// Get TDT model file information.
+///
+/// TDT model consists of three files (INT8 versions for smaller size):
+/// - encoder-model.int8.onnx (652 MB)
+/// - decoder_joint-model.int8.onnx (18 MB)
+/// - vocab.txt (94 KB)
+pub fn get_tdt_model_info() -> TdtModelFiles {
+    TdtModelFiles {
+        encoder: ModelInfo {
+            filename: "encoder-model.int8.onnx".to_string(),
+            display_name: "TDT Encoder (INT8)".to_string(),
+            size_bytes: 652_000_000,
+            description: "Parakeet TDT encoder model".to_string(),
+        },
+        decoder: ModelInfo {
+            filename: "decoder_joint-model.int8.onnx".to_string(),
+            display_name: "TDT Decoder (INT8)".to_string(),
+            size_bytes: 18_200_000,
+            description: "Parakeet TDT decoder model".to_string(),
+        },
+        vocab: ModelInfo {
+            filename: "vocab.txt".to_string(),
+            display_name: "TDT Vocabulary".to_string(),
+            size_bytes: 94_000,
+            description: "Parakeet TDT vocabulary".to_string(),
+        },
+    }
+}
+
+/// Get total TDT model size in bytes.
+pub fn get_tdt_total_size() -> u64 {
+    let info = get_tdt_model_info();
+    info.encoder.size_bytes + info.decoder.size_bytes + info.vocab.size_bytes
+}
+
+/// Get TDT model directory path.
+#[allow(dead_code)]
+pub fn get_tdt_model_path() -> PathBuf {
+    crate::config::tdt_models_dir()
+}
+
+/// Check if all TDT model files are downloaded.
+pub fn is_tdt_model_downloaded() -> bool {
+    let dir = crate::config::tdt_models_dir();
+    let info = get_tdt_model_info();
+
+    dir.join(&info.encoder.filename).exists()
+        && dir.join(&info.decoder.filename).exists()
+        && dir.join(&info.vocab.filename).exists()
+}
+
+/// Delete all TDT model files.
+pub fn delete_tdt_model() -> Result<()> {
+    let dir = crate::config::tdt_models_dir();
+    let info = get_tdt_model_info();
+
+    for filename in [
+        &info.encoder.filename,
+        &info.decoder.filename,
+        &info.vocab.filename,
+    ] {
+        let path = dir.join(filename);
+        if path.exists() {
+            fs::remove_file(&path)
+                .with_context(|| format!("Не вдалося видалити файл: {}", path.display()))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Download TDT model files from HuggingFace.
+///
+/// Downloads INT8 versions for smaller size (~670 MB total):
+/// - encoder-model.int8.onnx
+/// - decoder_joint-model.int8.onnx
+/// - vocab.txt
+pub async fn download_tdt_model<F>(progress_callback: F) -> Result<()>
+where
+    F: Fn(u64, u64) + Send + Clone + 'static,
+{
+    const BASE_URL: &str = "https://huggingface.co/altunenes/parakeet-rs/resolve/main/tdt/";
+
+    let dir = crate::config::tdt_models_dir();
+    fs::create_dir_all(&dir)
+        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
+
+    let info = get_tdt_model_info();
+    let total_size = get_tdt_total_size();
+    let mut total_downloaded: u64 = 0;
+
+    // Download each file
+    for model_file in [&info.encoder, &info.decoder, &info.vocab] {
+        let url = format!("{}{}", BASE_URL, model_file.filename);
+        let final_path = dir.join(&model_file.filename);
+        let temp_path = dir.join(format!("{}.downloading", model_file.filename));
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .with_context(|| format!("Не вдалося підключитися: {}", url))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "Помилка завантаження {}: HTTP {}",
+                model_file.filename,
+                response.status()
+            ));
+        }
+
+        let mut file = fs::File::create(&temp_path)
+            .with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
+
+        let mut stream = response.bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.context("Помилка при завантаженні")?;
+            std::io::Write::write_all(&mut file, &chunk).context("Не вдалося записати дані")?;
+
+            total_downloaded += chunk.len() as u64;
+            progress_callback(total_downloaded, total_size);
+        }
+
+        fs::rename(&temp_path, &final_path).with_context(|| {
+            format!(
+                "Не вдалося перейменувати {} -> {}",
+                temp_path.display(),
+                final_path.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,5 +509,27 @@ mod tests {
         let path = get_model_path("ggml-base.bin");
         assert!(path.to_string_lossy().contains("whisper"));
         assert!(path.to_string_lossy().ends_with("ggml-base.bin"));
+    }
+
+    #[test]
+    fn test_tdt_model_info_has_three_files() {
+        let info = get_tdt_model_info();
+        assert!(!info.encoder.filename.is_empty());
+        assert!(!info.decoder.filename.is_empty());
+        assert!(!info.vocab.filename.is_empty());
+    }
+
+    #[test]
+    fn test_tdt_total_size_reasonable() {
+        let total = get_tdt_total_size();
+        // Should be around 670 MB
+        assert!(total > 600_000_000);
+        assert!(total < 800_000_000);
+    }
+
+    #[test]
+    fn test_tdt_model_path_contains_tdt() {
+        let path = get_tdt_model_path();
+        assert!(path.to_string_lossy().contains("tdt"));
     }
 }

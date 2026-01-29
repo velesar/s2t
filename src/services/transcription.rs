@@ -1,29 +1,71 @@
 //! Transcription service layer.
 //!
 //! Provides a unified interface for speech-to-text transcription
-//! using Whisper, abstracting away model loading and lifecycle.
+//! supporting multiple backends (Whisper, Parakeet TDT).
 
+#[cfg(feature = "tdt")]
+use crate::tdt::ParakeetSTT;
 use crate::whisper::WhisperSTT;
 use anyhow::{Context, Result};
 use std::path::Path;
 
-/// Unified transcription service wrapping Whisper.
+/// Backend type identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum BackendType {
+    Whisper,
+    #[cfg(feature = "tdt")]
+    Tdt,
+}
+
+/// Transcription backend variants.
+enum TranscriptionBackend {
+    Whisper(WhisperSTT),
+    #[cfg(feature = "tdt")]
+    Tdt(ParakeetSTT),
+    None,
+}
+
+/// Unified transcription service supporting multiple STT backends.
 pub struct TranscriptionService {
-    whisper: Option<WhisperSTT>,
+    backend: TranscriptionBackend,
 }
 
 impl TranscriptionService {
     /// Create a new TranscriptionService without a loaded model.
     pub fn new() -> Self {
-        Self { whisper: None }
+        Self {
+            backend: TranscriptionBackend::None,
+        }
     }
 
-    /// Create a new TranscriptionService with a pre-loaded model.
+    /// Create a new TranscriptionService with a Whisper model.
     pub fn with_model(model_path: &str) -> Result<Self> {
         let whisper = WhisperSTT::new(model_path)?;
         Ok(Self {
-            whisper: Some(whisper),
+            backend: TranscriptionBackend::Whisper(whisper),
         })
+    }
+
+    /// Create a new TranscriptionService with a Parakeet TDT model.
+    ///
+    /// The model_dir should contain:
+    /// - encoder-model.int8.onnx (or encoder-model.onnx)
+    /// - decoder_joint-model.int8.onnx (or decoder_joint-model.onnx)
+    /// - vocab.txt
+    #[cfg(feature = "tdt")]
+    pub fn with_tdt(model_dir: &str) -> Result<Self> {
+        let tdt = ParakeetSTT::new(model_dir)?;
+        Ok(Self {
+            backend: TranscriptionBackend::Tdt(tdt),
+        })
+    }
+
+    /// Stub for TDT when feature is disabled.
+    #[cfg(not(feature = "tdt"))]
+    #[allow(dead_code)]
+    pub fn with_tdt(_model_dir: &str) -> Result<Self> {
+        anyhow::bail!("TDT not available. Build with feature 'tdt': cargo build --features tdt");
     }
 
     /// Get reference to WhisperSTT (for conference mode diarization).
@@ -32,7 +74,34 @@ impl TranscriptionService {
     /// `transcribe_with_auto_diarization()` which requires a
     /// mutable DiarizationEngine reference from AppContext.
     pub fn whisper(&self) -> Option<&WhisperSTT> {
-        self.whisper.as_ref()
+        match &self.backend {
+            TranscriptionBackend::Whisper(w) => Some(w),
+            _ => None,
+        }
+    }
+
+    /// Get the current backend type.
+    #[allow(dead_code)]
+    pub fn backend_type(&self) -> Option<BackendType> {
+        match &self.backend {
+            TranscriptionBackend::Whisper(_) => Some(BackendType::Whisper),
+            #[cfg(feature = "tdt")]
+            TranscriptionBackend::Tdt(_) => Some(BackendType::Tdt),
+            TranscriptionBackend::None => None,
+        }
+    }
+
+    /// Check if the backend has built-in punctuation.
+    ///
+    /// Parakeet TDT includes punctuation and capitalization;
+    /// Whisper does not.
+    #[allow(dead_code)]
+    pub fn has_builtin_punctuation(&self) -> bool {
+        match &self.backend {
+            #[cfg(feature = "tdt")]
+            TranscriptionBackend::Tdt(_) => true,
+            _ => false,
+        }
     }
 }
 
@@ -48,23 +117,34 @@ use crate::traits::Transcription;
 
 impl Transcription for TranscriptionService {
     fn transcribe(&self, samples: &[f32], language: &str) -> Result<String> {
-        let whisper = self.whisper.as_ref().context("Модель не завантажено")?;
-        whisper.transcribe(samples, Some(language))
+        match &self.backend {
+            TranscriptionBackend::Whisper(w) => w.transcribe(samples, Some(language)),
+            #[cfg(feature = "tdt")]
+            TranscriptionBackend::Tdt(t) => t.transcribe(samples, Some(language)),
+            TranscriptionBackend::None => {
+                anyhow::bail!("Модель не завантажено")
+            }
+        }
     }
 
     fn is_loaded(&self) -> bool {
-        self.whisper.is_some()
+        !matches!(self.backend, TranscriptionBackend::None)
     }
 
     fn model_name(&self) -> Option<String> {
-        self.whisper.as_ref().and_then(Transcription::model_name)
+        match &self.backend {
+            TranscriptionBackend::Whisper(w) => Transcription::model_name(w),
+            #[cfg(feature = "tdt")]
+            TranscriptionBackend::Tdt(t) => Transcription::model_name(t),
+            TranscriptionBackend::None => None,
+        }
     }
 
     fn load_model(&mut self, path: &Path) -> Result<()> {
         let path_str = path.to_string_lossy();
         let whisper = WhisperSTT::new(&path_str)
             .with_context(|| format!("Failed to load Whisper model from {}", path_str))?;
-        self.whisper = Some(whisper);
+        self.backend = TranscriptionBackend::Whisper(whisper);
         Ok(())
     }
 }
@@ -108,5 +188,17 @@ mod tests {
     fn test_trait_model_name_none_when_unloaded() {
         let service = TranscriptionService::new();
         assert!(Transcription::model_name(&service).is_none());
+    }
+
+    #[test]
+    fn test_backend_type_none_when_unloaded() {
+        let service = TranscriptionService::new();
+        assert!(service.backend_type().is_none());
+    }
+
+    #[test]
+    fn test_has_builtin_punctuation_false_when_unloaded() {
+        let service = TranscriptionService::new();
+        assert!(!service.has_builtin_punctuation());
     }
 }

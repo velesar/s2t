@@ -59,7 +59,7 @@ hound = "3.5"
 webrtc-vad = "0.4"
 
 # Silero VAD (neural network-based, more accurate)
-voice_activity_detector = "0.2"
+voice_activity_detector = "0.2.1"
 
 # Noise suppression (RNNoise-based)
 nnnoiseless = "0.5"
@@ -70,6 +70,8 @@ nnnoiseless = "0.5"
 [features]
 default = []
 sortformer = ["parakeet-rs"]
+tdt = ["parakeet-rs"]
+full = ["sortformer", "tdt"]
 
 [dependencies.parakeet-rs]
 version = "0.2"

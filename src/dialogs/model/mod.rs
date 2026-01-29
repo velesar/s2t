@@ -123,6 +123,28 @@ pub fn show_model_dialog(
     sortformer_row.set_margin_bottom(12);
     main_box.append(&sortformer_row);
 
+    // TDT section separator
+    let tdt_separator = Separator::new(Orientation::Horizontal);
+    tdt_separator.set_margin_top(6);
+    tdt_separator.set_margin_bottom(6);
+    tdt_separator.set_margin_start(12);
+    tdt_separator.set_margin_end(12);
+    main_box.append(&tdt_separator);
+
+    let tdt_header = Label::new(Some("Альтернативний STT Backend"));
+    tdt_header.add_css_class("heading");
+    tdt_header.set_halign(Align::Start);
+    tdt_header.set_margin_start(12);
+    tdt_header.set_margin_bottom(6);
+    main_box.append(&tdt_header);
+
+    // TDT model row
+    let tdt_row = download::create_tdt_row();
+    tdt_row.set_margin_start(12);
+    tdt_row.set_margin_end(12);
+    tdt_row.set_margin_bottom(12);
+    main_box.append(&tdt_row);
+
     let button_box = GtkBox::new(Orientation::Horizontal, 12);
     button_box.set_halign(Align::End);
     button_box.set_margin_top(12);

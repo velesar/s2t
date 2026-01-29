@@ -41,6 +41,10 @@ pub struct Config {
     pub vad_engine: String,
     #[serde(default = "default_silero_threshold")]
     pub silero_threshold: f32,
+    #[serde(default = "default_stt_backend")]
+    pub stt_backend: String,
+    #[serde(default)]
+    pub tdt_model_path: Option<String>,
 }
 
 fn default_diarization_method() -> String {
@@ -77,6 +81,10 @@ fn default_vad_engine() -> String {
 
 fn default_silero_threshold() -> f32 {
     0.5 // Default speech probability threshold for Silero VAD
+}
+
+fn default_stt_backend() -> String {
+    "whisper".to_string() // "whisper" (default) or "tdt"
 }
 
 fn default_history_max_entries() -> usize {
@@ -129,6 +137,8 @@ impl Default for Config {
             denoise_enabled: default_denoise_enabled(),
             vad_engine: default_vad_engine(),
             silero_threshold: default_silero_threshold(),
+            stt_backend: default_stt_backend(),
+            tdt_model_path: None,
         }
     }
 }
@@ -161,6 +171,13 @@ pub fn sortformer_models_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("voice-dictation")
         .join("sortformer")
+}
+
+pub fn tdt_models_dir() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("voice-dictation")
+        .join("tdt")
 }
 
 pub fn load_config() -> Result<Config> {
@@ -299,5 +316,17 @@ mod tests {
         use crate::traits::ConfigProvider;
         let config = Config::default();
         assert_eq!(ConfigProvider::recording_mode(&config), config.recording_mode);
+    }
+
+    #[test]
+    fn test_tdt_models_dir_not_empty() {
+        let dir = tdt_models_dir();
+        assert!(dir.to_string_lossy().contains("tdt"));
+    }
+
+    #[test]
+    fn test_default_stt_backend() {
+        let config = Config::default();
+        assert_eq!(config.stt_backend, "whisper");
     }
 }

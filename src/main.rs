@@ -16,6 +16,7 @@ mod paste;
 mod recordings;
 mod ring_buffer;
 mod services;
+mod tdt;
 #[cfg(test)]
 mod test_support;
 mod traits;
@@ -37,6 +38,67 @@ fn main() -> Result<()> {
         Some(cli::Commands::Transcribe(args)) => cli::transcribe::run(args),
         Some(cli::Commands::Models) => cli::transcribe::list_models(),
         None => run_gui(),
+    }
+}
+
+/// Initialize transcription service based on configured backend.
+fn init_transcription_service(
+    config: &std::sync::Arc<std::sync::Mutex<config::Config>>,
+) -> services::TranscriptionService {
+    #[cfg(feature = "tdt")]
+    {
+        use services::TranscriptionService;
+
+        let cfg = config.lock().unwrap();
+        let stt_backend = cfg.stt_backend.clone();
+        drop(cfg);
+
+        // Try TDT backend if configured and model is available
+        if stt_backend == "tdt" && models::is_tdt_model_downloaded() {
+            let tdt_dir = config::tdt_models_dir();
+            let tdt_path = tdt_dir.to_string_lossy().to_string();
+            println!("Завантаження TDT моделі: {}", tdt_path);
+            match TranscriptionService::with_tdt(&tdt_path) {
+                Ok(service) => {
+                    println!("TDT модель завантажено!");
+                    return service;
+                }
+                Err(e) => {
+                    eprintln!("Не вдалося завантажити TDT модель: {}", e);
+                    eprintln!("Переключаюсь на Whisper...");
+                }
+            }
+        }
+    }
+
+    // Fallback to Whisper
+    load_whisper_model(config)
+}
+
+/// Load Whisper model from config or fallback locations.
+fn load_whisper_model(
+    config: &std::sync::Arc<std::sync::Mutex<config::Config>>,
+) -> services::TranscriptionService {
+    use services::TranscriptionService;
+
+    let cfg = config.lock().unwrap();
+    if let Some(model_path) = find_model_path(&cfg) {
+        drop(cfg);
+        println!("Завантаження Whisper моделі: {}", model_path);
+        match TranscriptionService::with_model(&model_path) {
+            Ok(service) => {
+                println!("Whisper модель завантажено!");
+                service
+            }
+            Err(e) => {
+                eprintln!("Не вдалося завантажити модель: {}", e);
+                eprintln!("Запустіть додаток і завантажте модель через меню 'Моделі'");
+                TranscriptionService::new()
+            }
+        }
+    } else {
+        println!("Модель не знайдено. Завантажте через меню 'Моделі'.");
+        TranscriptionService::new()
     }
 }
 
@@ -79,7 +141,6 @@ fn run_gui() -> Result<()> {
     use gtk4::{glib, prelude::*, Application};
     use history::{load_history, save_history, History};
     use hotkeys::HotkeyManager;
-    use services::TranscriptionService;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use tray::{DictationTray, TrayAction};
@@ -116,27 +177,8 @@ fn run_gui() -> Result<()> {
         Arc::new(Mutex::new(h))
     };
 
-    // Initialize transcription service with Whisper model
-    let transcription = {
-        let cfg = config.lock().unwrap();
-        if let Some(model_path) = find_model_path(&cfg) {
-            println!("Завантаження моделі: {}", model_path);
-            match TranscriptionService::with_model(&model_path) {
-                Ok(service) => {
-                    println!("Модель завантажено!");
-                    service
-                }
-                Err(e) => {
-                    eprintln!("Не вдалося завантажити модель: {}", e);
-                    eprintln!("Запустіть додаток і завантажте модель через меню 'Моделі'");
-                    TranscriptionService::new()
-                }
-            }
-        } else {
-            println!("Модель не знайдено. Завантажте через меню 'Моделі'.");
-            TranscriptionService::new()
-        }
-    };
+    // Initialize transcription service based on configured backend
+    let transcription = init_transcription_service(&config);
 
     // Initialize diarization engine
     let diarization_engine = {

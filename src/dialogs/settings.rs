@@ -80,6 +80,39 @@ pub fn show_settings_dialog(
 
     main_box.append(&language_combo);
 
+    // STT Backend selector
+    let backend_label = Label::new(Some("STT Backend:"));
+    backend_label.set_halign(Align::Start);
+    backend_label.set_margin_top(12);
+    main_box.append(&backend_label);
+
+    let backend_combo = ComboBoxText::new();
+    backend_combo.append_text("Whisper");
+    backend_combo.append_text("Parakeet TDT v3");
+
+    let current_backend = {
+        let cfg = config.lock().unwrap();
+        cfg.stt_backend.clone()
+    };
+    if current_backend == "tdt" {
+        backend_combo.set_active(Some(1));
+    } else {
+        backend_combo.set_active(Some(0));
+    }
+    backend_combo.set_halign(Align::Start);
+
+    // Check if TDT model is available
+    let tdt_available = crate::models::is_tdt_model_downloaded();
+    if !tdt_available {
+        // Disable TDT option if model not downloaded
+        let info_label = Label::new(Some("(Завантажте модель TDT через меню 'Моделі' для активації)"));
+        info_label.add_css_class("dim-label");
+        info_label.set_halign(Align::Start);
+        main_box.append(&info_label);
+    }
+
+    main_box.append(&backend_combo);
+
     // Recording mode selector
     let mode_label = Label::new(Some("Режим запису:"));
     mode_label.set_halign(Align::Start);
@@ -284,6 +317,7 @@ pub fn show_settings_dialog(
     let config_clone = config.clone();
     let language_combo_clone = language_combo.clone();
     let languages_clone = languages.clone();
+    let backend_combo_clone = backend_combo.clone();
     let auto_copy_check_clone = auto_copy_check.clone();
     let auto_paste_check_clone = auto_paste_check.clone();
     let continuous_check_clone = continuous_check.clone();
@@ -338,9 +372,17 @@ pub fn show_settings_dialog(
             "channel".to_string()
         };
 
+        // Get STT backend
+        let stt_backend = if backend_combo_clone.active() == Some(1) {
+            "tdt".to_string()
+        } else {
+            "whisper".to_string()
+        };
+
         // Update config
         let mut cfg = config_clone.lock().unwrap();
         cfg.language = language;
+        cfg.stt_backend = stt_backend;
         cfg.auto_copy = auto_copy_check_clone.is_active();
         cfg.auto_paste = auto_paste_check_clone.is_active();
         cfg.continuous_mode = continuous_check_clone.is_active();
