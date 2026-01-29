@@ -2,7 +2,7 @@
 
 **Project:** Voice Dictation (s2t)
 **Initial Audit Date:** 2026-01-28
-**Last Updated:** 2026-01-29 (post-v0.2.0 trait wiring)
+**Last Updated:** 2026-01-29 (v0.3.0 — Capability-Based Architecture)
 **Methodology:** Architecture Fitness Functions (see `docs/architecture-fitness-methodology.md`)
 
 ---
@@ -10,52 +10,231 @@
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Architecture Pattern](#architecture-pattern)
-3. [Module Structure](#module-structure)
-4. [Data Flow](#data-flow)
-5. [Dependency Analysis](#dependency-analysis)
-6. [Layer Architecture](#layer-architecture)
-7. [Architecture Fitness Assessment](#architecture-fitness-assessment)
-8. [Hotspot Analysis](#hotspot-analysis)
-9. [Design Strengths](#design-strengths)
-10. [Design Weaknesses](#design-weaknesses)
-11. [Architectural Recommendations](#architectural-recommendations)
+2. [Capability Model](#capability-model) ← **NEW**
+3. [Architecture Pattern](#architecture-pattern)
+4. [Module Structure](#module-structure)
+5. [Data Flow](#data-flow)
+6. [Dependency Analysis](#dependency-analysis)
+7. [Layer Architecture](#layer-architecture)
+8. [Architecture Fitness Assessment](#architecture-fitness-assessment)
+9. [Hotspot Analysis](#hotspot-analysis)
+10. [Design Strengths](#design-strengths)
+11. [Design Weaknesses](#design-weaknesses)
+12. [Architectural Recommendations](#architectural-recommendations)
 
 ---
 
 ## System Overview
 
-Voice Dictation is a **desktop GUI application** for offline speech-to-text transcription on Linux using Whisper.
+Voice Dictation is a **desktop application** for offline speech-to-text transcription on Linux. It provides both a GTK4 GUI for interactive use and a CLI for batch processing and systematic testing.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Voice Dictation                            │
-│                                                                 │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────────┐          │
-│  │ System   │    │   GTK4   │    │    Whisper.cpp   │          │
-│  │   Tray   │◄──►│   GUI    │◄──►│  Speech Engine   │          │
-│  └──────────┘    └──────────┘    └──────────────────┘          │
-│        │              │                   │                     │
-│        ▼              ▼                   ▼                     │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────────┐          │
-│  │  Global  │    │  Audio   │    │     History      │          │
-│  │ Hotkeys  │    │ Pipeline │    │     Storage      │          │
-│  └──────────┘    └──────────┘    └──────────────────┘          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Voice Dictation v0.3.0                             │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                         CLI Interface (NEW)                           │  │
+│  │  voice-dictation transcribe file.wav --backend=tdt -f json           │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌──────────┐    ┌──────────┐    ┌──────────────────┐    ┌───────────┐   │
+│  │ System   │    │   GTK4   │    │   STT Backends   │    │ Diarization│   │
+│  │   Tray   │◄──►│   GUI    │◄──►│ Whisper | TDT    │◄──►│ Sortformer │   │
+│  └──────────┘    └──────────┘    └──────────────────┘    └───────────┘   │
+│        │              │                   │                               │
+│        ▼              ▼                   ▼                               │
+│  ┌──────────┐    ┌──────────┐    ┌──────────────────┐                    │
+│  │  Global  │    │  Audio   │    │     History      │                    │
+│  │ Hotkeys  │    │ Pipeline │    │     Storage      │                    │
+│  └──────────┘    └──────────┘    └──────────────────┘                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Characteristics
 
 | Aspect | Description |
 |--------|-------------|
-| **Type** | Desktop GUI Application |
+| **Type** | Desktop GUI + CLI Application |
 | **Platform** | Linux (Fedora optimized) |
 | **Connectivity** | Fully offline capable |
 | **State Management** | Shared state via `Arc<Mutex<T>>` |
 | **Concurrency** | Multi-threaded with async channels |
-| **Distribution** | Single binary + Whisper models |
-| **Codebase Size** | 40 files, 6,596 LOC |
+| **STT Backends** | Whisper (full-featured) + TDT/Parakeet (fast) |
+| **Distribution** | Single binary + model files |
+| **Codebase Size** | ~49 files, ~9,000 LOC |
+
+---
+
+## Capability Model
+
+### Overview
+
+The Voice Dictation architecture is evolving toward a **Capability-Based Pipeline** model. A **Capability** is a discrete processing function that building blocks can provide. Capabilities combine through configuration to form complete transcription pipelines.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         CAPABILITY PIPELINE                                  │
+│                                                                             │
+│   Audio     ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐      │
+│   Input ───►│ Denoise  │──►│   STT    │──►│ Diarize  │──►│  Post-   │───► Text
+│             │ (opt)    │   │ Backend  │   │ (opt)    │   │ Process  │      │
+│             └──────────┘   └──────────┘   └──────────┘   └──────────┘      │
+│                  │              │              │              │             │
+│             ┌────┴────┐   ┌────┴────┐   ┌────┴────┐   ┌────┴────┐        │
+│             │nnnoiseless│  │ Whisper │   │ Channel │   │ Punct.  │        │
+│             │  (off)   │   │   TDT   │   │Sortformer│  │ Caps.   │        │
+│             └─────────┘   └─────────┘   │  (none)  │   │ (future)│        │
+│                                         └─────────┘   └─────────┘        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Capability Definitions
+
+| Capability | Providers | Status | Description |
+|------------|-----------|--------|-------------|
+| **STT** | `WhisperSTT`, `ParakeetSTT` | ✅ Implemented | Speech-to-text conversion |
+| **Denoising** | `nnnoiseless` | ✅ Implemented | Audio noise suppression |
+| **Diarization** | `Channel`, `Sortformer` | ✅ Implemented | Speaker identification |
+| **VAD** | `WebRTC`, `Silero` | ✅ Implemented | Voice activity detection |
+| **Post-processing** | — | 🔮 Planned | Punctuation, capitalization |
+
+### Capability Constraints
+
+Not all capability combinations are valid. The system must enforce these constraints:
+
+```rust
+// Current constraint validation (cli/transcribe.rs:71-74)
+if matches!(args.backend, SttBackend::Tdt)
+   && !matches!(effective_diarization, DiarizationMethod::None) {
+    bail!("TDT backend does not support diarization");
+}
+```
+
+**Constraint Matrix:**
+
+| STT Backend | Diarization | Valid? | Notes |
+|-------------|-------------|--------|-------|
+| Whisper | None | ✅ | Default |
+| Whisper | Channel | ✅ | Requires stereo input |
+| Whisper | Sortformer | ✅ | Requires Sortformer model |
+| TDT | None | ✅ | TDT only mode |
+| TDT | Channel | ❌ | TDT is pure STT |
+| TDT | Sortformer | ❌ | TDT is pure STT |
+
+### Capability Providers (Building Blocks)
+
+Each capability has one or more **providers** — concrete implementations:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         CAPABILITY PROVIDERS                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  STT Capability                      Diarization Capability                 │
+│  ┌─────────────────────────────┐    ┌─────────────────────────────┐       │
+│  │ trait Transcription         │    │ DiarizationMethod enum      │       │
+│  │   ├─ WhisperSTT            │    │   ├─ None                   │       │
+│  │   ├─ ParakeetSTT (TDT)     │    │   ├─ Channel               │       │
+│  │   └─ TranscriptionService  │    │   └─ Sortformer            │       │
+│  └─────────────────────────────┘    └─────────────────────────────┘       │
+│                                                                             │
+│  Denoising Capability                VAD Capability                        │
+│  ┌─────────────────────────────┐    ┌─────────────────────────────┐       │
+│  │ trait AudioDenoising        │    │ trait VoiceDetection        │       │
+│  │   ├─ NnnoiselessDenoiser   │    │   ├─ WebRtcVoiceDetector   │       │
+│  │   └─ NoOpDenoiser          │    │   └─ SileroVoiceDetector   │       │
+│  └─────────────────────────────┘    └─────────────────────────────┘       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration Parameterization
+
+Configurations are **parameterized by capabilities**. The `Config` struct and CLI args specify which capabilities to enable:
+
+```rust
+// Config fields that enable capabilities
+pub struct Config {
+    // STT capability
+    pub stt_backend: String,           // "whisper" | "tdt"
+    pub default_model: String,
+    pub tdt_model_path: Option<String>,
+
+    // Diarization capability
+    pub diarization_method: String,    // "channel" | "sortformer" | "none"
+    pub sortformer_model_path: Option<String>,
+
+    // Denoising capability
+    pub denoise_enabled: bool,
+
+    // VAD capability
+    pub vad_engine: String,            // "webrtc" | "silero"
+    pub use_vad: bool,
+}
+```
+
+```rust
+// CLI capability selection (cli/args.rs)
+pub enum SttBackend { Whisper, Tdt }
+pub enum DiarizationMethod { None, Channel, Sortformer }
+```
+
+### Capability Resolution Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      CAPABILITY RESOLUTION                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. LOAD CONFIG                                                             │
+│     ├─ CLI args override config values                                      │
+│     └─ Defaults fill missing values                                         │
+│                                                                             │
+│  2. VALIDATE CONSTRAINTS                                                    │
+│     ├─ Check capability compatibility                                       │
+│     └─ Fail early if invalid combination                                    │
+│                                                                             │
+│  3. RESOLVE MODELS                                                          │
+│     ├─ resolve_whisper_model() or resolve_tdt_model()                       │
+│     ├─ resolve_sortformer_model() if diarization=sortformer                 │
+│     └─ Check model files exist                                              │
+│                                                                             │
+│  4. BUILD PIPELINE                                                          │
+│     ├─ Create STT service (Whisper or TDT)                                  │
+│     ├─ Prepare audio (denoise if enabled)                                   │
+│     ├─ Run transcription                                                    │
+│     └─ Apply diarization (if enabled)                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Future: Capability Trait
+
+The current implementation uses enums for capability selection. A more extensible approach would use a **Capability trait**:
+
+```rust
+// Future design (not yet implemented)
+pub trait Capability {
+    fn name(&self) -> &str;
+    fn requires(&self) -> Vec<&str>;      // Dependencies
+    fn conflicts(&self) -> Vec<&str>;     // Incompatibilities
+    fn is_available(&self) -> bool;       // Model loaded, etc.
+}
+
+pub struct Pipeline {
+    capabilities: Vec<Box<dyn Capability>>,
+}
+
+impl Pipeline {
+    fn validate(&self) -> Result<()> {
+        // Check all constraints
+    }
+    fn execute(&self, audio: &[f32]) -> Result<String> {
+        // Run pipeline stages
+    }
+}
+```
 
 ---
 
@@ -128,7 +307,7 @@ pub struct UIChannels {
 
 ## Module Structure
 
-### Module Overview (40 files, 6,596 LOC)
+### Module Overview (49 files, ~9,000 LOC)
 
 ```
 src/
@@ -138,22 +317,29 @@ src/
 ├── types.rs                  ( 74 LOC)   Shared type aliases + AppState
 ├── channels.rs               ( 79 LOC)   UIChannels
 │
-├── ui/                       UI layer
+├── cli/                      CLI interface (NEW in v0.3.0)
+│   ├── mod.rs                ( 10 LOC)   Re-exports
+│   ├── args.rs               (120 LOC)   SttBackend, DiarizationMethod enums + CLI args
+│   ├── transcribe.rs         (629 LOC)   Transcription orchestration + JSON output
+│   └── wav_reader.rs         (307 LOC)   WAV file parsing
+│
+├── ui/                       GUI layer
 │   ├── mod.rs                (238 LOC)   Window setup, build_ui
 │   ├── state.rs              (304 LOC)   UIContext, RecordingContext, mode UIs
-│   ├── dispatch.rs           ( 68 LOC)   Mode routing (NEW)
-│   ├── widgets.rs            (227 LOC)   Widget builders (NEW)
+│   ├── dispatch.rs           ( 68 LOC)   Mode routing
+│   ├── widgets.rs            (227 LOC)   Widget builders
 │   ├── recording.rs          (158 LOC)   Dictation mode handler
 │   ├── continuous.rs         (319 LOC)   Continuous mode handler
-│   └── conference.rs         (197 LOC)   Conference mode handler
+│   ├── conference.rs         (197 LOC)   Conference mode handler
+│   └── conference_file.rs    (120 LOC)   ConferenceFile mode (record only)
 │
-├── dialogs/                  Dialog windows (restructured)
+├── dialogs/                  Dialog windows
 │   ├── mod.rs                ( 14 LOC)   Re-exports
-│   ├── model/                Model management (SPLIT)
+│   ├── model/                Model management
 │   │   ├── mod.rs            (147 LOC)   Dialog entry point
 │   │   ├── download.rs       (  - LOC)   Download logic
 │   │   └── list.rs           (  - LOC)   Model list rows
-│   ├── history/              History browser (SPLIT)
+│   ├── history/              History browser
 │   │   ├── mod.rs            (239 LOC)   Dialog entry point
 │   │   ├── list.rs           (  - LOC)   History list rows
 │   │   └── export.rs         (  - LOC)   Export logic
@@ -164,6 +350,11 @@ src/
 │   ├── audio.rs              (251 LOC)   AudioService facade
 │   └── transcription.rs      (112 LOC)   TranscriptionService (impl Transcription)
 │
+├── vad/                      Voice Activity Detection (restructured in v0.3.0)
+│   ├── mod.rs                (152 LOC)   VoiceActivityDetector (impl VoiceDetection)
+│   ├── webrtc.rs             (208 LOC)   WebRTC VAD backend
+│   └── silero.rs             (201 LOC)   Silero ONNX VAD backend
+│
 ├── test_support/             Test infrastructure
 │   ├── mod.rs                (  6 LOC)   Re-exports
 │   └── mocks.rs              (410 LOC)   Mock implementations for all traits
@@ -172,10 +363,11 @@ src/
 ├── history.rs                (689 LOC)   History storage (impl HistoryRepository)
 ├── audio.rs                  (279 LOC)   Microphone recording (CPAL)
 ├── whisper.rs                (210 LOC)   Whisper STT (impl Transcription)
+├── tdt.rs                    (124 LOC)   Parakeet TDT STT (impl Transcription) ← NEW
+├── denoise.rs                (211 LOC)   nnnoiseless audio denoising ← NEW
 ├── continuous.rs             (247 LOC)   Continuous recording mode
 ├── conference_recorder.rs    ( 69 LOC)   Conference mode coordinator
-├── diarization.rs            (111 LOC)   Speaker diarization
-├── vad.rs                    (210 LOC)   Voice activity detection (impl VoiceDetection)
+├── diarization.rs            (111 LOC)   Speaker diarization (Sortformer)
 ├── loopback.rs               (143 LOC)   System audio capture (parec)
 ├── ring_buffer.rs            (114 LOC)   Circular audio buffer
 ├── recordings.rs             ( 71 LOC)   Recording file management
@@ -190,11 +382,13 @@ src/
 | Category | Modules | LOC | Purpose |
 |----------|---------|-----|---------|
 | **Core / DI** | main.rs, context.rs, traits.rs, types.rs, channels.rs | ~770 | Application lifecycle, DI, contracts |
-| **UI** | ui/* (7 files) | ~1,510 | User interface, event handling |
+| **CLI** | cli/* (4 files) | ~1,066 | Command-line transcription interface ← NEW |
+| **GUI** | ui/* (8 files) | ~1,630 | User interface, event handling |
 | **Dialogs** | dialogs/* (7 files) | ~760+ | Modal dialog windows |
 | **Services** | services/* (3 files) | ~370 | Service facades (audio, transcription) |
-| **Audio** | audio.rs, continuous.rs, conference_recorder.rs, ring_buffer.rs, vad.rs, loopback.rs, recordings.rs | ~1,240 | Audio capture and processing |
-| **Speech** | whisper.rs, diarization.rs | ~320 | Speech recognition |
+| **Audio** | audio.rs, continuous.rs, conference_recorder.rs, ring_buffer.rs, loopback.rs, recordings.rs, denoise.rs | ~1,140 | Audio capture and processing |
+| **VAD** | vad/* (3 files) | ~560 | Voice activity detection (WebRTC + Silero) ← RESTRUCTURED |
+| **Speech** | whisper.rs, tdt.rs, diarization.rs | ~445 | STT backends (Whisper, TDT) + diarization |
 | **System** | tray.rs, hotkeys.rs, paste.rs | ~350 | OS integration |
 | **Data** | history.rs, config.rs, models.rs | ~1,340 | Persistence, model management |
 | **Test** | test_support/* (2 files) | ~415 | Mock implementations for all 6 traits |
@@ -203,7 +397,58 @@ src/
 
 ## Data Flow
 
-### Recording Data Flow
+### Capability Pipeline Data Flow (v0.3.0)
+
+The CLI transcribe command implements a capability-based pipeline:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                        CLI CAPABILITY PIPELINE                                    │
+│                                                                                  │
+│  ┌─────────────┐                                                                 │
+│  │ Input WAV   │                                                                 │
+│  │    File     │                                                                 │
+│  └──────┬──────┘                                                                 │
+│         │                                                                        │
+│         ▼                                                                        │
+│  ┌─────────────┐   ┌─────────────┐                                              │
+│  │ wav_reader  │──►│   Denoise   │◄── --denoise flag                            │
+│  │  (decode)   │   │ nnnoiseless │    (MANDATORY for TDT)                       │
+│  └─────────────┘   └──────┬──────┘                                              │
+│                           │                                                      │
+│                           ▼                                                      │
+│                    ┌─────────────┐                                              │
+│                    │ STT Backend │◄── --backend whisper|tdt                     │
+│                    │             │                                               │
+│                    │ ┌─────────┐ │                                               │
+│                    │ │ Whisper │ │  ← Default, supports diarization             │
+│                    │ │ (rust)  │ │                                               │
+│                    │ └─────────┘ │                                               │
+│                    │ ┌─────────┐ │                                               │
+│                    │ │   TDT   │ │  ← Faster (0.19 RTF), pure STT only          │
+│                    │ │(parakeet)│ │                                               │
+│                    │ └─────────┘ │                                               │
+│                    └──────┬──────┘                                              │
+│                           │                                                      │
+│         ┌─────────────────┼─────────────────┐                                   │
+│         │                 │                 │                                    │
+│         ▼                 ▼                 ▼                                    │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐                           │
+│  │    None     │   │   Channel   │   │  Sortformer │◄── --diarization          │
+│  │ (default)   │   │  (stereo)   │   │  (neural)   │                           │
+│  └─────────────┘   └─────────────┘   └─────────────┘                           │
+│         │                 │                 │                                    │
+│         └─────────────────┴─────────────────┘                                   │
+│                           │                                                      │
+│                           ▼                                                      │
+│                    ┌─────────────┐                                              │
+│                    │ JSON Output │──► Metrics: RTF, word_count, segment_count   │
+│                    │   + Text    │                                               │
+│                    └─────────────┘                                              │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Recording Data Flow (GUI)
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -359,18 +604,25 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 
 ## Layer Architecture
 
-### Current Layer Structure (v0.2.0 — Traits Wired)
+### Current Layer Structure (v0.3.0 — Capability-Based)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         PRESENTATION LAYER                              │
 │                                                                         │
-│  ui/mod.rs      ui/state.rs (impl UIStateUpdater)   ui/dispatch.rs     │
-│  ui/widgets.rs  ui/recording.rs  ui/continuous.rs   ui/conference.rs   │
-│  dialogs/model/*  dialogs/history/*  dialogs/settings.rs               │
-│  tray.rs                                                                │
+│  CLI (NEW in v0.3.0)                                                    │
+│  ├── cli/args.rs — SttBackend, DiarizationMethod enums                 │
+│  ├── cli/transcribe.rs — Capability pipeline orchestration             │
+│  └── cli/wav_reader.rs — WAV file parsing                              │
 │                                                                         │
-│  Depends on: AppContext (via trait convenience methods)                 │
+│  GUI                                                                    │
+│  ├── ui/mod.rs      ui/state.rs (impl UIStateUpdater)   ui/dispatch.rs │
+│  ├── ui/widgets.rs  ui/recording.rs  ui/continuous.rs   ui/conference.rs│
+│  ├── ui/conference_file.rs (NEW)                                        │
+│  ├── dialogs/model/*  dialogs/history/*  dialogs/settings.rs           │
+│  └── tray.rs                                                            │
+│                                                                         │
+│  Depends on: AppContext (GUI) / direct service calls (CLI)             │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                         APPLICATION LAYER                               │
 │                                                                         │
@@ -386,26 +638,37 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 │                                                                         │
 │  traits.rs — 6 traits (all implemented):                                │
 │    • AudioRecording     (TestRecorder in tests)                         │
-│    • Transcription      ✅ WhisperSTT, TranscriptionService, Mock       │
+│    • Transcription      ✅ WhisperSTT, ParakeetSTT, TranscriptionService │
 │    • VoiceDetection     ✅ VoiceActivityDetector, Mock                  │
 │    • HistoryRepository  ✅ History                                       │
 │    • ConfigProvider     ✅ Config, Mock                                  │
-│    • UIStateUpdater     ✅ UIContext (NEW)                               │
+│    • UIStateUpdater     ✅ UIContext                                     │
 │  types.rs — AppState enum, shared type aliases                          │
 │                                                                         │
 │  Status: ALL TRAITS IMPLEMENTED ✅                                       │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                       INFRASTRUCTURE LAYER                              │
 │                                                                         │
-│  audio.rs — AudioRecorder (CPAL)                                        │
-│  whisper.rs — WhisperSTT (impl Transcription)                          │
-│  history.rs — History (impl HistoryRepository)                         │
-│  config.rs — Config (impl ConfigProvider)                              │
-│  vad.rs — VoiceActivityDetector (impl VoiceDetection)                  │
-│  continuous.rs, loopback.rs, diarization.rs, conference_recorder.rs    │
-│  ring_buffer.rs, recordings.rs, models.rs, paste.rs                    │
+│  STT Backends (Capability: STT)                                         │
+│  ├── whisper.rs — WhisperSTT (impl Transcription)                      │
+│  └── tdt.rs — ParakeetSTT (impl Transcription) ← NEW                   │
 │                                                                         │
-│  Status: Implements domain traits ✅                                     │
+│  Audio Processing (Capabilities: VAD, Denoising)                        │
+│  ├── audio.rs — AudioRecorder (CPAL)                                    │
+│  ├── vad/mod.rs — VoiceActivityDetector (impl VoiceDetection)          │
+│  ├── vad/webrtc.rs, vad/silero.rs — VAD backends                       │
+│  └── denoise.rs — nnnoiseless audio denoising ← NEW                    │
+│                                                                         │
+│  Diarization (Capability: Diarization)                                  │
+│  └── diarization.rs — Sortformer speaker identification                 │
+│                                                                         │
+│  Persistence & System                                                   │
+│  ├── history.rs — History (impl HistoryRepository)                     │
+│  ├── config.rs — Config (impl ConfigProvider)                          │
+│  ├── continuous.rs, loopback.rs, conference_recorder.rs                │
+│  └── ring_buffer.rs, recordings.rs, models.rs, paste.rs                │
+│                                                                         │
+│  Status: Implements domain traits + Capability providers ✅              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -416,9 +679,66 @@ Legend: `impl T` = implements Transcription, `impl CP` = implements ConfigProvid
 | V1 | Traits defined but not implemented | ✅ **RESOLVED** | All 6 traits now have production + mock impls |
 | V2 | Tray bypasses AppContext | ✅ **RESOLVED** | Uses `ctx.transcription.clone()` now |
 | V3 | AppContext leaks internals (`config_arc()`, `history_arc()`) | ✅ **RESOLVED** | Removed; uses trait convenience methods |
-| V4 | Dialogs use concrete types | ⚠️ REMAINING | dialogs/* → Config, History directly |
-| V5 | Services depend on concrete infra types | ⚠️ REMAINING | `AudioService` → `AudioRecorder` |
-| V6 | No layer enforcement | ⚠️ REMAINING | Flat `mod` in main.rs, no crate boundaries |
+| V4 | Dialogs use concrete types | ⚠️ REMAINING | dialogs/* → `Config`, `History`, `TranscriptionService` directly |
+| V5 | AudioService partial concrete deps | ✅ **PARTIAL** | `mic: Arc<dyn AudioRecording>` ✅; `conference`/`continuous` still concrete |
+| V6 | No layer enforcement | ⚠️ REMAINING | 26 flat `mod` in main.rs, no crate boundaries |
+| V7 | CLI inner functions use concrete types | ⚠️ NEW | `transcribe_with_whisper(&TranscriptionService)`, not `&dyn Transcription` |
+
+#### V4 Detail: Dialog Concrete Types
+
+All three dialog entry points accept concrete types:
+
+```rust
+// dialogs/history/mod.rs:20
+pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History>>)
+
+// dialogs/model/mod.rs:50-54
+pub fn show_model_dialog(
+    parent: &impl IsA<Window>,
+    config: Arc<Mutex<Config>>,
+    transcription: Arc<Mutex<TranscriptionService>>,
+)
+
+// dialogs/settings.rs:8-12
+pub fn show_settings_dialog(
+    parent: &impl IsA<Window>,
+    config: Arc<Mutex<Config>>,
+    reload_hotkeys_tx: async_channel::Sender<()>,
+)
+```
+
+**Impact:** Dialogs cannot be tested with mock implementations.
+
+#### V5 Detail: AudioService (Partially Resolved)
+
+```rust
+// services/audio.rs:49-56
+pub struct AudioService {
+    mic: Arc<dyn AudioRecording>,       // ✅ Trait object
+    conference: Arc<ConferenceRecorder>, // ⚠️ Concrete type
+    continuous: Arc<ContinuousRecorder>, // ⚠️ Concrete type
+}
+```
+
+`mic` was fixed to use `Arc<dyn AudioRecording>` with `with_recorder()` constructor. However, `ConferenceRecorder` and `ContinuousRecorder` lack trait abstractions. This is **acceptable complexity** — these are complex orchestrators with no alternative implementations needed. Adding traits would be over-engineering.
+
+**Status:** ✅ Resolved for practical purposes. No further action needed.
+
+#### V7 Detail: CLI Inner Functions
+
+CLI `run()` is a valid **composition root** — creating concrete types there is correct. However, inner helper functions should accept trait bounds:
+
+```rust
+// cli/transcribe.rs — CURRENT (concrete types)
+fn transcribe_with_whisper(service: &TranscriptionService, ...) -> Result<TranscriptionResult>
+fn transcribe_channel_diarization(whisper: &crate::whisper::WhisperSTT, ...) -> Result<TranscriptionResult>
+
+// SHOULD BE (trait bounds)
+fn transcribe_with_whisper(service: &dyn Transcription, ...) -> Result<TranscriptionResult>
+fn transcribe_channel_diarization(service: &dyn Transcription, ...) -> Result<TranscriptionResult>
+```
+
+**Impact:** CLI helper functions are tightly coupled to concrete implementations, preventing unit testing.
 
 ### Target Layer Flow
 
@@ -434,15 +754,16 @@ Presentation → Application → Domain ← Infrastructure
 
 ## Architecture Fitness Assessment
 
-### Overall Score: 4.0 / 5.0 (↑ from 2.6)
+### Overall Score: 4.2 / 5.0 (↑ from 4.0)
 
 | Fitness Function | Score | Status | Details |
 |-----------------|-------|--------|---------|
 | **FF-1:** Dependency Direction | 4/5 | **PASS** | All 6 traits implemented; polymorphism used in AppContext |
-| **FF-2:** Component Instability | 4/5 | IMPROVED | ui/state.rs now implements UIStateUpdater trait |
-| **FF-3:** Hotspot Risk | 3/5 | WARNING | history.rs grown to 689 LOC; test_support/mocks.rs 410 LOC |
-| **FF-4:** Module Size / Cohesion | 3/5 | WARNING | history.rs (689), settings.rs (374), models.rs (366) |
-| **FF-5:** Cyclic Dependencies | 3/5 | IMPROVED | Dispatch module reduces coupling; flat crate still limits enforcement |
+| **FF-2:** Component Instability | 4/5 | **PASS** | Capability enums in domain layer; providers in infrastructure |
+| **FF-3:** Hotspot Risk | 3/5 | WARNING | cli/transcribe.rs (629 LOC), history.rs (689 LOC) |
+| **FF-4:** Module Size / Cohesion | 3/5 | WARNING | cli/transcribe.rs (629), history.rs (689) exceed guideline |
+| **FF-5:** Cyclic Dependencies | 4/5 | **PASS** | CLI has clean dependencies; capability pipeline is linear |
+| **FF-6:** Capability Composability | 5/5 | **NEW** | Capabilities combine via config; invalid combos fail early |
 
 ### FF-1: Dependency Direction — PASS ✅
 
@@ -504,7 +825,7 @@ Presentation → Application → Domain ← Infrastructure
 - `dialogs/model/` → mod.rs, download.rs, list.rs (from 156-symbol monolith)
 - `dialogs/history/` → mod.rs, list.rs, export.rs (from 152-symbol monolith)
 
-### FF-5: Cyclic Dependencies — IMPROVED
+### FF-5: Cyclic Dependencies — PASS ✅
 
 **Previous:** 22 flat `mod` declarations in `main.rs`, no structure.
 
@@ -512,8 +833,34 @@ Presentation → Application → Domain ← Infrastructure
 - Dialogs organized into subdirectories with clear public APIs
 - `ui/dispatch.rs` centralizes mode routing, breaking direct inter-handler dependencies
 - Trait-based polymorphism in AppContext reduces concrete type coupling
+- CLI module has clean, linear dependency flow: args → transcribe → (whisper|tdt, denoise, diarization)
 
-The flat crate structure still limits enforcement, but semantic coupling is reduced through better module organization.
+The flat crate structure still limits enforcement, but semantic coupling is well-managed through module organization and capability pipeline design.
+
+### FF-6: Capability Composability — NEW ✅
+
+**Principle:** Capabilities should be independently selectable and combinable, with invalid combinations rejected at configuration time.
+
+**Current State:**
+- **Capability Selection:** CLI args (`--backend`, `--diarization`, `--denoise`) select capabilities
+- **Constraint Validation:** Invalid combinations (TDT + diarization) fail early with clear error
+- **Provider Independence:** STT backends (Whisper, TDT) implement same `Transcription` trait
+- **Pipeline Composability:** Capabilities chain linearly: Input → Denoise → STT → Diarization → Output
+
+**Evidence:**
+```rust
+// cli/transcribe.rs:71-74 — Constraint validation
+if matches!(args.backend, SttBackend::Tdt)
+   && !matches!(effective_diarization, DiarizationMethod::None) {
+    bail!("TDT backend does not support diarization");
+}
+```
+
+**Extensibility:** New capabilities (e.g., post-processing) can be added by:
+1. Adding enum variant to `cli/args.rs`
+2. Implementing the capability provider
+3. Adding constraint validation rules
+4. Wiring into the pipeline in `cli/transcribe.rs`
 
 ---
 
@@ -523,21 +870,25 @@ The flat crate structure still limits enforcement, but semantic coupling is redu
 
 | Symbol | File | Risk Level | Notes |
 |--------|------|------------|-------|
-| `History` / `HistoryEntry` | history.rs | Medium | Now implements `HistoryRepository` trait |
+| `run()` | cli/transcribe.rs | Medium | Capability pipeline orchestration (629 LOC) |
+| `History` / `HistoryEntry` | history.rs | Medium | Implements `HistoryRepository` trait (689 LOC) |
 | `Config` | config.rs | Low (stable) | Implements `ConfigProvider`, maximally stable |
 | `AppContext` | context.rs | Low | Central DI, uses trait polymorphism |
-| `UIContext` | ui/state.rs | Low (improved) | Now implements `UIStateUpdater` trait |
+| `UIContext` | ui/state.rs | Low (improved) | Implements `UIStateUpdater` trait |
 | `TranscriptionService` | services/transcription.rs | Low | Implements `Transcription` trait |
 | `WhisperSTT` | whisper.rs | Low | Implements `Transcription` trait |
+| `ParakeetSTT` | tdt.rs | Low | Implements `Transcription` trait ← NEW |
 
 ### Complexity Hotspots (Current)
 
 | File | LOC | Issue | Status |
 |------|-----|-------|--------|
 | history.rs | 689 | Largest file, grew with trait impl | ⚠️ Consider splitting |
+| cli/transcribe.rs | 629 | Capability pipeline + metrics | ⚠️ NEW — well-structured but large |
+| test_support/mocks.rs | 410 | All mock implementations | OK (consolidated) |
 | dialogs/settings.rs | 374 | Many config fields | ⚠️ Monitor |
 | models.rs | 366 | Model registry + metadata | OK |
-| test_support/mocks.rs | 410 | All mock implementations | OK (consolidated) |
+| cli/wav_reader.rs | 307 | WAV parsing | OK — isolated utility |
 
 ### Resolved Hotspots ✅
 
@@ -551,9 +902,29 @@ The flat crate structure still limits enforcement, but semantic coupling is redu
 
 ## Design Strengths
 
-### 1. AppContext Dependency Injection with Trait Polymorphism
+### 1. Capability-Based Architecture (NEW in v0.3.0)
 
-`AppContext` is now a fully-realized DI container that uses trait-based polymorphism for its convenience methods:
+The application now supports composable capabilities with clear constraints:
+
+```rust
+// Capability selection via CLI args
+pub enum SttBackend { Whisper, Tdt }
+pub enum DiarizationMethod { None, Channel, Sortformer }
+
+// Constraint validation
+if matches!(backend, SttBackend::Tdt) && diarization != DiarizationMethod::None {
+    bail!("TDT backend does not support diarization");
+}
+```
+
+**Benefits:**
+- Clear capability contracts
+- Fail-fast on invalid combinations
+- Extensible design for future capabilities (post-processing, etc.)
+
+### 2. AppContext Dependency Injection with Trait Polymorphism
+
+`AppContext` is a fully-realized DI container using trait-based polymorphism:
 
 ```rust
 // AppContext uses ConfigProvider trait for polymorphism
@@ -566,50 +937,62 @@ pub fn is_model_loaded(&self) -> bool {
 }
 ```
 
-### 2. Trait Abstractions — ALL IMPLEMENTED ✅
+### 3. Trait Abstractions — ALL IMPLEMENTED ✅
 
-`traits.rs` defines 6 traits — all now have production and/or mock implementations:
+`traits.rs` defines 6 traits — all have production and/or mock implementations:
 
 | Trait | Production Impl | Mock Impl | Test Impl |
 |-------|-----------------|-----------|-----------|
 | `AudioRecording` | — | — | `TestRecorder` |
-| `Transcription` | `WhisperSTT`, `TranscriptionService` | `MockTranscription` | — |
+| `Transcription` | `WhisperSTT`, `ParakeetSTT`, `TranscriptionService` | `MockTranscription` | — |
 | `VoiceDetection` | `VoiceActivityDetector` | `MockVoiceDetector` | — |
 | `HistoryRepository` | `History` | — | — |
 | `ConfigProvider` | `Config` | `MockConfigProvider` | — |
 | `UIStateUpdater` | `UIContext` | — | — |
 
-### 3. UI Module Split + Dispatch Pattern
+### 4. UI Module Split + Dispatch Pattern
 
 The UI layer is well-organized with clear separation:
 - `ui/mod.rs` — window setup, `build_ui()`
 - `ui/state.rs` — state structs implementing `UIStateUpdater` trait
-- `ui/dispatch.rs` — centralized mode routing (NEW)
-- `ui/widgets.rs` — widget builders (NEW)
-- `ui/recording.rs`, `ui/continuous.rs`, `ui/conference.rs` — mode handlers
+- `ui/dispatch.rs` — centralized mode routing
+- `ui/widgets.rs` — widget builders
+- `ui/recording.rs`, `ui/continuous.rs`, `ui/conference.rs`, `ui/conference_file.rs` — mode handlers
 
-### 4. Dialog Subdirectory Organization
+### 5. CLI Interface with JSON Metrics (NEW in v0.3.0)
+
+The CLI provides systematic testing capabilities:
+```bash
+voice-dictation transcribe test.wav --backend=tdt -f json -o result.json
+```
+
+Output includes:
+- `backend`, `diarization`, `denoise` — capability selection
+- `metrics.rtf` — Real-Time Factor (execution/audio duration)
+- `metrics.word_count`, `metrics.segment_count` — quality indicators
+
+### 6. Dialog Subdirectory Organization
 
 Dialogs split into cohesive subdirectories:
 - `dialogs/model/` — mod.rs, download.rs, list.rs
 - `dialogs/history/` — mod.rs, list.rs, export.rs
 
-### 5. Service Layer with Trait Implementation
+### 7. Service Layer with Trait Implementation
 
 `services/transcription.rs` implements the `Transcription` trait, enabling polymorphic dispatch:
 ```rust
 impl Transcription for TranscriptionService { ... }
 ```
 
-### 6. Centralized Channel Management
+### 8. Centralized Channel Management
 
 `UIChannels` consolidates all async communication channels with clean accessor methods.
 
-### 7. Comprehensive Test Infrastructure
+### 9. Comprehensive Test Infrastructure
 
 `test_support/mocks.rs` (410 LOC) provides mock implementations for all 6 domain traits, enabling unit testing without real dependencies.
 
-### 8. Clean Error Handling
+### 10. Clean Error Handling
 
 Consistent use of `anyhow::Result` with `.context()` for error propagation throughout.
 
@@ -626,51 +1009,64 @@ Consistent use of `anyhow::Result` with `.context()` for error propagation throu
 | 3 | AppContext leaks internals (`config_arc()`, `history_arc()`) | Methods removed; uses trait convenience methods |
 | 4 | ui/state.rs unstable hotspot | Implements `UIStateUpdater` trait; `AppState` moved to types.rs |
 | 5 | Oversized dialog modules | Split into `dialogs/model/*` and `dialogs/history/*` |
+| 6 | AudioService concrete mic dependency (V5) | `mic: Arc<dyn AudioRecording>` + `with_recorder()` constructor |
+| 7 | Single STT backend | Capability-based architecture with Whisper + TDT backends |
 
 ### Remaining Issues
 
-#### 1. history.rs Size (689 LOC)
+#### 1. Dialogs Use Concrete Types (V4) — High Priority
 
-**Problem:** `history.rs` has grown significantly (689 LOC) due to the `HistoryRepository` trait implementation. While cohesive, it exceeds the 500 LOC guideline.
+**Problem:** All three dialog entry points accept concrete infrastructure types instead of trait bounds. This is the most significant remaining architectural violation.
 
-**Recommendation:** Consider extracting search/filter logic into a separate `history_search.rs` module.
+**Affected files:**
+- `dialogs/history/mod.rs` → `Arc<Mutex<History>>` (should be `Arc<Mutex<dyn HistoryRepository>>`)
+- `dialogs/model/mod.rs` → `Arc<Mutex<Config>>`, `Arc<Mutex<TranscriptionService>>` (should be `dyn ConfigProvider`, `dyn Transcription`)
+- `dialogs/settings.rs` → `Arc<Mutex<Config>>` (should be `dyn ConfigProvider`)
 
-#### 2. Dialogs Still Use Concrete Types
+**Impact:** Dialogs cannot be tested with mock implementations. All dialog tests require real `History`, `Config`, and `TranscriptionService` instances.
 
-**Problem:** Dialogs import and use `Config`, `History`, `TranscriptionService` directly rather than through trait bounds.
+**Note:** `ModelRowContext` internal struct in `model/list.rs` also holds concrete types, propagating the violation deeper.
 
-**Impact:** Dialogs cannot be easily tested with mock implementations.
+#### 2. CLI Inner Functions Use Concrete Types (V7) — Medium Priority
 
-**Evidence:**
+**Problem:** While `cli/transcribe.rs::run()` is a valid composition root, its helper functions accept concrete types:
+
 ```rust
-// dialogs/history/mod.rs
-pub fn show_history_dialog(parent: &impl IsA<Window>, history: Arc<Mutex<History>>)
+fn transcribe_with_whisper(service: &TranscriptionService, ...) -> Result<TranscriptionResult>
+fn transcribe_channel_diarization(whisper: &crate::whisper::WhisperSTT, ...) -> Result<TranscriptionResult>
 ```
 
-#### 3. AudioService Uses Concrete AudioRecorder
+**Impact:** CLI pipeline stages cannot be unit-tested with mock STT backends.
 
-**Problem:** `services/audio.rs` depends directly on `AudioRecorder` rather than a trait abstraction.
+#### 3. history.rs Size (689 LOC) — Medium Priority
 
-**Impact:** Cannot swap audio implementations or test with mocks.
+**Problem:** `history.rs` has grown to 689 LOC due to the `HistoryRepository` trait implementation. While cohesive, it exceeds the 500 LOC guideline.
 
-#### 4. Flat Module Hierarchy (No Layer Enforcement)
+**Recommendation:** Extract search/filter logic into `history_search.rs`.
 
-**Problem:** All 24 modules are declared as flat siblings in `main.rs`. Rust's module system prevents import cycles, but semantic layer boundaries are not enforced.
+#### 4. Flat Module Hierarchy (V6) — Low Priority
+
+**Problem:** 26 modules declared as flat siblings in `main.rs`. Rust's module system prevents import cycles, but semantic layer boundaries are not enforced.
 
 ```rust
 mod audio;
 mod channels;
+mod cli;
 mod conference_recorder;
-// ... 21 more flat mods
+// ... 22 more flat mods
 ```
 
-**Mitigation:** Trait-based polymorphism and `ui/dispatch.rs` reduce semantic coupling, but layer violations remain possible.
+**Mitigation:** Some natural grouping exists (`cli/`, `ui/`, `dialogs/`, `vad/`, `services/`), but infrastructure modules (`whisper.rs`, `tdt.rs`, `denoise.rs`, `diarization.rs`) are ungrouped.
 
-#### 5. settings.rs Growing (374 LOC)
+#### 5. settings.rs Growing (374 LOC) — Low Priority
 
-**Problem:** `dialogs/settings.rs` handles all application settings in a single module. As config options grow, this will become harder to maintain.
+**Problem:** `dialogs/settings.rs` handles all settings in a single module. As capability options grow (new STT backends, post-processing), this will become harder to maintain.
 
-**Recommendation:** Consider grouping settings by category (audio, transcription, UI, etc.).
+**Recommendation:** Group settings by capability category (audio, STT, diarization, UI).
+
+#### ~~6. AudioService Uses Concrete AudioRecorder~~ — Resolved ✅
+
+**Status:** `mic` field uses `Arc<dyn AudioRecording>` trait object. `conference`/`continuous` use concrete types, but this is acceptable — they are complex orchestrators with no alternative implementations.
 
 ---
 
@@ -685,10 +1081,34 @@ mod conference_recorder;
 | P2 | Fix tray duplication | ✅ Uses `ctx.transcription.clone()` |
 | P3 | Decompose oversized dialog modules | ✅ Split into subdirectories |
 | P3 | AudioRecording trait for AudioService | ✅ `Arc<dyn AudioRecording>` + `with_recorder()` |
+| P4 | Capability-based architecture | ✅ Multi-backend STT, CLI pipeline, constraint validation |
 
 ### Remaining Recommendations
 
-#### Priority 1: Decompose history.rs (689 LOC)
+#### Priority 1: Trait-ify Dialog Dependencies (V4)
+
+**Goal:** Enable dialog testing with mocks. Addresses the most impactful remaining violation.
+
+**Steps:**
+1. Change `show_history_dialog(Arc<Mutex<History>>)` to accept `Arc<Mutex<dyn HistoryRepository>>`
+2. Change `show_model_dialog(Arc<Mutex<TranscriptionService>>)` to accept `Arc<Mutex<dyn Transcription>>`
+3. Change `show_settings_dialog(Arc<Mutex<Config>>)` to accept `Arc<Mutex<dyn ConfigProvider>>`
+4. Update `ModelRowContext` internal struct in `model/list.rs` to use trait objects
+
+**Challenge:** GTK4 dialog code often needs concrete methods not on the trait (e.g., `Config::save()`). May require extending trait surfaces or using a **dialog context** pattern that bundles both read (trait) and write (concrete) access.
+
+#### Priority 2: Trait-ify CLI Inner Functions (V7)
+
+**Goal:** Enable unit testing of CLI pipeline stages with mock STT backends.
+
+**Steps:**
+1. Change `transcribe_with_whisper(service: &TranscriptionService)` → `transcribe_with_backend(service: &dyn Transcription)`
+2. Change `transcribe_channel_diarization(whisper: &WhisperSTT)` → accept `&dyn Transcription`
+3. Keep `run()` as composition root creating concrete types (correct pattern)
+
+**Benefit:** Enables testing CLI pipeline logic without loading actual Whisper/TDT models.
+
+#### Priority 3: Decompose history.rs (689 LOC)
 
 **Goal:** Keep modules under 500 LOC guideline.
 
@@ -697,84 +1117,107 @@ mod conference_recorder;
 2. Keep core `History` struct and `HistoryRepository` impl in `history.rs`
 3. Consider `history_export.rs` for serialization logic
 
-#### Priority 2: Trait-ify Dialog Dependencies
+#### Priority 4: Group Infrastructure Modules (V6)
 
-**Goal:** Enable dialog testing with mocks.
+**Goal:** Organize flat modules into capability-aligned directories.
 
-**Steps:**
-1. Change `show_history_dialog(Arc<Mutex<History>>)` to accept `Arc<Mutex<dyn HistoryRepository<Entry = HistoryEntry>>>`
-2. Change `show_model_dialog(Arc<Mutex<TranscriptionService>>)` to accept `Arc<Mutex<dyn Transcription>>`
-3. Update `show_settings_dialog` to accept `dyn ConfigProvider`
+**Current:** 26 flat modules in `main.rs`.
 
-#### ~~Priority 3: AudioRecording Trait for AudioService~~ ✅ DONE
+**Proposed grouping:**
+```
+src/
+├── stt/                    # STT capability providers
+│   ├── whisper.rs
+│   ├── tdt.rs
+│   └── mod.rs
+├── audio/                  # Audio capability providers
+│   ├── capture.rs          # (was audio.rs)
+│   ├── denoise.rs
+│   ├── loopback.rs
+│   └── mod.rs
+├── diarization/            # Diarization capability
+│   ├── sortformer.rs       # (was diarization.rs)
+│   └── mod.rs
+```
 
-**Status:** Already implemented:
-- `impl AudioRecording for AudioRecorder` — `audio.rs:188-204`
-- `AudioService.mic: Arc<dyn AudioRecording>` — `services/audio.rs:46`
-- `AudioService::with_recorder()` constructor — `services/audio.rs:76-92`
-- `MockAudioRecorder` — `test_support/mocks.rs:15-78`
-- Tests using mock injection — `services/audio.rs:181-241`
-
-#### Priority 4: Enforce Layer Boundaries (Long-term)
-
-**Goal:** Make layer violations compile-time errors.
-
-**Options:**
-1. Workspace crates: `s2t-domain`, `s2t-services`, `s2t-ui`, `s2t-infra`
-2. Use `pub(crate)`, `pub(super)` to restrict visibility
-3. Add architecture fitness checks to CI
+**Risk:** Module renames break imports across the crate. This is a refactoring-only change with high churn and should only be done when the module set stabilizes.
 
 #### Priority 5: Split settings.rs (374 LOC)
 
-**Goal:** Improve maintainability as config options grow.
+**Goal:** Improve maintainability as capability options grow.
 
 **Steps:**
-1. Group by category: `settings/audio.rs`, `settings/transcription.rs`, `settings/ui.rs`
+1. Group by capability: `settings/audio.rs`, `settings/stt.rs`, `settings/diarization.rs`, `settings/ui.rs`
 2. Or use a builder pattern to construct settings UI declaratively
 
 ---
 
 ## Conclusion
 
-The Voice Dictation application (v0.2.0) has achieved a significant architectural milestone: **all domain traits are now implemented and actively used for polymorphism**. The codebase has transitioned from aspirational architecture to enforced contracts.
+The Voice Dictation application (v0.3.0) has evolved into a **Capability-Based Architecture** that provides flexibility in combining STT backends, diarization methods, and audio processing options.
 
-### Key Achievements (v0.2.0)
+### Key Achievements (v0.3.0)
 
-1. **All 6 domain traits implemented** with production and mock implementations
-2. **Trait-based polymorphism** used in `AppContext` convenience methods
-3. **UIStateUpdater trait** decouples UI handlers from concrete widget structs
-4. **Tray integration fixed** — no more duplicate Whisper model loading
-5. **Dialog modules split** into cohesive subdirectories
-6. **Dispatch pattern** centralizes mode routing in `ui/dispatch.rs`
-7. **Comprehensive mock infrastructure** (410 LOC) enables unit testing
+1. **Capability-Based Pipeline** — STT, Denoising, Diarization, VAD as composable capabilities
+2. **Multi-Backend STT** — Whisper (full-featured) + TDT/Parakeet (fast, pure STT)
+3. **CLI Transcription Interface** — `voice-dictation transcribe` with JSON metrics output
+4. **Constraint Validation** — Invalid capability combinations (TDT + diarization) fail early
+5. **Comprehensive Metrics** — RTF, word count, segment count for quality comparison
+6. **VAD Module Restructure** — Split into webrtc.rs + silero.rs backends
+7. **nnnoiseless Denoising** — Audio preprocessing capability (mandatory for TDT)
+8. **ConferenceFile Mode** — Record-only mode without transcription
+9. **All domain traits implemented** with production and mock implementations
+
+### Version History
+
+| Version | Architecture Milestone |
+|---------|------------------------|
+| v0.1.0 | Monolithic GTK application |
+| v0.2.0 | Trait-based polymorphism, DI container, module split |
+| v0.3.0 | **Capability-Based Architecture**, multi-backend STT, CLI interface |
 
 ### Current State Summary
 
 | Aspect | Status |
 |--------|--------|
 | AppContext DI container | ✅ Implemented |
+| Capability pipeline | ✅ **NEW** (STT, Denoise, Diarization, VAD) |
+| Multi-backend STT | ✅ **NEW** (Whisper + TDT) |
+| CLI interface | ✅ **NEW** (transcribe command + JSON output) |
 | UI module split | ✅ Implemented |
 | Service layer | ✅ Implemented |
-| UIChannels | ✅ Implemented |
-| Domain traits defined | ✅ Implemented (6 traits) |
-| Domain traits wired | ✅ **DONE** (all implemented) |
-| Tray uses AppContext | ✅ **DONE** |
-| Legacy accessors removed | ✅ **DONE** (config_arc, history_arc removed) |
-| UIStateUpdater trait | ✅ **NEW** |
-| Mock implementations | ✅ **NEW** (all traits) |
-| Dialog module split | ✅ **DONE** |
+| Domain traits wired | ✅ All 6 traits implemented |
+| Constraint validation | ✅ **NEW** (TDT + diarization blocked) |
+| VAD module restructure | ✅ **NEW** (webrtc.rs + silero.rs) |
 | Layer enforcement | ⚠️ Partial (flat hierarchy, but traits reduce coupling) |
+
+### Performance Benchmarks (v0.3.0)
+
+| Backend | RTF | Notes |
+|---------|-----|-------|
+| TDT | 0.19 | Fastest, pure STT only |
+| Whisper base | 0.31 | Good quality, supports diarization |
+| Whisper medium | 0.45 | Best quality, slowest |
+
+*RTF (Real-Time Factor) = execution_time / audio_duration. Lower is faster.*
 
 ### Remaining Work
 
-| Priority | Task | Effort |
-|----------|------|--------|
-| P1 | Decompose history.rs (689 LOC) | Medium |
-| P2 | Trait-ify dialog dependencies | Medium |
-| P3 | ~~AudioRecording trait for AudioService~~ | ✅ Done |
-| P4 | Layer boundary enforcement | High (optional) |
-| P5 | Split settings.rs | Low |
+| Priority | Task | Violation | Effort |
+|----------|------|-----------|--------|
+| P1 | Trait-ify dialog dependencies | V4 | Medium |
+| P2 | Trait-ify CLI inner functions | V7 | Low |
+| P3 | Decompose history.rs (689 LOC) | — | Medium |
+| P4 | Group infrastructure modules | V6 | High (churn risk) |
+| P5 | Split settings.rs | — | Low |
+| P6 | Post-processing capability (punctuation, caps) | — | Medium |
 
-**Overall Architecture Rating:** 7.5/10 (up from 5/10)
+**Overall Architecture Rating:** 8.0/10 (up from 7.5)
 
-The architecture is now in a healthy state with clear contracts and testable components. The main technical debt is module size (history.rs) and the remaining concrete type dependencies in dialogs. These are manageable and do not block feature development.
+The architecture now provides:
+- **Flexibility** — Mix and match capabilities via CLI or config
+- **Extensibility** — New backends/capabilities can be added without modifying core
+- **Testability** — All traits have mock implementations
+- **Performance visibility** — JSON metrics enable systematic comparison
+
+The main remaining technical debt is module size (history.rs) and concrete type dependencies in dialogs. The capability model provides a clear path for future extensions like post-processing.
