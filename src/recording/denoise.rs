@@ -8,7 +8,7 @@ use crate::domain::traits::AudioDenoising;
 use anyhow::{Context, Result};
 use nnnoiseless::DenoiseState;
 use rubato::{FftFixedIn, Resampler};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 /// Input sample rate (Whisper pipeline rate)
 const INPUT_SAMPLE_RATE: usize = 16000;
@@ -149,7 +149,7 @@ impl NnnoiselessDenoiser {
 
         // Run RNNoise at 48kHz (single lock — no ordering issue)
         let denoised_48k = {
-            let mut inner = self.inner.lock().unwrap();
+            let mut inner = self.inner.lock();
 
             let mut denoised = Vec::with_capacity(upsampled.len());
             inner.buffer.extend_from_slice(&upsampled);
@@ -191,7 +191,7 @@ impl AudioDenoising for NnnoiselessDenoiser {
     }
 
     fn reset(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         inner.buffer.clear();
         inner.state = DenoiseState::new();
     }

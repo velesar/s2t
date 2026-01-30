@@ -2,7 +2,8 @@ use crate::recording::microphone::AudioRecorder;
 use crate::recording::loopback::LoopbackRecorder;
 use crate::domain::types::ConferenceRecording;
 use anyhow::{Context, Result};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::Instant;
 
 pub(crate) struct ConferenceRecorder {
@@ -23,7 +24,7 @@ impl ConferenceRecorder {
     /// Start recording from both microphone and loopback simultaneously
     pub fn start_conference(&self) -> Result<()> {
         let start = Instant::now();
-        *self.start_time.lock().unwrap() = Some(start);
+        *self.start_time.lock() = Some(start);
 
         // Start both recorders
         self.mic_recorder
@@ -41,7 +42,7 @@ impl ConferenceRecorder {
         let (mic_samples, mic_completion) = self.mic_recorder.stop_recording();
         let (loopback_samples, loopback_completion) = self.loopback_recorder.stop_loopback();
 
-        *self.start_time.lock().unwrap() = None;
+        *self.start_time.lock() = None;
 
         ConferenceRecording::new(
             mic_samples,

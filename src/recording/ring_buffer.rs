@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 /// Internal state for ring buffer, consolidated into single mutex
 struct RingBufferState {
@@ -35,7 +36,7 @@ impl RingBuffer {
 
     /// Write samples to the buffer (overwrites oldest if full)
     pub fn write(&self, samples: &[f32]) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         let capacity = self.capacity;
 
         for &sample in samples {
@@ -48,7 +49,7 @@ impl RingBuffer {
 
     /// Read all available samples from the buffer (clears buffer)
     pub fn read_all(&self) -> Vec<f32> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
 
         if state.size == 0 {
             return Vec::new();
@@ -77,7 +78,7 @@ impl RingBuffer {
 
     /// Read last N samples without clearing buffer
     pub fn peek_last(&self, n: usize) -> Vec<f32> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock();
 
         let read_size = n.min(state.size);
         if read_size == 0 {
@@ -101,7 +102,7 @@ impl RingBuffer {
 
     /// Clear the buffer
     pub fn clear(&self) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.size = 0;
         state.write_pos = 0;
     }

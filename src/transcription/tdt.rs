@@ -10,7 +10,7 @@
 
 use anyhow::{Context, Result};
 use parakeet_rs::{ParakeetTDT, Transcriber};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 /// Parakeet TDT speech-to-text backend.
 ///
@@ -47,10 +47,7 @@ impl ParakeetSTT {
     /// * `_language` - Language hint (currently ignored; TDT uses auto-detection)
     pub fn transcribe(&self, samples: &[f32], _language: Option<&str>) -> Result<String> {
         // ParakeetTDT expects samples at 16kHz as Vec<f32>
-        let mut model = self
-            .model
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to lock TDT model: {}", e))?;
+        let mut model = self.model.lock();
 
         let result = model
             .transcribe_samples(samples.to_vec(), 16000, 1, None)

@@ -29,11 +29,11 @@ fn main() -> Result<()> {
 
 /// Initialize transcription service based on configured backend.
 fn init_transcription_service(
-    config: &std::sync::Arc<std::sync::Mutex<app::config::Config>>,
+    config: &std::sync::Arc<parking_lot::Mutex<app::config::Config>>,
 ) -> transcription::TranscriptionService {
     use transcription::TranscriptionService;
 
-    let cfg = config.lock().unwrap();
+    let cfg = config.lock();
     let stt_backend = cfg.stt_backend.clone();
     drop(cfg);
 
@@ -60,11 +60,11 @@ fn init_transcription_service(
 
 /// Load Whisper model from config or fallback locations.
 fn load_whisper_model(
-    config: &std::sync::Arc<std::sync::Mutex<app::config::Config>>,
+    config: &std::sync::Arc<parking_lot::Mutex<app::config::Config>>,
 ) -> transcription::TranscriptionService {
     use transcription::TranscriptionService;
 
-    let cfg = config.lock().unwrap();
+    let cfg = config.lock();
     if let Some(model_path) = find_model_path(&cfg) {
         drop(cfg);
         println!("Завантаження Whisper моделі: {}", model_path);
@@ -125,7 +125,8 @@ fn run_gui() -> Result<()> {
     use history::{load_history, save_history, History};
     use infrastructure::hotkeys::HotkeyManager;
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use parking_lot::Mutex;
     use infrastructure::tray::{DictationTray, TrayAction};
 
     gtk4::init()?;
@@ -150,7 +151,7 @@ fn run_gui() -> Result<()> {
             eprintln!("Помилка завантаження історії: {}. Створюю нову.", e);
             History::default()
         });
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         h.cleanup_old_entries(cfg.history_max_age_days);
         h.trim_to_limit(cfg.history_max_entries);
         drop(cfg);
@@ -165,7 +166,7 @@ fn run_gui() -> Result<()> {
 
     // Initialize diarization engine
     let diarization_engine = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         let model_path = if let Some(ref path) = cfg.sortformer_model_path {
             Some(PathBuf::from(path))
         } else {
@@ -228,8 +229,8 @@ fn run_gui() -> Result<()> {
 
     // Register hotkeys from config
     {
-        let cfg = config.lock().unwrap();
-        let mut hk = hotkey_manager.lock().unwrap();
+        let cfg = config.lock();
+        let mut hk = hotkey_manager.lock();
         if let Err(e) = hk.register_from_config(&cfg) {
             eprintln!("Помилка реєстрації гарячих клавіш: {}", e);
         }
@@ -241,8 +242,8 @@ fn run_gui() -> Result<()> {
     let reload_hotkeys_rx = ctx.channels.reload_hotkeys_rx().clone();
     std::thread::spawn(move || {
         while reload_hotkeys_rx.recv_blocking().is_ok() {
-            let cfg = config_for_reload.lock().unwrap();
-            let mut hk = hotkey_manager_for_reload.lock().unwrap();
+            let cfg = config_for_reload.lock();
+            let mut hk = hotkey_manager_for_reload.lock();
             if let Err(e) = hk.register_from_config(&cfg) {
                 eprintln!("Помилка перереєстрації гарячих клавіш: {}", e);
             }

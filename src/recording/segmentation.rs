@@ -11,7 +11,8 @@ use crate::recording::ring_buffer::RingBuffer;
 use crate::vad::{create_vad, VadConfig, VadEngine};
 use async_channel::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 
 /// Configuration for audio segmentation.
@@ -71,10 +72,10 @@ impl SegmentationMonitor {
     /// feeds them into the ring buffer, and produces segments via the channel.
     pub fn start(&self, samples_buffer: Arc<Mutex<Vec<f32>>>, segment_tx: Sender<AudioSegment>) {
         self.ring_buffer.clear();
-        *self.segment_tx.lock().unwrap() = Some(segment_tx);
+        *self.segment_tx.lock() = Some(segment_tx);
         self.is_running.store(true, Ordering::SeqCst);
-        *self.segment_counter.lock().unwrap() = 0;
-        *self.last_segment_time.lock().unwrap() = Some(Instant::now());
+        *self.segment_counter.lock() = 0;
+        *self.last_segment_time.lock() = Some(Instant::now());
 
         let ring_buffer = self.ring_buffer.clone();
         let is_running = self.is_running.clone();
@@ -111,7 +112,7 @@ impl SegmentationMonitor {
 
                 // Read only new samples from the recorder's shared buffer
                 {
-                    let samples = samples_buffer.lock().unwrap();
+                    let samples = samples_buffer.lock();
                     let current_len = samples.len();
                     if current_len > last_samples_len {
                         ring_buffer.write(&samples[last_samples_len..]);
@@ -140,7 +141,7 @@ impl SegmentationMonitor {
                     is_speech_detected.store(false, Ordering::SeqCst);
 
                     // Fixed interval fallback
-                    let last_time = *last_segment_time.lock().unwrap();
+                    let last_time = *last_segment_time.lock();
                     last_time
                         .map(|t| Instant::now().duration_since(t) >= segment_interval)
                         .unwrap_or(false)
@@ -151,14 +152,13 @@ impl SegmentationMonitor {
 
                     if segment_samples.len() >= min_samples {
                         let segment_id = {
-                            let mut counter = segment_counter.lock().unwrap();
+                            let mut counter = segment_counter.lock();
                             *counter += 1;
                             *counter
                         };
 
                         let start_time = last_segment_time
                             .lock()
-                            .unwrap()
                             .unwrap_or_else(Instant::now);
                         let end_time = Instant::now();
 
@@ -169,13 +169,13 @@ impl SegmentationMonitor {
                             segment_id,
                         };
 
-                        if let Some(ref tx) = *segment_tx.lock().unwrap() {
+                        if let Some(ref tx) = *segment_tx.lock() {
                             if let Err(e) = tx.try_send(segment) {
                                 eprintln!("Помилка відправки сегменту: {:?}", e);
                             }
                         }
 
-                        *last_segment_time.lock().unwrap() = Some(end_time);
+                        *last_segment_time.lock() = Some(end_time);
                     }
                 }
             }
@@ -198,7 +198,7 @@ impl SegmentationMonitor {
         // Fallback: if ring buffer is empty, use last 5s from recorder's samples
         let mut remaining = ring_remaining;
         if remaining.is_empty() {
-            let recorder_samples = samples_buffer.lock().unwrap();
+            let recorder_samples = samples_buffer.lock();
             if !recorder_samples.is_empty() {
                 let last_segment_samples = (WHISPER_SAMPLE_RATE as usize) * 5;
                 let start = recorder_samples.len().saturating_sub(last_segment_samples);
@@ -211,18 +211,17 @@ impl SegmentationMonitor {
 
         if remaining.len() >= min_samples {
             let segment_id = {
-                let mut counter = self.segment_counter.lock().unwrap();
+                let mut counter = self.segment_counter.lock();
                 *counter += 1;
                 *counter
             };
 
-            if let Some(ref tx) = *self.segment_tx.lock().unwrap() {
+            if let Some(ref tx) = *self.segment_tx.lock() {
                 let segment = AudioSegment {
                     samples: remaining,
                     start_time: self
                         .last_segment_time
                         .lock()
-                        .unwrap()
                         .unwrap_or_else(Instant::now),
                     end_time: Instant::now(),
                     segment_id,
@@ -232,7 +231,7 @@ impl SegmentationMonitor {
         }
 
         // Close the channel
-        *self.segment_tx.lock().unwrap() = None;
+        *self.segment_tx.lock() = None;
     }
 
     /// Check if speech is currently detected (for UI display).

@@ -15,7 +15,8 @@ use crate::domain::traits::Transcription;
 use crate::domain::types::SharedHistory;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Button, TextView};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let config = ctx.config.clone();
@@ -48,7 +49,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
         level_bar_clone.set_visible(!is_conference_mode);
         level_bars_box_clone.set_visible(is_conference_mode);
 
-        let mut cfg = config_for_mode.lock().unwrap();
+        let mut cfg = config_for_mode.lock();
         cfg.recording_mode = match combo.active() {
             Some(1) => "conference".to_string(),
             Some(2) => "conference_file".to_string(),

@@ -67,6 +67,9 @@ nnnoiseless = "0.5"
 # Cryptographic hashing for model integrity verification
 sha2 = "0.10"
 
+# Mutex without poisoning (parking_lot::Mutex)
+parking_lot = "0.12"
+
 # Speaker diarization (Sortformer) and TDT backend (parakeet-rs)
 [dependencies.parakeet-rs]
 version = "0.2"

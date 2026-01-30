@@ -37,7 +37,7 @@ pub fn export_history(
         if response == gtk4::ResponseType::Accept {
             if let Some(file) = dialog.file() {
                 if let Some(path) = file.path() {
-                    let history_guard = history_for_export.lock().unwrap();
+                    let history_guard = history_for_export.lock();
                     let query = search_query_for_export.borrow();
                     let from_date = date_from_for_export.borrow();
                     let to_date = date_to_for_export.borrow();

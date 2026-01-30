@@ -5,7 +5,8 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -90,7 +91,7 @@ impl AudioRecorder {
                     current_amplitude.store(amplitude.to_bits(), Ordering::Relaxed);
 
                     // Resample to 16kHz using high-quality sinc interpolation
-                    let mut resampler = resampler.lock().unwrap();
+                    let mut resampler = resampler.lock();
                     let input_frames = resampler.input_frames_next();
 
                     // Process in chunks matching resampler's expected input size
@@ -98,7 +99,7 @@ impl AudioRecorder {
                         if chunk.len() == input_frames {
                             let input = vec![chunk.to_vec()];
                             if let Ok(output) = resampler.process(&input, None) {
-                                samples.lock().unwrap().extend(&output[0]);
+                                samples.lock().extend(&output[0]);
                             }
                         } else {
                             // Pad the last chunk if needed
@@ -113,7 +114,6 @@ impl AudioRecorder {
                                     as usize;
                                 samples
                                     .lock()
-                                    .unwrap()
                                     .extend(&output[0][..output_len.min(output[0].len())]);
                             }
                         }
@@ -202,7 +202,7 @@ mod tests {
     fn test_audio_recorder_default() {
         let recorder = AudioRecorder::default();
         assert!(!recorder.core.is_recording());
-        assert!(recorder.core.samples.lock().unwrap().is_empty());
+        assert!(recorder.core.samples.lock().is_empty());
     }
 
     #[test]

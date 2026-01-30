@@ -13,7 +13,8 @@ use crate::recording::microphone::AudioRecorder;
 use crate::recording::segmentation::{SegmentationConfig, SegmentationMonitor};
 use anyhow::Result;
 use async_channel::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 /// Unified audio service wrapping all recording modes.
 ///

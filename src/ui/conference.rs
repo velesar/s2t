@@ -150,8 +150,8 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
             } else {
                 loopback_samples
             };
-            let ts = ctx_for_thread.transcription.lock().unwrap();
-            let mut engine_guard = ctx_for_thread.diarization.lock().unwrap();
+            let ts = ctx_for_thread.transcription.lock();
+            let mut engine_guard = ctx_for_thread.diarization.lock();
             let result = ts.transcribe_conference(
                 &mic_samples,
                 &loopback_samples,
@@ -199,7 +199,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
                             Some(file_path.to_string_lossy().to_string()),
                             speakers,
                         );
-                        let mut h = ctx.history.lock().unwrap();
+                        let mut h = ctx.history.lock();
                         h.add(entry);
                         if let Err(e) = save_history(&h) {
                             eprintln!("Помилка збереження історії: {}", e);

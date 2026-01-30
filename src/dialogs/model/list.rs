@@ -30,7 +30,7 @@ pub fn create_model_row(
 
     let is_downloaded = is_model_downloaded(filename);
     let is_default = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.default_model == filename
     };
 
@@ -105,7 +105,7 @@ pub fn create_model_row(
     let row_widgets_clone = row_widgets.clone();
 
     set_default_button.connect_clicked(move |_| {
-        let mut cfg = config_clone.lock().unwrap();
+        let mut cfg = config_clone.lock();
         cfg.default_model = filename_owned.clone();
         if let Err(e) = save_config(&cfg) {
             eprintln!("Помилка збереження конфігу: {}", e);
@@ -113,7 +113,7 @@ pub fn create_model_row(
         }
 
         let model_path = get_model_path(&filename_owned);
-        let mut ts = transcription_clone.lock().unwrap();
+        let mut ts = transcription_clone.lock();
         if let Err(e) = ts.load_model(&model_path) {
             eprintln!("Помилка завантаження моделі: {}", e);
         } else {
@@ -240,7 +240,7 @@ pub fn create_model_row(
 
     delete_button.connect_clicked(move |btn| {
         let is_default = {
-            let cfg = config_clone.lock().unwrap();
+            let cfg = config_clone.lock();
             cfg.default_model == filename_owned
         };
 

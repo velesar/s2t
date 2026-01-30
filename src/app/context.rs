@@ -14,7 +14,8 @@ use crate::transcription::TranscriptionService;
 use crate::domain::traits::{ConfigProvider, Transcription};
 use crate::vad::VadEngine;
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 /// Central application context bundling all services and shared state.
 ///
@@ -59,7 +60,7 @@ impl AppContext {
         diarization: DiarizationEngine,
     ) -> Result<Self> {
         let seg_config = {
-            let cfg = config.lock().unwrap();
+            let cfg = config.lock();
             SegmentationConfig {
                 use_vad: cfg.use_vad,
                 segment_interval_secs: cfg.segment_interval_secs,
@@ -88,38 +89,38 @@ impl AppContext {
 
     /// Get current language setting
     pub fn language(&self) -> String {
-        ConfigProvider::language(&*self.config.lock().unwrap())
+        ConfigProvider::language(&*self.config.lock())
     }
 
     /// Check if continuous mode is enabled
     pub fn continuous_mode(&self) -> bool {
-        ConfigProvider::continuous_mode(&*self.config.lock().unwrap())
+        ConfigProvider::continuous_mode(&*self.config.lock())
     }
 
     /// Check if auto-copy is enabled
     pub fn auto_copy(&self) -> bool {
-        ConfigProvider::auto_copy(&*self.config.lock().unwrap())
+        ConfigProvider::auto_copy(&*self.config.lock())
     }
 
     /// Check if auto-paste is enabled
     pub fn auto_paste(&self) -> bool {
-        ConfigProvider::auto_paste(&*self.config.lock().unwrap())
+        ConfigProvider::auto_paste(&*self.config.lock())
     }
 
     /// Get diarization method
     pub fn diarization_method(&self) -> String {
-        self.config.lock().unwrap().diarization_method.clone()
+        self.config.lock().diarization_method.clone()
     }
 
     /// Check if denoising is enabled
     pub fn denoise_enabled(&self) -> bool {
-        self.config.lock().unwrap().denoise_enabled
+        self.config.lock().denoise_enabled
     }
 
     // === Transcription convenience methods ===
 
     /// Check if a Whisper model is loaded
     pub fn is_model_loaded(&self) -> bool {
-        self.transcription.lock().unwrap().is_loaded()
+        self.transcription.lock().is_loaded()
     }
 }

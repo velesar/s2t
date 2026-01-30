@@ -26,7 +26,7 @@ pub fn populate_list(
         list_box.remove(&child);
     }
 
-    let history_guard = history.lock().unwrap();
+    let history_guard = history.lock();
     let query = search_query.borrow();
     let from_date = date_from.borrow();
     let to_date = date_to.borrow();
@@ -132,7 +132,7 @@ fn create_history_row(
     let row_weak = row.downgrade();
     delete_button.connect_clicked(move |_| {
         {
-            let mut h = history_for_delete.lock().unwrap();
+            let mut h = history_for_delete.lock();
             h.remove(&id_owned);
             if let Err(e) = h.save() {
                 eprintln!("Помилка збереження історії: {}", e);

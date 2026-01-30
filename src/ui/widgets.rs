@@ -3,7 +3,8 @@ use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, Label, LevelBar, Orientation, ScrolledWindow, Spinner, TextView,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 /// All widgets needed by the main UI orchestrator for signal wiring and context creation.
 pub struct MainWidgets {
@@ -63,7 +64,7 @@ pub fn build_main_widgets(config: &Arc<Mutex<Config>>) -> MainWidgets {
     mode_combo.set_halign(Align::Start);
 
     let current_mode = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         match cfg.recording_mode.as_str() {
             "conference" => mode_combo.set_active(Some(1)),
             "conference_file" => mode_combo.set_active(Some(2)),

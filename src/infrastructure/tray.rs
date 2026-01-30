@@ -7,7 +7,8 @@ use ksni::{
     menu::{StandardItem, SubMenu},
     MenuItem, Tray, TrayMethods,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 #[derive(Debug, Clone)]
 pub enum TrayAction {
@@ -47,7 +48,7 @@ impl DictationTray {
 
     fn select_model(&mut self, filename: &str) {
         {
-            let mut cfg = self.config.lock().unwrap();
+            let mut cfg = self.config.lock();
             cfg.default_model = filename.to_string();
             if let Err(e) = save_config(&cfg) {
                 eprintln!("Помилка збереження конфігу: {}", e);
@@ -56,7 +57,7 @@ impl DictationTray {
         }
 
         let model_path = get_model_path(filename);
-        let mut ts = self.transcription.lock().unwrap();
+        let mut ts = self.transcription.lock();
         if let Err(e) = ts.load_model(&model_path) {
             eprintln!("Помилка завантаження моделі: {}", e);
         } else {
@@ -81,7 +82,7 @@ impl Tray for DictationTray {
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let downloaded_models = list_downloaded_models();
         let current_model = {
-            let cfg = self.config.lock().unwrap();
+            let cfg = self.config.lock();
             cfg.default_model.clone()
         };
 

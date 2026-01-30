@@ -93,7 +93,7 @@ impl LoopbackRecorder {
                     current_amplitude.store(amplitude.to_bits(), Ordering::Relaxed);
 
                     // Store samples
-                    samples.lock().unwrap().extend(&f32_samples);
+                    samples.lock().extend(&f32_samples);
                 } else {
                     break;
                 }

@@ -1,6 +1,7 @@
 use async_channel::Receiver;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 pub(crate) const WHISPER_SAMPLE_RATE: u32 = 16000;
 
@@ -70,11 +71,11 @@ impl RecordingCore {
     /// Clear samples, set recording flag, create completion channel,
     /// and return handles for the spawned recording thread.
     pub fn prepare_recording(&self) -> RecordingHandles {
-        self.samples.lock().unwrap().clear();
+        self.samples.lock().clear();
         self.is_recording.store(true, Ordering::SeqCst);
 
         let (completion_tx, completion_rx) = async_channel::bounded::<()>(1);
-        *self.completion_rx.lock().unwrap() = Some(completion_rx);
+        *self.completion_rx.lock() = Some(completion_rx);
 
         RecordingHandles {
             samples: self.samples.clone(),
@@ -90,8 +91,8 @@ impl RecordingCore {
         self.is_recording.store(false, Ordering::SeqCst);
         self.current_amplitude
             .store(0.0_f32.to_bits(), Ordering::Relaxed);
-        let completion_rx = self.completion_rx.lock().unwrap().take();
-        let samples = self.samples.lock().unwrap().clone();
+        let completion_rx = self.completion_rx.lock().take();
+        let samples = self.samples.lock().clone();
         (samples, completion_rx)
     }
 }
@@ -148,7 +149,7 @@ mod tests {
         let core = RecordingCore::new();
         assert!(!core.is_recording());
         assert_eq!(core.get_amplitude(), 0.0);
-        assert!(core.samples.lock().unwrap().is_empty());
+        assert!(core.samples.lock().is_empty());
     }
 
     #[test]
@@ -159,7 +160,7 @@ mod tests {
         assert!(core.is_recording());
 
         // Simulate writing samples
-        handles.samples.lock().unwrap().extend(&[0.1, 0.2, 0.3]);
+        handles.samples.lock().extend(&[0.1, 0.2, 0.3]);
 
         let (samples, completion_rx) = core.stop();
         assert!(!core.is_recording());

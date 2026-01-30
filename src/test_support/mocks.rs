@@ -11,7 +11,8 @@ use crate::domain::traits::{
 use anyhow::Result;
 use async_channel::Receiver;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 /// Mock audio recorder for testing.
 ///
@@ -63,7 +64,7 @@ impl MockAudioRecorder {
     /// Set samples to be returned on next stop().
     #[allow(dead_code)] // Utility for test scenarios
     pub fn set_samples(&self, samples: Vec<f32>) {
-        *self.samples_to_return.lock().unwrap() = samples;
+        *self.samples_to_return.lock() = samples;
     }
 }
 
@@ -81,7 +82,7 @@ impl AudioRecording for MockAudioRecorder {
 
     fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
         self.is_recording.store(false, Ordering::SeqCst);
-        let samples = self.samples_to_return.lock().unwrap().clone();
+        let samples = self.samples_to_return.lock().clone();
         (samples, None)
     }
 
@@ -124,7 +125,7 @@ impl MockTranscription {
 
     /// Set the text to return on next transcribe().
     pub fn set_result(&self, text: &str) {
-        *self.result.lock().unwrap() = text.to_string();
+        *self.result.lock() = text.to_string();
     }
 }
 
@@ -133,7 +134,7 @@ impl Transcription for MockTranscription {
         if !self.is_loaded {
             anyhow::bail!("Model not loaded");
         }
-        Ok(self.result.lock().unwrap().clone())
+        Ok(self.result.lock().clone())
     }
 
     fn is_loaded(&self) -> bool {

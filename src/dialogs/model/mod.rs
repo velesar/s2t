@@ -17,7 +17,8 @@ use gtk4::{
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 struct RowWidgets {
     indicator: Label,

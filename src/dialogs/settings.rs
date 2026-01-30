@@ -3,7 +3,8 @@ use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton, Window,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 pub fn show_settings_dialog(
     parent: &impl IsA<Window>,
@@ -54,7 +55,7 @@ pub fn show_settings_dialog(
 
     // Load current language
     let current_language = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.language.clone()
     };
 
@@ -91,7 +92,7 @@ pub fn show_settings_dialog(
     backend_combo.append_text("Parakeet TDT v3");
 
     let current_backend = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.stt_backend.clone()
     };
     if current_backend == "tdt" {
@@ -123,7 +124,7 @@ pub fn show_settings_dialog(
     mode_combo.append_text("Диктовка");
     mode_combo.append_text("Конференція");
     let current_mode = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.recording_mode.clone()
     };
     if current_mode == "conference" {
@@ -145,7 +146,7 @@ pub fn show_settings_dialog(
     diarization_combo.append_text("Sortformer (до 4 мовців)");
 
     let current_diarization = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.diarization_method.clone()
     };
     if current_diarization == "sortformer" {
@@ -170,7 +171,7 @@ pub fn show_settings_dialog(
     // Auto-copy checkbox
     let auto_copy_check = CheckButton::with_label("Автоматично копіювати результат");
     let auto_copy_enabled = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.auto_copy
     };
     auto_copy_check.set_active(auto_copy_enabled);
@@ -180,7 +181,7 @@ pub fn show_settings_dialog(
     // Auto-paste checkbox
     let auto_paste_check = CheckButton::with_label("Автоматично вставити в активне вікно");
     let auto_paste_enabled = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.auto_paste
     };
     auto_paste_check.set_active(auto_paste_enabled);
@@ -190,7 +191,7 @@ pub fn show_settings_dialog(
     // Continuous mode checkbox
     let continuous_check = CheckButton::with_label("Неперервний режим (автоматична сегментація)");
     let continuous_enabled = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.continuous_mode
     };
     continuous_check.set_active(continuous_enabled);
@@ -201,7 +202,7 @@ pub fn show_settings_dialog(
     // VAD checkbox (only active when continuous mode is enabled)
     let vad_check = CheckButton::with_label("VAD (автовиявлення пауз)");
     let vad_enabled = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.use_vad
     };
     vad_check.set_active(vad_enabled);
@@ -219,7 +220,7 @@ pub fn show_settings_dialog(
     // Denoise checkbox
     let denoise_check = CheckButton::with_label("Шумоподавлення (RNNoise)");
     let denoise_enabled = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.denoise_enabled
     };
     denoise_check.set_active(denoise_enabled);
@@ -236,7 +237,7 @@ pub fn show_settings_dialog(
     // Hotkey enabled checkbox
     let hotkey_enabled_check = CheckButton::with_label("Увімкнути глобальні гарячі клавіші");
     let hotkey_enabled = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.hotkey_enabled
     };
     hotkey_enabled_check.set_active(hotkey_enabled);
@@ -251,7 +252,7 @@ pub fn show_settings_dialog(
 
     let hotkey_entry = gtk4::Entry::new();
     let current_hotkey = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.hotkey.clone()
     };
     hotkey_entry.set_text(&current_hotkey);
@@ -282,7 +283,7 @@ pub fn show_settings_dialog(
         0,
     );
     let current_max_entries = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.history_max_entries as f64
     };
     max_entries_spin.set_value(current_max_entries);
@@ -301,7 +302,7 @@ pub fn show_settings_dialog(
         0,
     );
     let current_max_age = {
-        let cfg = config.lock().unwrap();
+        let cfg = config.lock();
         cfg.history_max_age_days as f64
     };
     max_age_spin.set_value(current_max_age);
@@ -392,7 +393,7 @@ pub fn show_settings_dialog(
         };
 
         // Update config
-        let mut cfg = config_clone.lock().unwrap();
+        let mut cfg = config_clone.lock();
         cfg.language = language;
         cfg.stt_backend = stt_backend;
         cfg.auto_copy = auto_copy_check_clone.is_active();

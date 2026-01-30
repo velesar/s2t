@@ -206,7 +206,7 @@ fn spawn_segment_pipeline(
 
             std::thread::spawn(move || {
                 let segment_samples = maybe_denoise(&segment_samples, denoise_enabled);
-                let ts = ctx.transcription.lock().unwrap();
+                let ts = ctx.transcription.lock();
                 let result = ts.transcribe(&segment_samples, &lang);
                 let text = result.unwrap_or_default();
                 if text.is_empty() {
@@ -295,7 +295,7 @@ fn handle_simple_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI)
                 Err(anyhow::anyhow!("Запис закороткий"))
             } else {
                 let samples = maybe_denoise(&samples, denoise_enabled);
-                let ts = ctx_for_thread.transcription.lock().unwrap();
+                let ts = ctx_for_thread.transcription.lock();
                 ts.transcribe(&samples, &language_for_thread)
             };
             let _ = tx.send_blocking(result);
@@ -327,7 +327,7 @@ fn handle_simple_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI)
                         }
 
                         let entry = HistoryEntry::new(text, duration_secs, language.clone());
-                        let mut h = ctx.history.lock().unwrap();
+                        let mut h = ctx.history.lock();
                         h.add(entry);
                         if let Err(e) = save_history(&h) {
                             eprintln!("Помилка збереження історії: {}", e);
@@ -428,7 +428,7 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
             }
 
             let entry = HistoryEntry::new(final_text, duration_secs, language);
-            let mut h = ctx.history.lock().unwrap();
+            let mut h = ctx.history.lock();
             h.add(entry);
             if let Err(e) = save_history(&h) {
                 eprintln!("Помилка збереження історії: {}", e);

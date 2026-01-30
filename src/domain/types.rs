@@ -6,7 +6,8 @@
 use crate::history::HistoryEntry;
 use crate::domain::traits::HistoryRepository;
 use async_channel::Receiver;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::Instant;
 
 /// Shared history storage as a trait object.
