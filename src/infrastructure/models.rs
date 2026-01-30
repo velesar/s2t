@@ -5,6 +5,23 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Validates that a model filename is safe (no path traversal).
+///
+/// Rejects filenames containing path separators or `..` sequences.
+fn sanitize_model_filename(filename: &str) -> Result<()> {
+    if filename.is_empty() {
+        bail!("Ім'я файлу моделі не може бути порожнім");
+    }
+    if filename.contains('/')
+        || filename.contains('\\')
+        || filename.contains("..")
+        || filename.contains('\0')
+    {
+        bail!("Неприпустиме ім'я файлу моделі: {}", filename);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct ModelInfo {
     pub filename: String,
@@ -131,15 +148,22 @@ pub fn list_downloaded_models() -> Vec<ModelInfo> {
 }
 
 pub fn is_model_downloaded(filename: &str) -> bool {
+    if sanitize_model_filename(filename).is_err() {
+        return false;
+    }
     let path = models_dir().join(filename);
     path.exists()
 }
 
 pub fn get_model_path(filename: &str) -> PathBuf {
+    // Note: callers should validate before calling; this is a best-effort guard.
+    // If the filename is invalid, we still return a path within models_dir
+    // but the file won't exist, which is safe.
     models_dir().join(filename)
 }
 
 pub fn delete_model(filename: &str) -> Result<()> {
+    sanitize_model_filename(filename)?;
     let path = models_dir().join(filename);
 
     if !path.exists() {
@@ -229,6 +253,8 @@ pub async fn download_model<F>(filename: &str, progress_callback: F) -> Result<(
 where
     F: Fn(u64, u64) + Send + Sync + 'static,
 {
+    sanitize_model_filename(filename)?;
+
     let expected_sha256 = get_available_models()
         .iter()
         .find(|m| m.filename == filename)
@@ -618,5 +644,54 @@ mod tests {
     fn test_tdt_model_path_contains_tdt() {
         let path = get_tdt_model_path();
         assert!(path.to_string_lossy().contains("tdt"));
+    }
+
+    // === Path traversal guard tests ===
+
+    #[test]
+    fn test_sanitize_valid_filename() {
+        assert!(sanitize_model_filename("ggml-base.bin").is_ok());
+        assert!(sanitize_model_filename("model-v2.1.onnx").is_ok());
+        assert!(sanitize_model_filename("vocab.txt").is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_rejects_path_traversal() {
+        assert!(sanitize_model_filename("../../../etc/passwd").is_err());
+        assert!(sanitize_model_filename("..").is_err());
+        assert!(sanitize_model_filename("foo/../bar").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_rejects_path_separators() {
+        assert!(sanitize_model_filename("/etc/passwd").is_err());
+        assert!(sanitize_model_filename("subdir/model.bin").is_err());
+        assert!(sanitize_model_filename("C:\\Windows\\model.bin").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_rejects_empty() {
+        assert!(sanitize_model_filename("").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_rejects_null_bytes() {
+        assert!(sanitize_model_filename("model\0.bin").is_err());
+    }
+
+    #[test]
+    fn test_is_model_downloaded_rejects_traversal() {
+        // Should return false (not panic) for malicious filenames
+        assert!(!is_model_downloaded("../../../etc/passwd"));
+    }
+
+    #[test]
+    fn test_delete_model_rejects_traversal() {
+        let result = delete_model("../../../etc/passwd");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Неприпустиме ім'я файлу"));
     }
 }

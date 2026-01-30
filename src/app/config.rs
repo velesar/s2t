@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -143,6 +143,46 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    /// Validates config values after loading. Clamps out-of-range values
+    /// and rejects clearly invalid inputs.
+    pub fn validate(&mut self) -> Result<()> {
+        // default_model must not contain path separators
+        if self.default_model.contains('/')
+            || self.default_model.contains('\\')
+            || self.default_model.contains("..")
+        {
+            bail!(
+                "Неприпустиме ім'я моделі: {}",
+                self.default_model
+            );
+        }
+
+        // Clamp numeric fields to sane ranges
+        self.segment_interval_secs = self.segment_interval_secs.clamp(1, 300);
+        self.history_max_entries = self.history_max_entries.clamp(1, 10_000);
+        self.history_max_age_days = self.history_max_age_days.clamp(1, 3650);
+        self.silero_threshold = self.silero_threshold.clamp(0.0, 1.0);
+
+        // Validate recording_mode
+        if !["dictation", "conference", "conference_file"].contains(&self.recording_mode.as_str()) {
+            self.recording_mode = default_recording_mode();
+        }
+
+        // Validate stt_backend
+        if !["whisper", "tdt"].contains(&self.stt_backend.as_str()) {
+            self.stt_backend = default_stt_backend();
+        }
+
+        // Validate vad_engine
+        if !["webrtc", "silero"].contains(&self.vad_engine.as_str()) {
+            self.vad_engine = default_vad_engine();
+        }
+
+        Ok(())
+    }
+}
+
 pub fn config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -190,7 +230,23 @@ pub fn load_config() -> Result<Config> {
     let content = fs::read_to_string(&path)
         .with_context(|| format!("Не вдалося прочитати конфіг: {}", path.display()))?;
 
-    toml::from_str(&content).with_context(|| "Не вдалося розпарсити конфіг")
+    let mut config: Config =
+        toml::from_str(&content).with_context(|| "Не вдалося розпарсити конфіг")?;
+    config.validate()?;
+    Ok(config)
+}
+
+/// Set restrictive file permissions (owner-only read/write) on Unix systems.
+#[cfg(unix)]
+pub fn set_owner_only_permissions(path: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("Не вдалося встановити права доступу: {}", path.display()))
+}
+
+#[cfg(not(unix))]
+pub fn set_owner_only_permissions(_path: &std::path::Path) -> Result<()> {
+    Ok(())
 }
 
 pub fn save_config(config: &Config) -> Result<()> {
@@ -201,8 +257,10 @@ pub fn save_config(config: &Config) -> Result<()> {
     let path = config_path();
     let content = toml::to_string_pretty(config).context("Не вдалося серіалізувати конфіг")?;
 
-    fs::write(&path, content)
+    fs::write(&path, &content)
         .with_context(|| format!("Не вдалося записати конфіг: {}", path.display()))?;
+
+    set_owner_only_permissions(&path)?;
 
     Ok(())
 }
@@ -328,5 +386,123 @@ mod tests {
     fn test_default_stt_backend() {
         let config = Config::default();
         assert_eq!(config.stt_backend, "whisper");
+    }
+
+    // === Validation Tests ===
+
+    #[test]
+    fn test_validate_default_config_is_valid() {
+        let mut config = Config::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_rejects_path_traversal_in_model() {
+        let mut config = Config::default();
+        config.default_model = "../../../etc/passwd".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_slash_in_model() {
+        let mut config = Config::default();
+        config.default_model = "subdir/model.bin".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_clamps_segment_interval() {
+        let mut config = Config::default();
+        config.segment_interval_secs = 0;
+        config.validate().unwrap();
+        assert_eq!(config.segment_interval_secs, 1);
+
+        config.segment_interval_secs = 9999;
+        config.validate().unwrap();
+        assert_eq!(config.segment_interval_secs, 300);
+    }
+
+    #[test]
+    fn test_validate_clamps_history_max_entries() {
+        let mut config = Config::default();
+        config.history_max_entries = 0;
+        config.validate().unwrap();
+        assert_eq!(config.history_max_entries, 1);
+
+        config.history_max_entries = 100_000;
+        config.validate().unwrap();
+        assert_eq!(config.history_max_entries, 10_000);
+    }
+
+    #[test]
+    fn test_validate_clamps_history_max_age_days() {
+        let mut config = Config::default();
+        config.history_max_age_days = 0;
+        config.validate().unwrap();
+        assert_eq!(config.history_max_age_days, 1);
+
+        config.history_max_age_days = 99999;
+        config.validate().unwrap();
+        assert_eq!(config.history_max_age_days, 3650);
+    }
+
+    #[test]
+    fn test_validate_clamps_silero_threshold() {
+        let mut config = Config::default();
+        config.silero_threshold = -0.5;
+        config.validate().unwrap();
+        assert_eq!(config.silero_threshold, 0.0);
+
+        config.silero_threshold = 1.5;
+        config.validate().unwrap();
+        assert_eq!(config.silero_threshold, 1.0);
+    }
+
+    #[test]
+    fn test_validate_resets_invalid_recording_mode() {
+        let mut config = Config::default();
+        config.recording_mode = "invalid_mode".to_string();
+        config.validate().unwrap();
+        assert_eq!(config.recording_mode, "dictation");
+    }
+
+    #[test]
+    fn test_validate_resets_invalid_stt_backend() {
+        let mut config = Config::default();
+        config.stt_backend = "openai".to_string();
+        config.validate().unwrap();
+        assert_eq!(config.stt_backend, "whisper");
+    }
+
+    #[test]
+    fn test_validate_resets_invalid_vad_engine() {
+        let mut config = Config::default();
+        config.vad_engine = "deep_speech".to_string();
+        config.validate().unwrap();
+        assert_eq!(config.vad_engine, "webrtc");
+    }
+
+    #[test]
+    fn test_validate_accepts_valid_enum_values() {
+        for mode in ["dictation", "conference", "conference_file"] {
+            let mut config = Config::default();
+            config.recording_mode = mode.to_string();
+            config.validate().unwrap();
+            assert_eq!(config.recording_mode, mode);
+        }
+
+        for backend in ["whisper", "tdt"] {
+            let mut config = Config::default();
+            config.stt_backend = backend.to_string();
+            config.validate().unwrap();
+            assert_eq!(config.stt_backend, backend);
+        }
+
+        for engine in ["webrtc", "silero"] {
+            let mut config = Config::default();
+            config.vad_engine = engine.to_string();
+            config.validate().unwrap();
+            assert_eq!(config.vad_engine, engine);
+        }
     }
 }

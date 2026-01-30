@@ -34,8 +34,10 @@ pub fn save_history(history: &History) -> Result<()> {
     let content =
         serde_json::to_string_pretty(history).context("Не вдалося серіалізувати історію")?;
 
-    fs::write(&path, content)
+    fs::write(&path, &content)
         .with_context(|| format!("Не вдалося записати історію: {}", path.display()))?;
+
+    crate::app::config::set_owner_only_permissions(&path)?;
 
     Ok(())
 }
