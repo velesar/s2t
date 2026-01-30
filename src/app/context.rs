@@ -123,4 +123,106 @@ impl AppContext {
     pub fn is_model_loaded(&self) -> bool {
         self.transcription.lock().is_loaded()
     }
+
+    /// Create an `AppContext` for testing without requiring real hardware.
+    ///
+    /// Accepts pre-built services so tests can inject mocks for audio,
+    /// transcription, and diarization. All fields are set directly —
+    /// no CPAL devices, Whisper models, or Sortformer weights needed.
+    #[cfg(test)]
+    pub fn for_testing(
+        config: Arc<Mutex<Config>>,
+        history: Arc<Mutex<History>>,
+        audio: Arc<AudioService>,
+        transcription: Arc<Mutex<TranscriptionService>>,
+    ) -> Self {
+        Self {
+            audio,
+            transcription,
+            config,
+            history,
+            diarization: Arc::new(Mutex::new(DiarizationEngine::default())),
+            channels: Arc::new(UIChannels::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::mocks::MockAudioRecorder;
+
+    #[test]
+    fn test_for_testing_creates_valid_context() {
+        let config = Arc::new(Mutex::new(Config::default()));
+        let history = Arc::new(Mutex::new(History::default()));
+        let mock = Arc::new(MockAudioRecorder::new());
+        let samples = mock.samples_buffer();
+        let audio = Arc::new(AudioService::with_recorder(mock, samples, None).unwrap());
+        let transcription = Arc::new(Mutex::new(TranscriptionService::new()));
+
+        let ctx = AppContext::for_testing(config, history, audio, transcription);
+
+        assert!(!ctx.is_model_loaded());
+        assert_eq!(ctx.language(), "uk");
+    }
+
+    #[test]
+    fn test_for_testing_config_accessors() {
+        let mut cfg = Config::default();
+        cfg.auto_copy = true;
+        cfg.auto_paste = false;
+        cfg.continuous_mode = true;
+        cfg.denoise_enabled = true;
+        cfg.diarization_method = "sortformer".to_string();
+
+        let config = Arc::new(Mutex::new(cfg));
+        let history = Arc::new(Mutex::new(History::default()));
+        let mock = Arc::new(MockAudioRecorder::new());
+        let samples = mock.samples_buffer();
+        let audio = Arc::new(AudioService::with_recorder(mock, samples, None).unwrap());
+        let transcription = Arc::new(Mutex::new(TranscriptionService::new()));
+
+        let ctx = AppContext::for_testing(config, history, audio, transcription);
+
+        assert!(ctx.auto_copy());
+        assert!(!ctx.auto_paste());
+        assert!(ctx.continuous_mode());
+        assert!(ctx.denoise_enabled());
+        assert_eq!(ctx.diarization_method(), "sortformer");
+    }
+
+    #[test]
+    fn test_for_testing_channels_work() {
+        let config = Arc::new(Mutex::new(Config::default()));
+        let history = Arc::new(Mutex::new(History::default()));
+        let mock = Arc::new(MockAudioRecorder::new());
+        let samples = mock.samples_buffer();
+        let audio = Arc::new(AudioService::with_recorder(mock, samples, None).unwrap());
+        let transcription = Arc::new(Mutex::new(TranscriptionService::new()));
+
+        let ctx = AppContext::for_testing(config, history, audio, transcription);
+
+        // Verify channels are functional
+        let tx = ctx.channels.toggle_recording_tx().clone();
+        let rx = ctx.channels.toggle_recording_rx().clone();
+        tx.send_blocking(()).unwrap();
+        rx.recv_blocking().unwrap();
+    }
+
+    #[test]
+    fn test_for_testing_audio_service() {
+        let config = Arc::new(Mutex::new(Config::default()));
+        let history = Arc::new(Mutex::new(History::default()));
+        let mock = Arc::new(MockAudioRecorder::with_samples(vec![0.1, 0.2, 0.3]));
+        let samples = mock.samples_buffer();
+        let audio = Arc::new(AudioService::with_recorder(mock, samples, None).unwrap());
+        let transcription = Arc::new(Mutex::new(TranscriptionService::new()));
+
+        let ctx = AppContext::for_testing(config, history, audio, transcription);
+
+        ctx.audio.start_mic().unwrap();
+        let (recorded, _) = ctx.audio.stop_mic();
+        assert_eq!(recorded, vec![0.1, 0.2, 0.3]);
+    }
 }

@@ -6,7 +6,7 @@
 use crate::history::HistoryEntry;
 use crate::domain::traits::{
     AudioDenoising, AudioRecording, ConfigProvider, HistoryRepository, Transcription,
-    VoiceDetection,
+    UIStateUpdater, VoiceDetection,
 };
 use anyhow::Result;
 use async_channel::Receiver;
@@ -401,6 +401,75 @@ impl HistoryRepository for MockHistoryRepository {
     }
 }
 
+/// Mock UI state updater for testing recording handlers without GTK.
+///
+/// Records all state transitions and text updates in vectors for
+/// assertion in tests. Uses `Mutex` for interior mutability since
+/// `UIStateUpdater` takes `&self`.
+pub struct MockUIStateUpdater {
+    pub status_calls: Mutex<Vec<String>>,
+    pub recording_calls: Mutex<Vec<String>>,
+    pub processing_calls: Mutex<Vec<String>>,
+    pub idle_count: std::sync::atomic::AtomicUsize,
+    pub timer_updates: Mutex<Vec<u64>>,
+    pub result_text: Mutex<String>,
+}
+
+impl MockUIStateUpdater {
+    /// Create a new mock with empty state.
+    pub fn new() -> Self {
+        Self {
+            status_calls: Mutex::new(Vec::new()),
+            recording_calls: Mutex::new(Vec::new()),
+            processing_calls: Mutex::new(Vec::new()),
+            idle_count: std::sync::atomic::AtomicUsize::new(0),
+            timer_updates: Mutex::new(Vec::new()),
+            result_text: Mutex::new(String::new()),
+        }
+    }
+
+    /// Get how many times `set_idle()` was called.
+    pub fn idle_count(&self) -> usize {
+        self.idle_count.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for MockUIStateUpdater {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UIStateUpdater for MockUIStateUpdater {
+    fn set_status(&self, text: &str) {
+        self.status_calls.lock().push(text.to_string());
+    }
+
+    fn set_recording(&self, status_text: &str) {
+        self.recording_calls.lock().push(status_text.to_string());
+    }
+
+    fn set_processing(&self, status_text: &str) {
+        self.processing_calls.lock().push(status_text.to_string());
+    }
+
+    fn set_idle(&self) {
+        self.idle_count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn update_timer(&self, secs: u64) {
+        self.timer_updates.lock().push(secs);
+    }
+
+    fn get_result_text(&self) -> String {
+        self.result_text.lock().clone()
+    }
+
+    fn set_result_text(&self, text: &str) {
+        *self.result_text.lock() = text.to_string();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,5 +658,68 @@ mod tests {
         let input = vec![0.5, 0.6, 0.7];
         let output = denoiser.denoise(&input).unwrap();
         assert_eq!(output, input);
+    }
+
+    // === MockUIStateUpdater Tests ===
+
+    #[test]
+    fn test_mock_ui_state_updater_set_status() {
+        let ui = MockUIStateUpdater::new();
+        ui.set_status("Recording...");
+        ui.set_status("Processing...");
+
+        let calls = ui.status_calls.lock();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], "Recording...");
+        assert_eq!(calls[1], "Processing...");
+    }
+
+    #[test]
+    fn test_mock_ui_state_updater_recording_cycle() {
+        let ui = MockUIStateUpdater::new();
+        ui.set_recording("Запис...");
+        ui.update_timer(5);
+        ui.update_timer(10);
+        ui.set_processing("Обробка...");
+        ui.set_idle();
+
+        assert_eq!(ui.recording_calls.lock().len(), 1);
+        assert_eq!(*ui.timer_updates.lock(), vec![5, 10]);
+        assert_eq!(ui.processing_calls.lock().len(), 1);
+        assert_eq!(ui.idle_count(), 1);
+    }
+
+    #[test]
+    fn test_mock_ui_state_updater_result_text() {
+        let ui = MockUIStateUpdater::new();
+        assert_eq!(ui.get_result_text(), "");
+
+        ui.set_result_text("Привіт, світе");
+        assert_eq!(ui.get_result_text(), "Привіт, світе");
+
+        ui.set_result_text("Updated");
+        assert_eq!(ui.get_result_text(), "Updated");
+    }
+
+    #[test]
+    fn test_mock_ui_state_updater_as_trait_object() {
+        let ui: Box<dyn UIStateUpdater> = Box::new(MockUIStateUpdater::new());
+        ui.set_status("test");
+        ui.set_recording("rec");
+        ui.set_processing("proc");
+        ui.set_idle();
+        ui.update_timer(42);
+        ui.set_result_text("result");
+        assert_eq!(ui.get_result_text(), "result");
+    }
+
+    #[test]
+    fn test_mock_ui_state_updater_idle_count() {
+        let ui = MockUIStateUpdater::new();
+        assert_eq!(ui.idle_count(), 0);
+        ui.set_idle();
+        ui.set_idle();
+        ui.set_idle();
+        assert_eq!(ui.idle_count(), 3);
     }
 }
