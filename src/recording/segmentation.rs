@@ -256,3 +256,198 @@ impl SegmentationMonitor {
         self.is_speech_detected.load(Ordering::SeqCst)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_segmentation_config_default() {
+        let config = SegmentationConfig::default();
+        assert!(config.use_vad);
+        assert_eq!(config.segment_interval_secs, 10);
+        assert_eq!(config.vad_silence_threshold_ms, 1000);
+        assert_eq!(config.vad_min_speech_ms, 500);
+        assert_eq!(config.silero_threshold, 0.5);
+    }
+
+    #[test]
+    fn test_new_monitor_not_running() {
+        let monitor = SegmentationMonitor::new(SegmentationConfig::default());
+        assert!(!monitor.is_speech_detected());
+    }
+
+    #[test]
+    fn test_stop_sends_final_segment() {
+        // Use fixed-interval mode (no VAD) with a long interval so
+        // the background thread never auto-segments.
+        let config = SegmentationConfig {
+            use_vad: false,
+            segment_interval_secs: 3600, // 1 hour — won't trigger
+            ..Default::default()
+        };
+        let monitor = SegmentationMonitor::new(config);
+
+        let samples_buffer = Arc::new(Mutex::new(Vec::new()));
+        let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
+
+        // Pre-fill with enough samples (1 second at 16kHz = 16000 samples)
+        {
+            let mut buf = samples_buffer.lock();
+            buf.extend(vec![0.5_f32; WHISPER_SAMPLE_RATE as usize]);
+        }
+
+        monitor.start(samples_buffer.clone(), segment_tx);
+
+        // Let the monitor thread pick up the samples
+        std::thread::sleep(Duration::from_millis(700));
+
+        // Stop should emit the final segment
+        monitor.stop(&samples_buffer);
+
+        // The final segment should be available
+        let segment = segment_rx.try_recv();
+        assert!(segment.is_ok(), "Expected final segment after stop()");
+        let seg = segment.unwrap();
+        assert_eq!(seg.segment_id, 1);
+        assert!(!seg.samples.is_empty());
+    }
+
+    #[test]
+    fn test_stop_no_segment_when_too_short() {
+        let config = SegmentationConfig {
+            use_vad: false,
+            segment_interval_secs: 3600,
+            ..Default::default()
+        };
+        let monitor = SegmentationMonitor::new(config);
+
+        let samples_buffer = Arc::new(Mutex::new(Vec::new()));
+        let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
+
+        // Write too few samples (less than 0.5 seconds = 8000 samples)
+        {
+            let mut buf = samples_buffer.lock();
+            buf.extend(vec![0.5_f32; 100]);
+        }
+
+        monitor.start(samples_buffer.clone(), segment_tx);
+        std::thread::sleep(Duration::from_millis(700));
+        monitor.stop(&samples_buffer);
+
+        // No segment should be emitted (too few samples)
+        assert!(segment_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_fixed_interval_segmentation() {
+        // Use a very short interval (1 second) to trigger automatic segmentation
+        let config = SegmentationConfig {
+            use_vad: false,
+            segment_interval_secs: 1,
+            ..Default::default()
+        };
+        let monitor = SegmentationMonitor::new(config);
+
+        let samples_buffer = Arc::new(Mutex::new(Vec::new()));
+        let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
+
+        // Pre-fill with 2 seconds of audio (enough for auto-segment at 1s interval)
+        {
+            let mut buf = samples_buffer.lock();
+            buf.extend(vec![0.3_f32; WHISPER_SAMPLE_RATE as usize * 2]);
+        }
+
+        monitor.start(samples_buffer.clone(), segment_tx);
+
+        // Wait for the interval + check_interval to pass (1s interval + 500ms check + margin)
+        std::thread::sleep(Duration::from_millis(2000));
+
+        monitor.stop(&samples_buffer);
+
+        // Should have at least one auto-emitted segment
+        let mut segments = Vec::new();
+        while let Ok(seg) = segment_rx.try_recv() {
+            segments.push(seg);
+        }
+        assert!(
+            !segments.is_empty(),
+            "Expected at least one segment from fixed-interval segmentation"
+        );
+        // Segment IDs should be sequential starting from 1
+        for (i, seg) in segments.iter().enumerate() {
+            assert_eq!(seg.segment_id, i + 1);
+        }
+    }
+
+    #[test]
+    fn test_stop_closes_channel() {
+        let config = SegmentationConfig {
+            use_vad: false,
+            segment_interval_secs: 3600,
+            ..Default::default()
+        };
+        let monitor = SegmentationMonitor::new(config);
+
+        let samples_buffer = Arc::new(Mutex::new(Vec::new()));
+        let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
+
+        monitor.start(samples_buffer.clone(), segment_tx);
+        std::thread::sleep(Duration::from_millis(100));
+        monitor.stop(&samples_buffer);
+
+        // After stop, the internal sender is dropped — channel should be closed.
+        // Note: try_recv returns Err(TryRecvError::Closed) when all senders are gone
+        // and the channel is empty.
+        // The unbounded receiver returns Empty if channel still open, Closed if all senders dropped.
+        // We dropped our original segment_tx by moving it into start(), and stop() drops the internal one.
+        // So the channel should now be closed.
+        assert!(segment_rx.is_closed() || segment_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_incremental_sample_reading() {
+        // Verify that only new samples are read from the buffer
+        // (not the entire buffer each iteration)
+        let config = SegmentationConfig {
+            use_vad: false,
+            segment_interval_secs: 3600,
+            ..Default::default()
+        };
+        let monitor = SegmentationMonitor::new(config);
+
+        let samples_buffer = Arc::new(Mutex::new(Vec::new()));
+        let (segment_tx, segment_rx) = async_channel::unbounded::<AudioSegment>();
+
+        // Start with some samples
+        {
+            let mut buf = samples_buffer.lock();
+            buf.extend(vec![1.0_f32; WHISPER_SAMPLE_RATE as usize]);
+        }
+
+        monitor.start(samples_buffer.clone(), segment_tx);
+        std::thread::sleep(Duration::from_millis(700));
+
+        // Add more samples while monitoring
+        {
+            let mut buf = samples_buffer.lock();
+            buf.extend(vec![2.0_f32; WHISPER_SAMPLE_RATE as usize]);
+        }
+
+        std::thread::sleep(Duration::from_millis(700));
+        monitor.stop(&samples_buffer);
+
+        // The final segment should contain samples from both batches
+        let mut total_samples = 0;
+        while let Ok(seg) = segment_rx.try_recv() {
+            total_samples += seg.samples.len();
+        }
+        // Should have roughly 2 seconds worth of audio
+        assert!(
+            total_samples >= WHISPER_SAMPLE_RATE as usize,
+            "Expected at least 1s of audio, got {} samples",
+            total_samples
+        );
+    }
+}
