@@ -162,8 +162,9 @@ fn spawn_segment_pipeline(
     let language = ctx.language();
     let denoise_enabled = ctx.denoise_enabled();
 
-    // Channel for transcription results: (segment_id, text)
-    let (result_tx, result_rx) = async_channel::unbounded::<(usize, String)>();
+    // Channel for transcription results: (segment_id, Result<text>)
+    let (result_tx, result_rx) =
+        async_channel::unbounded::<(usize, Result<String, String>)>();
 
     // Shared storage for segment indicator labels
     let segment_labels: Rc<RefCell<HashMap<usize, Label>>> =
@@ -207,16 +208,19 @@ fn spawn_segment_pipeline(
             std::thread::spawn(move || {
                 let segment_samples = maybe_denoise(&segment_samples, denoise_enabled);
                 let ts = ctx.transcription.lock();
-                let result = ts.transcribe(&segment_samples, &lang);
-                let text = result.unwrap_or_default();
-                if text.is_empty() {
-                    eprintln!(
-                        "Сегмент {} повернув порожній результат ({} семплів)",
-                        segment_id,
-                        segment_samples.len()
-                    );
+                let result = ts
+                    .transcribe(&segment_samples, &lang)
+                    .map_err(|e| e.to_string());
+                if let Ok(ref text) = result {
+                    if text.is_empty() {
+                        eprintln!(
+                            "Сегмент {} повернув порожній результат ({} семплів)",
+                            segment_id,
+                            segment_samples.len()
+                        );
+                    }
                 }
-                let _ = tx.send_blocking((segment_id, text));
+                let _ = tx.send_blocking((segment_id, result));
             });
         }
     });
@@ -227,35 +231,60 @@ fn spawn_segment_pipeline(
     glib::spawn_future_local(async move {
         let mut accumulated_text = String::new();
         let mut next_segment_id: usize = 1;
-        let mut pending_results: BTreeMap<usize, String> = BTreeMap::new();
+        let mut pending_results: BTreeMap<usize, Result<String, String>> = BTreeMap::new();
         let mut completed_count: usize = 0;
+        let mut failed_count: usize = 0;
 
-        while let Ok((segment_id, text)) = result_rx.recv().await {
+        while let Ok((segment_id, result)) = result_rx.recv().await {
             completed_count += 1;
             SEGMENTS_COMPLETED.with(|c| c.set(c.get() + 1));
+
+            let is_error = result.is_err();
 
             if let Some(label) = segment_labels_for_results.borrow().get(&segment_id) {
                 let current_text = label.text();
                 let duration = current_text.split_whitespace().last().unwrap_or("");
-                label.set_label(&format!("{} {}", SEGMENT_COMPLETED, duration));
-                label.remove_css_class("segment-processing");
-                label.add_css_class("segment-completed");
+                if is_error {
+                    label.set_label(&format!("✗ {}", duration));
+                    label.remove_css_class("segment-processing");
+                    label.add_css_class("segment-error");
+                } else {
+                    label.set_label(&format!("{} {}", SEGMENT_COMPLETED, duration));
+                    label.remove_css_class("segment-processing");
+                    label.add_css_class("segment-completed");
+                }
             }
 
-            pending_results.insert(segment_id, text);
+            pending_results.insert(segment_id, result);
 
-            while let Some(text) = pending_results.remove(&next_segment_id) {
-                if !text.is_empty() {
-                    accumulated_text.push_str(&text);
-                    accumulated_text.push(' ');
-                    ui_for_results.base.set_result_text(&accumulated_text);
+            while let Some(result) = pending_results.remove(&next_segment_id) {
+                match result {
+                    Ok(text) if !text.is_empty() => {
+                        accumulated_text.push_str(&text);
+                        accumulated_text.push(' ');
+                        ui_for_results.base.set_result_text(&accumulated_text);
+                    }
+                    Err(ref err) => {
+                        failed_count += 1;
+                        eprintln!(
+                            "Помилка транскрипції сегменту {}: {}",
+                            next_segment_id, err
+                        );
+                    }
+                    _ => {} // Ok but empty — already logged by the worker thread
                 }
                 next_segment_id += 1;
             }
 
-            ui_for_results
-                .base
-                .set_status(&format!("Транскрибовано: {} сегментів", completed_count));
+            let status = if failed_count > 0 {
+                format!(
+                    "Транскрибовано: {} сегментів ({} з помилками)",
+                    completed_count, failed_count
+                )
+            } else {
+                format!("Транскрибовано: {} сегментів", completed_count)
+            };
+            ui_for_results.base.set_status(&status);
         }
     });
 }

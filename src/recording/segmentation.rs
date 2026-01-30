@@ -102,7 +102,16 @@ impl SegmentationMonitor {
                     min_speech_ms: vad_min_speech_ms,
                     silero_threshold,
                 };
-                create_vad(&config).ok()
+                match create_vad(&config) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        eprintln!(
+                            "VAD initialization failed ({:?}), falling back to fixed-interval segmentation: {}",
+                            vad_engine, e
+                        );
+                        None
+                    }
+                }
             } else {
                 None
             };
