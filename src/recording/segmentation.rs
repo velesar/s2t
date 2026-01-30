@@ -109,17 +109,14 @@ impl SegmentationMonitor {
             while is_running.load(Ordering::SeqCst) {
                 std::thread::sleep(check_interval);
 
-                // Read new samples from the recorder's shared buffer
-                let current_samples = {
+                // Read only new samples from the recorder's shared buffer
+                {
                     let samples = samples_buffer.lock().unwrap();
-                    samples.clone()
-                };
-
-                let new_samples_count = current_samples.len().saturating_sub(last_samples_len);
-                if new_samples_count > 0 {
-                    let new_samples = &current_samples[last_samples_len..];
-                    ring_buffer.write(new_samples);
-                    last_samples_len = current_samples.len();
+                    let current_len = samples.len();
+                    if current_len > last_samples_len {
+                        ring_buffer.write(&samples[last_samples_len..]);
+                        last_samples_len = current_len;
+                    }
                 }
 
                 // Minimum segment length: 0.5 seconds
@@ -199,12 +196,14 @@ impl SegmentationMonitor {
         let ring_remaining = self.ring_buffer.read_all();
 
         // Fallback: if ring buffer is empty, use last 5s from recorder's samples
-        let recorder_samples = samples_buffer.lock().unwrap().clone();
         let mut remaining = ring_remaining;
-        if remaining.is_empty() && !recorder_samples.is_empty() {
-            let last_segment_samples = (WHISPER_SAMPLE_RATE as usize) * 5;
-            let start = recorder_samples.len().saturating_sub(last_segment_samples);
-            remaining = recorder_samples[start..].to_vec();
+        if remaining.is_empty() {
+            let recorder_samples = samples_buffer.lock().unwrap();
+            if !recorder_samples.is_empty() {
+                let last_segment_samples = (WHISPER_SAMPLE_RATE as usize) * 5;
+                let start = recorder_samples.len().saturating_sub(last_segment_samples);
+                remaining = recorder_samples[start..].to_vec();
+            }
         }
 
         // Minimum samples for a valid segment (0.5 seconds)

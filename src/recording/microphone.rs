@@ -77,55 +77,64 @@ impl AudioRecorder {
             let resampler = resampler.clone();
             let current_amplitude = current_amplitude.clone();
 
-            let stream = device
-                .build_input_stream(
-                    &config.into(),
-                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                        if !is_recording.load(Ordering::SeqCst) {
-                            return;
-                        }
+            let stream = match device.build_input_stream(
+                &config.into(),
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    if !is_recording.load(Ordering::SeqCst) {
+                        return;
+                    }
 
-                        let mono = to_mono(data, channels);
+                    let mono = to_mono(data, channels);
 
-                        let amplitude = calculate_rms(&mono);
-                        current_amplitude.store(amplitude.to_bits(), Ordering::Relaxed);
+                    let amplitude = calculate_rms(&mono);
+                    current_amplitude.store(amplitude.to_bits(), Ordering::Relaxed);
 
-                        // Resample to 16kHz using high-quality sinc interpolation
-                        let mut resampler = resampler.lock().unwrap();
-                        let input_frames = resampler.input_frames_next();
+                    // Resample to 16kHz using high-quality sinc interpolation
+                    let mut resampler = resampler.lock().unwrap();
+                    let input_frames = resampler.input_frames_next();
 
-                        // Process in chunks matching resampler's expected input size
-                        for chunk in mono.chunks(input_frames) {
-                            if chunk.len() == input_frames {
-                                let input = vec![chunk.to_vec()];
-                                if let Ok(output) = resampler.process(&input, None) {
-                                    samples.lock().unwrap().extend(&output[0]);
-                                }
-                            } else {
-                                // Pad the last chunk if needed
-                                let mut padded = chunk.to_vec();
-                                padded.resize(input_frames, 0.0);
-                                let input = vec![padded];
-                                if let Ok(output) = resampler.process(&input, None) {
-                                    // Only take proportional output for partial input
-                                    let output_len = (chunk.len() as f64
-                                        * resampler.output_frames_next() as f64
-                                        / input_frames as f64)
-                                        as usize;
-                                    samples
-                                        .lock()
-                                        .unwrap()
-                                        .extend(&output[0][..output_len.min(output[0].len())]);
-                                }
+                    // Process in chunks matching resampler's expected input size
+                    for chunk in mono.chunks(input_frames) {
+                        if chunk.len() == input_frames {
+                            let input = vec![chunk.to_vec()];
+                            if let Ok(output) = resampler.process(&input, None) {
+                                samples.lock().unwrap().extend(&output[0]);
+                            }
+                        } else {
+                            // Pad the last chunk if needed
+                            let mut padded = chunk.to_vec();
+                            padded.resize(input_frames, 0.0);
+                            let input = vec![padded];
+                            if let Ok(output) = resampler.process(&input, None) {
+                                // Only take proportional output for partial input
+                                let output_len = (chunk.len() as f64
+                                    * resampler.output_frames_next() as f64
+                                    / input_frames as f64)
+                                    as usize;
+                                samples
+                                    .lock()
+                                    .unwrap()
+                                    .extend(&output[0][..output_len.min(output[0].len())]);
                             }
                         }
-                    },
-                    |err| eprintln!("Помилка запису: {}", err),
-                    None,
-                )
-                .unwrap();
+                    }
+                },
+                |err| eprintln!("Помилка запису: {}", err),
+                None,
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Не вдалося створити аудіопотік: {}", e);
+                    let _ = completion_tx.send_blocking(());
+                    return;
+                }
+            };
 
-            stream.play().unwrap();
+            if let Err(e) = stream.play() {
+                eprintln!("Не вдалося запустити аудіопотік: {}", e);
+                let _ = completion_tx.send_blocking(());
+                return;
+            }
 
             while is_recording_for_loop.load(Ordering::SeqCst) {
                 thread::sleep(Duration::from_millis(100));
