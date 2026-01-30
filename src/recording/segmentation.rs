@@ -51,6 +51,7 @@ pub struct SegmentationMonitor {
     last_segment_time: Arc<Mutex<Option<Instant>>>,
     segment_tx: Arc<Mutex<Option<Sender<AudioSegment>>>>,
     is_speech_detected: Arc<AtomicBool>,
+    thread_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl SegmentationMonitor {
@@ -63,6 +64,7 @@ impl SegmentationMonitor {
             last_segment_time: Arc::new(Mutex::new(None)),
             segment_tx: Arc::new(Mutex::new(None)),
             is_speech_detected: Arc::new(AtomicBool::new(false)),
+            thread_handle: Mutex::new(None),
         }
     }
 
@@ -90,7 +92,7 @@ impl SegmentationMonitor {
         let segment_interval = Duration::from_secs(self.config.segment_interval_secs as u64);
         let is_speech_detected = self.is_speech_detected.clone();
 
-        std::thread::spawn(move || {
+        let handle = std::thread::spawn(move || {
             let check_interval = Duration::from_millis(500);
             let mut last_samples_len = 0;
 
@@ -189,6 +191,8 @@ impl SegmentationMonitor {
                 }
             }
         });
+
+        *self.thread_handle.lock() = Some(handle);
     }
 
     /// Stop the monitoring thread, drain remaining audio, and send the final segment.
@@ -198,8 +202,12 @@ impl SegmentationMonitor {
     pub fn stop(&self, samples_buffer: &Arc<Mutex<Vec<f32>>>) {
         self.is_running.store(false, Ordering::SeqCst);
 
-        // Give the monitoring thread a moment to finish its current iteration
-        std::thread::sleep(Duration::from_millis(100));
+        // Wait for the monitoring thread to finish its current iteration
+        if let Some(handle) = self.thread_handle.lock().take() {
+            if let Err(e) = handle.join() {
+                eprintln!("Segmentation thread panicked: {:?}", e);
+            }
+        }
 
         // Get remaining samples from ring buffer
         let ring_remaining = self.ring_buffer.read_all();
