@@ -111,6 +111,11 @@ impl AppContext {
         self.config.lock().unwrap().diarization_method.clone()
     }
 
+    /// Check if denoising is enabled
+    pub fn denoise_enabled(&self) -> bool {
+        self.config.lock().unwrap().denoise_enabled
+    }
+
     // === Transcription convenience methods ===
 
     /// Check if a Whisper model is loaded

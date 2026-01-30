@@ -8,6 +8,7 @@ use crate::app::context::AppContext;
 use crate::domain::traits::{HistoryRepository, Transcription, UIStateUpdater};
 use crate::domain::types::AudioSegment;
 use crate::history::{save_history, HistoryEntry};
+use crate::recording::denoise::NnnoiselessDenoiser;
 use gtk4::prelude::*;
 use gtk4::{glib, Label};
 use std::cell::{Cell, RefCell};
@@ -29,6 +30,20 @@ thread_local! {
     static SEGMENTS_SENT: Cell<usize> = const { Cell::new(0) };
     static SEGMENTS_COMPLETED: Cell<usize> = const { Cell::new(0) };
     static PROCESSING_CANCELLED: Cell<bool> = const { Cell::new(false) };
+}
+
+fn maybe_denoise(samples: &[f32], enabled: bool) -> Vec<f32> {
+    if !enabled {
+        return samples.to_vec();
+    }
+    let denoiser = NnnoiselessDenoiser::new();
+    match denoiser.denoise_buffer(samples) {
+        Ok(denoised) => denoised,
+        Err(e) => {
+            eprintln!("Denoising failed, using original: {}", e);
+            samples.to_vec()
+        }
+    }
 }
 
 /// Start microphone recording (dictation or segmented depending on config).
@@ -145,6 +160,7 @@ fn spawn_segment_pipeline(
     segment_rx: async_channel::Receiver<AudioSegment>,
 ) {
     let language = ctx.language();
+    let denoise_enabled = ctx.denoise_enabled();
 
     // Channel for transcription results: (segment_id, text)
     let (result_tx, result_rx) = async_channel::unbounded::<(usize, String)>();
@@ -189,6 +205,7 @@ fn spawn_segment_pipeline(
                 .set_status(&format!("Сегмент {}...", segment_id));
 
             std::thread::spawn(move || {
+                let segment_samples = maybe_denoise(&segment_samples, denoise_enabled);
                 let ts = ctx.transcription.lock().unwrap();
                 let result = ts.transcribe(&segment_samples, &lang);
                 let text = result.unwrap_or_default();
@@ -262,6 +279,7 @@ fn handle_simple_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI)
     let rec = rec.clone();
     let ui = ui.clone();
     let language = ctx.language();
+    let denoise_enabled = ctx.denoise_enabled();
 
     glib::spawn_future_local(async move {
         if let Some(rx) = completion_rx {
@@ -276,6 +294,7 @@ fn handle_simple_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI)
             let result = if samples.len() < MIN_RECORDING_SAMPLES {
                 Err(anyhow::anyhow!("Запис закороткий"))
             } else {
+                let samples = maybe_denoise(&samples, denoise_enabled);
                 let ts = ctx_for_thread.transcription.lock().unwrap();
                 ts.transcribe(&samples, &language_for_thread)
             };

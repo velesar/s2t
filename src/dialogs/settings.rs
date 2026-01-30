@@ -216,6 +216,17 @@ pub fn show_settings_dialog(
         vad_check_clone.set_sensitive(check.is_active());
     });
 
+    // Denoise checkbox
+    let denoise_check = CheckButton::with_label("Шумоподавлення (RNNoise)");
+    let denoise_enabled = {
+        let cfg = config.lock().unwrap();
+        cfg.denoise_enabled
+    };
+    denoise_check.set_active(denoise_enabled);
+    denoise_check.set_halign(Align::Start);
+    denoise_check.set_margin_top(12);
+    main_box.append(&denoise_check);
+
     // Hotkey settings section
     let hotkey_label = Label::new(Some("Гарячі клавіші:"));
     hotkey_label.set_halign(Align::Start);
@@ -324,6 +335,7 @@ pub fn show_settings_dialog(
     let vad_check_clone = vad_check.clone();
     let mode_combo_clone = mode_combo.clone();
     let diarization_combo_clone = diarization_combo.clone();
+    let denoise_check_clone = denoise_check.clone();
     let hotkey_enabled_check_clone = hotkey_enabled_check.clone();
     let hotkey_entry_clone = hotkey_entry.clone();
     let max_entries_spin_clone = max_entries_spin.clone();
@@ -387,6 +399,7 @@ pub fn show_settings_dialog(
         cfg.auto_paste = auto_paste_check_clone.is_active();
         cfg.continuous_mode = continuous_check_clone.is_active();
         cfg.use_vad = vad_check_clone.is_active();
+        cfg.denoise_enabled = denoise_check_clone.is_active();
         cfg.recording_mode = recording_mode;
         cfg.diarization_method = diarization_method;
         cfg.hotkey_enabled = hotkey_enabled_check_clone.is_active();

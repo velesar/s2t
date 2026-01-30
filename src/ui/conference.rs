@@ -9,6 +9,7 @@ use crate::domain::traits::{HistoryRepository, UIStateUpdater};
 use crate::infrastructure::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };
+use crate::recording::denoise::NnnoiselessDenoiser;
 use gtk4::glib;
 use std::sync::Arc;
 
@@ -93,6 +94,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
     let ui = ui.clone();
     let language = ctx.language();
     let diarization_method = ctx.diarization_method();
+    let denoise_enabled = ctx.denoise_enabled();
 
     glib::spawn_future_local(async move {
         // Wait for both recording threads to finish
@@ -124,6 +126,30 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
         let diarization_method_for_thread = diarization_method.clone();
 
         std::thread::spawn(move || {
+            let mic_samples = if denoise_enabled {
+                let denoiser = NnnoiselessDenoiser::new();
+                match denoiser.denoise_buffer(&mic_samples) {
+                    Ok(denoised) => denoised,
+                    Err(e) => {
+                        eprintln!("Mic denoising failed, using original: {}", e);
+                        mic_samples
+                    }
+                }
+            } else {
+                mic_samples
+            };
+            let loopback_samples = if denoise_enabled {
+                let denoiser = NnnoiselessDenoiser::new();
+                match denoiser.denoise_buffer(&loopback_samples) {
+                    Ok(denoised) => denoised,
+                    Err(e) => {
+                        eprintln!("Loopback denoising failed, using original: {}", e);
+                        loopback_samples
+                    }
+                }
+            } else {
+                loopback_samples
+            };
             let ts = ctx_for_thread.transcription.lock().unwrap();
             let mut engine_guard = ctx_for_thread.diarization.lock().unwrap();
             let result = ts.transcribe_conference(
