@@ -1,23 +1,32 @@
 //! Audio denoising using nnnoiseless (RNNoise).
 //!
 //! This module provides noise suppression for cleaner speech recognition.
-//! nnnoiseless operates at 48kHz with 10ms frames (480 samples).
+//! nnnoiseless/RNNoise operates at 48kHz with 10ms frames (480 samples).
+//! The denoiser accepts 16kHz input and handles resampling internally.
 
 use crate::domain::traits::AudioDenoising;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use nnnoiseless::DenoiseState;
+use rubato::{FftFixedIn, Resampler};
 use std::sync::Mutex;
 
+/// Input sample rate (Whisper pipeline rate)
+const INPUT_SAMPLE_RATE: usize = 16000;
+
 /// Sample rate required by nnnoiseless (RNNoise)
-const NNNOISELESS_SAMPLE_RATE: u32 = 48000;
+const NNNOISELESS_SAMPLE_RATE: usize = 48000;
 
 /// Frame size in samples (10ms at 48kHz)
 const FRAME_SIZE: usize = 480;
 
+/// Chunk size for rubato resampler
+const RESAMPLE_CHUNK: usize = 1024;
+
 /// RNNoise-based denoiser using nnnoiseless.
 ///
-/// Processes audio in 480-sample frames (10ms at 48kHz).
-/// Buffers partial frames between calls to denoise().
+/// Accepts 16kHz audio, resamples to 48kHz for RNNoise processing,
+/// then resamples back to 16kHz. This ensures RNNoise operates at
+/// its trained sample rate for correct noise suppression.
 pub struct NnnoiselessDenoiser {
     state: Mutex<Box<DenoiseState<'static>>>,
     buffer: Mutex<Vec<f32>>,
@@ -31,6 +40,132 @@ impl NnnoiselessDenoiser {
             buffer: Mutex::new(Vec::with_capacity(FRAME_SIZE)),
         }
     }
+
+    /// Upsample 16kHz audio to 48kHz using rubato.
+    fn upsample(samples: &[f32]) -> Result<Vec<f32>> {
+        if samples.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut resampler = FftFixedIn::<f32>::new(
+            INPUT_SAMPLE_RATE,
+            NNNOISELESS_SAMPLE_RATE,
+            RESAMPLE_CHUNK,
+            2, // sub chunks
+            1, // channels
+        )
+        .context("Failed to create upsampler")?;
+
+        let mut output = Vec::with_capacity(samples.len() * 3);
+        let mut pos = 0;
+        let frames_needed = resampler.input_frames_next();
+
+        while pos + frames_needed <= samples.len() {
+            let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
+            let resampled = resampler.process(&chunk, None)
+                .context("Upsample failed")?;
+            output.extend_from_slice(&resampled[0]);
+            pos += frames_needed;
+        }
+
+        // Process remaining samples with zero-padding
+        if pos < samples.len() {
+            let remaining = &samples[pos..];
+            let mut padded = remaining.to_vec();
+            padded.resize(frames_needed, 0.0);
+            let chunk = vec![padded];
+            let resampled = resampler.process(&chunk, None)
+                .context("Upsample final chunk failed")?;
+            let remaining_duration = remaining.len() as f64 / INPUT_SAMPLE_RATE as f64;
+            let expected = (remaining_duration * NNNOISELESS_SAMPLE_RATE as f64).ceil() as usize;
+            let actual = expected.min(resampled[0].len());
+            output.extend_from_slice(&resampled[0][..actual]);
+        }
+
+        Ok(output)
+    }
+
+    /// Downsample 48kHz audio back to 16kHz using rubato.
+    fn downsample(samples: &[f32]) -> Result<Vec<f32>> {
+        if samples.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut resampler = FftFixedIn::<f32>::new(
+            NNNOISELESS_SAMPLE_RATE,
+            INPUT_SAMPLE_RATE,
+            RESAMPLE_CHUNK,
+            2, // sub chunks
+            1, // channels
+        )
+        .context("Failed to create downsampler")?;
+
+        let mut output = Vec::with_capacity(samples.len() / 3);
+        let mut pos = 0;
+        let frames_needed = resampler.input_frames_next();
+
+        while pos + frames_needed <= samples.len() {
+            let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
+            let resampled = resampler.process(&chunk, None)
+                .context("Downsample failed")?;
+            output.extend_from_slice(&resampled[0]);
+            pos += frames_needed;
+        }
+
+        // Process remaining samples with zero-padding
+        if pos < samples.len() {
+            let remaining = &samples[pos..];
+            let mut padded = remaining.to_vec();
+            padded.resize(frames_needed, 0.0);
+            let chunk = vec![padded];
+            let resampled = resampler.process(&chunk, None)
+                .context("Downsample final chunk failed")?;
+            let remaining_duration = remaining.len() as f64 / NNNOISELESS_SAMPLE_RATE as f64;
+            let expected = (remaining_duration * INPUT_SAMPLE_RATE as f64).ceil() as usize;
+            let actual = expected.min(resampled[0].len());
+            output.extend_from_slice(&resampled[0][..actual]);
+        }
+
+        Ok(output)
+    }
+
+    /// Denoise a complete buffer of 16kHz audio.
+    ///
+    /// Resamples to 48kHz, runs RNNoise, resamples back to 16kHz.
+    pub fn denoise_buffer(&self, samples: &[f32]) -> Result<Vec<f32>> {
+        if samples.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // 16kHz → 48kHz
+        let upsampled = Self::upsample(samples)?;
+
+        // Run RNNoise at 48kHz
+        let mut state = self.state.lock().unwrap();
+        let mut buffer = self.buffer.lock().unwrap();
+
+        let mut denoised_48k = Vec::with_capacity(upsampled.len());
+        buffer.extend_from_slice(&upsampled);
+
+        while buffer.len() >= FRAME_SIZE {
+            let frame: Vec<f32> = buffer.drain(..FRAME_SIZE).collect();
+            let mut frame_out = vec![0.0f32; FRAME_SIZE];
+            state.process_frame(&mut frame_out, &frame);
+            denoised_48k.extend_from_slice(&frame_out);
+        }
+
+        // Flush remaining buffered samples (pass through unprocessed)
+        if !buffer.is_empty() {
+            denoised_48k.extend_from_slice(&buffer);
+            buffer.clear();
+        }
+
+        drop(buffer);
+        drop(state);
+
+        // 48kHz → 16kHz
+        Self::downsample(&denoised_48k)
+    }
 }
 
 impl Default for NnnoiselessDenoiser {
@@ -41,26 +176,11 @@ impl Default for NnnoiselessDenoiser {
 
 impl AudioDenoising for NnnoiselessDenoiser {
     fn denoise(&self, samples: &[f32]) -> Result<Vec<f32>> {
-        let mut buffer = self.buffer.lock().unwrap();
-        let mut state = self.state.lock().unwrap();
-        let mut output = Vec::with_capacity(samples.len());
-
-        // Add incoming samples to buffer
-        buffer.extend_from_slice(samples);
-
-        // Process complete frames
-        while buffer.len() >= FRAME_SIZE {
-            let frame: Vec<f32> = buffer.drain(..FRAME_SIZE).collect();
-            let mut frame_out = vec![0.0f32; FRAME_SIZE];
-            state.process_frame(&mut frame_out, &frame);
-            output.extend_from_slice(&frame_out);
-        }
-
-        Ok(output)
+        self.denoise_buffer(samples)
     }
 
     fn required_sample_rate(&self) -> u32 {
-        NNNOISELESS_SAMPLE_RATE
+        INPUT_SAMPLE_RATE as u32
     }
 
     fn reset(&self) {
@@ -123,64 +243,37 @@ mod tests {
     #[test]
     fn test_nnnoiseless_denoiser_creation() {
         let denoiser = NnnoiselessDenoiser::new();
-        assert_eq!(denoiser.required_sample_rate(), 48000);
+        assert_eq!(denoiser.required_sample_rate(), 16000);
     }
 
     #[test]
-    fn test_nnnoiseless_denoiser_small_input() {
+    fn test_nnnoiseless_denoiser_empty_input() {
         let denoiser = NnnoiselessDenoiser::new();
-        // Input smaller than frame size should buffer and return empty
-        let input = vec![0.0f32; 100];
-        let output = denoiser.denoise(&input).unwrap();
+        let output = denoiser.denoise(&[]).unwrap();
         assert!(output.is_empty());
     }
 
     #[test]
-    fn test_nnnoiseless_denoiser_exact_frame() {
+    fn test_nnnoiseless_denoiser_processes_audio() {
         let denoiser = NnnoiselessDenoiser::new();
-        // Exact frame size should process one frame
-        let input = vec![0.1f32; FRAME_SIZE];
+        // 1 second of silence at 16kHz
+        let input = vec![0.0f32; 16000];
         let output = denoiser.denoise(&input).unwrap();
-        assert_eq!(output.len(), FRAME_SIZE);
-    }
-
-    #[test]
-    fn test_nnnoiseless_denoiser_multiple_frames() {
-        let denoiser = NnnoiselessDenoiser::new();
-        // Two frames worth of input
-        let input = vec![0.1f32; FRAME_SIZE * 2];
-        let output = denoiser.denoise(&input).unwrap();
-        assert_eq!(output.len(), FRAME_SIZE * 2);
-    }
-
-    #[test]
-    fn test_nnnoiseless_denoiser_buffering() {
-        let denoiser = NnnoiselessDenoiser::new();
-
-        // First call: partial frame, should buffer
-        let input1 = vec![0.1f32; 200];
-        let output1 = denoiser.denoise(&input1).unwrap();
-        assert!(output1.is_empty());
-
-        // Second call: completes the frame
-        let input2 = vec![0.1f32; 300];
-        let output2 = denoiser.denoise(&input2).unwrap();
-        assert_eq!(output2.len(), FRAME_SIZE);
+        // Output should be approximately the same length
+        // (resampling may introduce slight length differences)
+        let ratio = output.len() as f64 / input.len() as f64;
+        assert!(ratio > 0.95 && ratio < 1.05,
+            "Output length {} too different from input length {}", output.len(), input.len());
     }
 
     #[test]
     fn test_nnnoiseless_denoiser_reset() {
         let denoiser = NnnoiselessDenoiser::new();
-
-        // Add partial frame
-        let _ = denoiser.denoise(&vec![0.1f32; 200]).unwrap();
-
-        // Reset should clear buffer
+        let _ = denoiser.denoise(&vec![0.1f32; 16000]).unwrap();
         denoiser.reset();
-
-        // Buffer should be empty now, so small input returns nothing
-        let output = denoiser.denoise(&vec![0.1f32; 100]).unwrap();
-        assert!(output.is_empty());
+        // After reset, should work cleanly again
+        let output = denoiser.denoise(&vec![0.0f32; 16000]).unwrap();
+        assert!(!output.is_empty());
     }
 
     #[test]
@@ -200,7 +293,7 @@ mod tests {
     #[test]
     fn test_create_denoiser_enabled() {
         let denoiser = create_denoiser(true);
-        assert_eq!(denoiser.required_sample_rate(), 48000);
+        assert_eq!(denoiser.required_sample_rate(), 16000);
     }
 
     #[test]

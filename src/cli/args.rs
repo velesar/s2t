@@ -21,7 +21,7 @@ pub enum DiarizationMethod {
     None,
     /// Channel-based diarization (stereo: left=mic, right=loopback)
     Channel,
-    /// Sortformer neural diarization (requires --features sortformer)
+    /// Sortformer neural diarization
     Sortformer,
 }
 

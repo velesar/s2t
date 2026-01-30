@@ -148,52 +148,12 @@ fn resample_to_16khz(samples: &[f32], input_rate: u32) -> Result<Vec<f32>> {
     Ok(output)
 }
 
-/// Apply noise suppression using nnnoiseless.
-fn apply_denoise(samples: &[f32]) -> Vec<f32> {
-    use nnnoiseless::DenoiseState;
+/// Apply noise suppression using nnnoiseless with proper resampling.
+fn apply_denoise(samples: &[f32]) -> Result<Vec<f32>> {
+    use crate::recording::denoise::NnnoiselessDenoiser;
 
-    const FRAME_SIZE: usize = 480; // nnnoiseless frame size at 48kHz
-
-    // nnnoiseless works at 48kHz, we have 16kHz - need to upsample, denoise, downsample
-    // For simplicity, we'll work directly at 16kHz by adjusting frame processing
-    // nnnoiseless actually expects 48kHz samples, so we need to handle this properly
-
-    // Since our audio is 16kHz and nnnoiseless expects 48kHz,
-    // we'll process 160 samples (10ms at 16kHz) as if they were 480 (10ms at 48kHz)
-    const FRAME_16K: usize = 160;
-
-    let mut output = Vec::with_capacity(samples.len());
-    let mut state = DenoiseState::new();
-
-    // Process in 10ms frames (160 samples at 16kHz)
-    let mut pos = 0;
-    while pos + FRAME_SIZE <= samples.len() {
-        let mut frame = [0.0f32; FRAME_SIZE];
-        // Upsample 3x by linear interpolation
-        for i in 0..FRAME_16K {
-            let val = samples[pos + i];
-            frame[i * 3] = val;
-            frame[i * 3 + 1] = val;
-            frame[i * 3 + 2] = val;
-        }
-
-        let mut output_frame = [0.0f32; FRAME_SIZE];
-        state.process_frame(&mut output_frame, &frame);
-
-        // Downsample 3x by taking every 3rd sample
-        for i in 0..FRAME_16K {
-            output.push(output_frame[i * 3]);
-        }
-
-        pos += FRAME_16K;
-    }
-
-    // Copy remaining samples unprocessed
-    if pos < samples.len() {
-        output.extend_from_slice(&samples[pos..]);
-    }
-
-    output
+    let denoiser = NnnoiselessDenoiser::new();
+    denoiser.denoise_buffer(samples)
 }
 
 use crate::cli::args::ChannelMode;
@@ -255,7 +215,7 @@ pub fn prepare_for_whisper(
 
     // Apply denoising if requested
     if denoise {
-        samples = apply_denoise(&samples);
+        samples = apply_denoise(&samples).context("Denoising failed")?;
     }
 
     Ok(PreparedAudio {

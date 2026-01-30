@@ -413,7 +413,7 @@ fn transcribe_sortformer_diarization(
     engine.load_model().context("Failed to load Sortformer model")?;
 
     if !engine.is_available() {
-        bail!("Sortformer diarization not available. Build with --features sortformer");
+        bail!("Sortformer diarization not available. Load the Sortformer model first.");
     }
 
     // Run diarization to get speaker segments

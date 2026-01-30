@@ -64,19 +64,15 @@ voice_activity_detector = "0.2.1"
 # Noise suppression (RNNoise-based)
 nnnoiseless = "0.5"
 
-# Speaker diarization with Sortformer
-# Note: Requires rustc 1.88+ and ort dependency
-# Enable with: cargo build --features sortformer
+# Speaker diarization with Sortformer (always enabled)
+# TDT: Parakeet TDT backend (optional, enable with --features tdt)
 [features]
 default = []
-sortformer = ["parakeet-rs"]
-tdt = ["parakeet-rs"]
-full = ["sortformer", "tdt"]
+tdt = []
 
 [dependencies.parakeet-rs]
 version = "0.2"
 features = ["sortformer"]
-optional = true
 
 [profile.release]
 opt-level = 3

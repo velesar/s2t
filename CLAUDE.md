@@ -16,14 +16,11 @@
 ## Quick Commands
 
 ```bash
-# Build
+# Build (includes Sortformer diarization by default)
 cargo build --release
 
 # Run
 cargo run --release
-
-# Run with Sortformer diarization (requires rustc 1.88+)
-cargo build --release --features sortformer
 
 # Test
 cargo test
