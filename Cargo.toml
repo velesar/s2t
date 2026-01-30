@@ -70,6 +70,9 @@ sha2 = "0.10"
 # Mutex without poisoning (parking_lot::Mutex)
 parking_lot = "0.12"
 
+# Lock-free SPSC ring buffer for real-time audio callback
+rtrb = "0.3"
+
 # Speaker diarization (Sortformer) and TDT backend (parakeet-rs)
 [dependencies.parakeet-rs]
 version = "0.2"
