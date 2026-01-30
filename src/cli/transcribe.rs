@@ -302,7 +302,7 @@ struct TranscriptionResult {
     model_name: String,
 }
 
-/// Transcribe audio using Whisper backend with specified diarization method.
+/// Transcribe audio using the active backend with specified diarization method.
 fn transcribe_with_whisper(
     service: &TranscriptionService,
     prepared: &PreparedAudio,
@@ -311,16 +311,12 @@ fn transcribe_with_whisper(
     diarization: DiarizationMethod,
     config: &Config,
 ) -> Result<TranscriptionResult> {
-    let whisper = service
-        .whisper()
-        .context("Whisper model not loaded")?;
-
     let model_name = args.model.clone().unwrap_or_else(|| config.default_model.clone());
 
     match diarization {
         DiarizationMethod::None => {
             // No diarization - simple transcription
-            let text = whisper.transcribe(&prepared.samples, Some(language))?;
+            let text = Transcription::transcribe(service, &prepared.samples, language)?;
             Ok(TranscriptionResult {
                 text: text.trim().to_string(),
                 segments: Vec::new(),
@@ -329,26 +325,26 @@ fn transcribe_with_whisper(
         }
         DiarizationMethod::Channel => {
             // Channel-based diarization (stereo: left=mic, right=loopback)
-            transcribe_channel_diarization(whisper, prepared, language, model_name)
+            transcribe_channel_diarization(service, prepared, language, model_name)
         }
         DiarizationMethod::Sortformer => {
             // Sortformer neural diarization
-            transcribe_sortformer_diarization(whisper, prepared, language, args, config, model_name)
+            transcribe_sortformer_diarization(service, prepared, language, args, config, model_name)
         }
     }
 }
 
 /// Channel-based diarization: transcribe left and right channels separately.
 fn transcribe_channel_diarization(
-    whisper: &crate::transcription::WhisperSTT,
+    service: &TranscriptionService,
     prepared: &PreparedAudio,
     language: &str,
     model_name: String,
 ) -> Result<TranscriptionResult> {
     match (&prepared.left, &prepared.right) {
         (Some(left), Some(right)) => {
-            let left_text = whisper.transcribe(left, Some(language))?;
-            let right_text = whisper.transcribe(right, Some(language))?;
+            let left_text = Transcription::transcribe(service, left, language)?;
+            let right_text = Transcription::transcribe(service, right, language)?;
 
             let mut segments = Vec::new();
             let mut full_text = String::new();
@@ -386,7 +382,7 @@ fn transcribe_channel_diarization(
         }
         _ => {
             // No stereo channels available, fall back to mixed mono
-            let text = whisper.transcribe(&prepared.samples, Some(language))?;
+            let text = Transcription::transcribe(service, &prepared.samples, language)?;
             Ok(TranscriptionResult {
                 text: text.trim().to_string(),
                 segments: Vec::new(),
@@ -398,7 +394,7 @@ fn transcribe_channel_diarization(
 
 /// Sortformer neural diarization: use Sortformer to identify speakers, then transcribe segments.
 fn transcribe_sortformer_diarization(
-    whisper: &crate::transcription::WhisperSTT,
+    service: &TranscriptionService,
     prepared: &PreparedAudio,
     language: &str,
     args: &TranscribeArgs,
@@ -421,7 +417,7 @@ fn transcribe_sortformer_diarization(
 
     if diar_segments.is_empty() {
         // No speakers detected, fall back to simple transcription
-        let text = whisper.transcribe(&prepared.samples, Some(language))?;
+        let text = Transcription::transcribe(service, &prepared.samples, language)?;
         return Ok(TranscriptionResult {
             text: text.trim().to_string(),
             segments: Vec::new(),
@@ -449,7 +445,7 @@ fn transcribe_sortformer_diarization(
             continue;
         }
 
-        let text = whisper.transcribe(segment_audio, Some(language))?;
+        let text = Transcription::transcribe(service, segment_audio, language)?;
         let text = text.trim();
 
         if !text.is_empty() {

@@ -125,19 +125,15 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
 
         std::thread::spawn(move || {
             let ts = ctx_for_thread.transcription.lock().unwrap();
-            if let Some(whisper) = ts.whisper() {
-                let mut engine_guard = ctx_for_thread.diarization.lock().unwrap();
-                let result = whisper.transcribe_with_auto_diarization(
-                    &mic_samples,
-                    &loopback_samples,
-                    Some(&language_for_thread),
-                    &diarization_method_for_thread,
-                    Some(&mut *engine_guard),
-                );
-                let _ = tx.send_blocking(result);
-            } else {
-                let _ = tx.send_blocking(Err(anyhow::anyhow!("Модель не завантажено")));
-            }
+            let mut engine_guard = ctx_for_thread.diarization.lock().unwrap();
+            let result = ts.transcribe_conference(
+                &mic_samples,
+                &loopback_samples,
+                &language_for_thread,
+                &diarization_method_for_thread,
+                Some(&mut *engine_guard),
+            );
+            let _ = tx.send_blocking(result);
         });
 
         if let Ok(result) = rx.recv().await {
