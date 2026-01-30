@@ -1,80 +1,10 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoryEntry {
-    pub id: String,
-    pub text: String,
-    pub timestamp: DateTime<Utc>,
-    pub duration_secs: f32,
-    pub language: String,
-    #[serde(default)]
-    pub recording_path: Option<String>,
-    #[serde(default)]
-    pub speakers: Vec<String>,
-}
-
-impl HistoryEntry {
-    pub fn new(text: String, duration_secs: f32, language: String) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            text,
-            timestamp: Utc::now(),
-            duration_secs,
-            language,
-            recording_path: None,
-            speakers: Vec::new(),
-        }
-    }
-
-    pub fn new_with_recording(
-        text: String,
-        duration_secs: f32,
-        language: String,
-        recording_path: Option<String>,
-        speakers: Vec<String>,
-    ) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            text,
-            timestamp: Utc::now(),
-            duration_secs,
-            language,
-            recording_path,
-            speakers,
-        }
-    }
-
-    /// Returns a preview of the text (first 80 chars, single line)
-    pub fn preview(&self) -> String {
-        let text = self.text.replace('\n', " ");
-        let chars: Vec<char> = text.chars().collect();
-        if chars.len() > 80 {
-            format!("{}...", chars[..80].iter().collect::<String>())
-        } else {
-            text
-        }
-    }
-
-    /// Returns formatted timestamp in local time (YYYY-MM-DD HH:MM)
-    pub fn formatted_timestamp(&self) -> String {
-        let local = self.timestamp.with_timezone(&chrono::Local);
-        local.format("%Y-%m-%d %H:%M").to_string()
-    }
-
-    /// Returns formatted duration (MM:SS)
-    pub fn formatted_duration(&self) -> String {
-        let mins = (self.duration_secs / 60.0).floor() as u32;
-        let secs = (self.duration_secs % 60.0).floor() as u32;
-        format!("{:02}:{:02}", mins, secs)
-    }
-}
+pub use crate::domain::types::HistoryEntry;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use chrono::Utc;
 
     #[test]
     fn test_history_entry_new() {
