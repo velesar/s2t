@@ -242,9 +242,9 @@ fn run_gui() -> Result<()> {
 
     // Register hotkeys from config
     {
-        let cfg = config.lock();
+        let cfg_snapshot = config.lock().clone();
         let mut hk = hotkey_manager.lock();
-        if let Err(e) = hk.register_from_config(&cfg) {
+        if let Err(e) = hk.register_from_config(&cfg_snapshot) {
             eprintln!("Помилка реєстрації гарячих клавіш: {}", e);
         }
     }
@@ -255,9 +255,9 @@ fn run_gui() -> Result<()> {
     let reload_hotkeys_rx = ctx.channels.reload_hotkeys_rx().clone();
     std::thread::spawn(move || {
         while reload_hotkeys_rx.recv_blocking().is_ok() {
-            let cfg = config_for_reload.lock();
+            let cfg_snapshot = config_for_reload.lock().clone();
             let mut hk = hotkey_manager_for_reload.lock();
-            if let Err(e) = hk.register_from_config(&cfg) {
+            if let Err(e) = hk.register_from_config(&cfg_snapshot) {
                 eprintln!("Помилка перереєстрації гарячих клавіш: {}", e);
             }
         }

@@ -150,8 +150,10 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
             } else {
                 loopback_samples
             };
-            let ts = ctx_for_thread.transcription.lock();
+            // Lock ordering: diarization before transcription.
+            // This ensures consistent ordering across the codebase.
             let mut engine_guard = ctx_for_thread.diarization.lock();
+            let ts = ctx_for_thread.transcription.lock();
             let result = ts.transcribe_conference(
                 &mic_samples,
                 &loopback_samples,

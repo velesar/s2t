@@ -105,11 +105,14 @@ pub fn create_model_row(
     let row_widgets_clone = row_widgets.clone();
 
     set_default_button.connect_clicked(move |_| {
-        let mut cfg = config_clone.lock();
-        cfg.default_model = filename_owned.clone();
-        if let Err(e) = save_config(&cfg) {
-            eprintln!("Помилка збереження конфігу: {}", e);
-            return;
+        // Save config first, then drop the lock before acquiring transcription lock
+        {
+            let mut cfg = config_clone.lock();
+            cfg.default_model = filename_owned.clone();
+            if let Err(e) = save_config(&cfg) {
+                eprintln!("Помилка збереження конфігу: {}", e);
+                return;
+            }
         }
 
         let model_path = get_model_path(&filename_owned);
@@ -119,6 +122,7 @@ pub fn create_model_row(
         } else {
             println!("Модель завантажено: {}", filename_owned);
         }
+        drop(ts);
 
         // Update all row indicators
         let widgets = row_widgets_clone.borrow();
