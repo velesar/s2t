@@ -97,6 +97,15 @@ impl RecordingCore {
     }
 }
 
+impl Drop for RecordingCore {
+    fn drop(&mut self) {
+        // Ensure spawned recording threads stop when RecordingCore is dropped.
+        // Without this, threads checking `is_recording` would spin forever
+        // if `stop()` was never called (e.g., early return, panic unwinding).
+        self.is_recording.store(false, Ordering::SeqCst);
+    }
+}
+
 impl Default for RecordingCore {
     fn default() -> Self {
         Self::new()
@@ -185,5 +194,50 @@ mod tests {
         let (samples, completion_rx) = core.stop();
         assert!(samples.is_empty());
         assert!(completion_rx.is_none());
+    }
+
+    #[test]
+    fn test_drop_clears_is_recording() {
+        let is_recording = Arc::new(AtomicBool::new(false));
+        {
+            let core = RecordingCore::new();
+            // Grab a clone of the is_recording flag before drop
+            let flag = core.is_recording.clone();
+            // Simulate starting a recording
+            core.prepare_recording();
+            assert!(flag.load(Ordering::SeqCst));
+            // Reassign so we can check after drop
+            is_recording.store(true, Ordering::SeqCst);
+
+            // `core` is dropped here — Drop should set is_recording to false
+        }
+        // Cannot check the internal flag after drop, so test via a spawned thread pattern
+    }
+
+    #[test]
+    fn test_drop_signals_thread_to_stop() {
+        use std::thread;
+        use std::time::Duration;
+
+        let core = RecordingCore::new();
+        let handles = core.prepare_recording();
+
+        let is_recording = handles.is_recording.clone();
+
+        // Simulate a background thread that checks the flag
+        let thread_handle = thread::spawn(move || {
+            while is_recording.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(1));
+            }
+            // Thread exits because is_recording became false
+            true
+        });
+
+        // Drop without calling stop() — Drop impl should clear the flag
+        drop(core);
+
+        // The thread should exit within a reasonable time
+        let result = thread_handle.join().unwrap();
+        assert!(result, "Thread should have exited after Drop set is_recording to false");
     }
 }

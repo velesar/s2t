@@ -57,6 +57,14 @@ impl HotkeyManager {
     }
 }
 
+impl Drop for HotkeyManager {
+    fn drop(&mut self) {
+        if let Some(hotkey) = self.current_hotkey.take() {
+            let _ = self.manager.unregister(hotkey);
+        }
+    }
+}
+
 fn parse_hotkey(hotkey_str: &str) -> Result<(Modifiers, Code)> {
     let parts: Vec<&str> = hotkey_str.split('+').map(|s| s.trim()).collect();
     if parts.is_empty() {
