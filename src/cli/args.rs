@@ -9,7 +9,7 @@ pub enum SttBackend {
     /// Whisper backend (default)
     #[default]
     Whisper,
-    /// Parakeet TDT backend (requires --features tdt)
+    /// Parakeet TDT backend
     Tdt,
 }
 

@@ -30,28 +30,25 @@ fn main() -> Result<()> {
 fn init_transcription_service(
     config: &std::sync::Arc<std::sync::Mutex<app::config::Config>>,
 ) -> transcription::TranscriptionService {
-    #[cfg(feature = "tdt")]
-    {
-        use transcription::TranscriptionService;
+    use transcription::TranscriptionService;
 
-        let cfg = config.lock().unwrap();
-        let stt_backend = cfg.stt_backend.clone();
-        drop(cfg);
+    let cfg = config.lock().unwrap();
+    let stt_backend = cfg.stt_backend.clone();
+    drop(cfg);
 
-        // Try TDT backend if configured and model is available
-        if stt_backend == "tdt" && infrastructure::models::is_tdt_model_downloaded() {
-            let tdt_dir = app::config::tdt_models_dir();
-            let tdt_path = tdt_dir.to_string_lossy().to_string();
-            println!("Завантаження TDT моделі: {}", tdt_path);
-            match TranscriptionService::with_tdt(&tdt_path) {
-                Ok(service) => {
-                    println!("TDT модель завантажено!");
-                    return service;
-                }
-                Err(e) => {
-                    eprintln!("Не вдалося завантажити TDT модель: {}", e);
-                    eprintln!("Переключаюсь на Whisper...");
-                }
+    // Try TDT backend if configured and model is available
+    if stt_backend == "tdt" && infrastructure::models::is_tdt_model_downloaded() {
+        let tdt_dir = app::config::tdt_models_dir();
+        let tdt_path = tdt_dir.to_string_lossy().to_string();
+        println!("Завантаження TDT моделі: {}", tdt_path);
+        match TranscriptionService::with_tdt(&tdt_path) {
+            Ok(service) => {
+                println!("TDT модель завантажено!");
+                return service;
+            }
+            Err(e) => {
+                eprintln!("Не вдалося завантажити TDT модель: {}", e);
+                eprintln!("Переключаюсь на Whisper...");
             }
         }
     }

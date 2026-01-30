@@ -3,7 +3,6 @@
 //! Provides a unified interface for speech-to-text transcription
 //! supporting multiple backends (Whisper, Parakeet TDT).
 
-#[cfg(feature = "tdt")]
 use crate::transcription::ParakeetSTT;
 use crate::transcription::WhisperSTT;
 use anyhow::{Context, Result};
@@ -14,15 +13,13 @@ use std::path::Path;
 #[allow(dead_code)]
 pub enum BackendType {
     Whisper,
-    #[cfg(feature = "tdt")]
     Tdt,
 }
 
 /// Transcription backend variants.
 enum TranscriptionBackend {
     Whisper(WhisperSTT),
-    #[cfg(feature = "tdt")]
-    Tdt(ParakeetSTT),
+    Tdt(Box<ParakeetSTT>),
     None,
 }
 
@@ -53,19 +50,11 @@ impl TranscriptionService {
     /// - encoder-model.int8.onnx (or encoder-model.onnx)
     /// - decoder_joint-model.int8.onnx (or decoder_joint-model.onnx)
     /// - vocab.txt
-    #[cfg(feature = "tdt")]
     pub fn with_tdt(model_dir: &str) -> Result<Self> {
         let tdt = ParakeetSTT::new(model_dir)?;
         Ok(Self {
-            backend: TranscriptionBackend::Tdt(tdt),
+            backend: TranscriptionBackend::Tdt(Box::new(tdt)),
         })
-    }
-
-    /// Stub for TDT when feature is disabled.
-    #[cfg(not(feature = "tdt"))]
-    #[allow(dead_code)]
-    pub fn with_tdt(_model_dir: &str) -> Result<Self> {
-        anyhow::bail!("TDT not available. Build with feature 'tdt': cargo build --features tdt");
     }
 
     /// Get reference to WhisperSTT (for conference mode diarization).
@@ -85,7 +74,6 @@ impl TranscriptionService {
     pub fn backend_type(&self) -> Option<BackendType> {
         match &self.backend {
             TranscriptionBackend::Whisper(_) => Some(BackendType::Whisper),
-            #[cfg(feature = "tdt")]
             TranscriptionBackend::Tdt(_) => Some(BackendType::Tdt),
             TranscriptionBackend::None => None,
         }
@@ -97,11 +85,7 @@ impl TranscriptionService {
     /// Whisper does not.
     #[allow(dead_code)]
     pub fn has_builtin_punctuation(&self) -> bool {
-        match &self.backend {
-            #[cfg(feature = "tdt")]
-            TranscriptionBackend::Tdt(_) => true,
-            _ => false,
-        }
+        matches!(&self.backend, TranscriptionBackend::Tdt(_))
     }
 }
 
@@ -119,7 +103,6 @@ impl Transcription for TranscriptionService {
     fn transcribe(&self, samples: &[f32], language: &str) -> Result<String> {
         match &self.backend {
             TranscriptionBackend::Whisper(w) => w.transcribe(samples, Some(language)),
-            #[cfg(feature = "tdt")]
             TranscriptionBackend::Tdt(t) => t.transcribe(samples, Some(language)),
             TranscriptionBackend::None => {
                 anyhow::bail!("Модель не завантажено")
@@ -134,8 +117,7 @@ impl Transcription for TranscriptionService {
     fn model_name(&self) -> Option<String> {
         match &self.backend {
             TranscriptionBackend::Whisper(w) => Transcription::model_name(w),
-            #[cfg(feature = "tdt")]
-            TranscriptionBackend::Tdt(t) => Transcription::model_name(t),
+            TranscriptionBackend::Tdt(t) => Transcription::model_name(t.as_ref()),
             TranscriptionBackend::None => None,
         }
     }

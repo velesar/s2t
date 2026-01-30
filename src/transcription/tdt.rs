@@ -8,15 +8,8 @@
 //! - Built-in punctuation and capitalization
 //! - Word-level timestamps
 
-use anyhow::Result;
-
-#[cfg(feature = "tdt")]
-use anyhow::Context;
-
-#[cfg(feature = "tdt")]
+use anyhow::{Context, Result};
 use parakeet_rs::{ParakeetTDT, Transcriber};
-
-#[cfg(feature = "tdt")]
 use std::sync::Mutex;
 
 /// Parakeet TDT speech-to-text backend.
@@ -25,7 +18,6 @@ use std::sync::Mutex;
 /// for transcription, but our Transcription trait uses &self.
 #[allow(dead_code)]
 pub struct ParakeetSTT {
-    #[cfg(feature = "tdt")]
     model: Mutex<ParakeetTDT>,
     model_dir: String,
 }
@@ -38,7 +30,6 @@ impl ParakeetSTT {
     /// - encoder-model.int8.onnx (or encoder-model.onnx)
     /// - decoder_joint-model.int8.onnx (or decoder_joint-model.onnx)
     /// - vocab.txt
-    #[cfg(feature = "tdt")]
     pub fn new(model_dir: &str) -> Result<Self> {
         let model = ParakeetTDT::from_pretrained(model_dir, None)
             .with_context(|| format!("Failed to load Parakeet TDT model from {}", model_dir))?;
@@ -49,20 +40,11 @@ impl ParakeetSTT {
         })
     }
 
-    /// Stub constructor when TDT feature is disabled.
-    #[cfg(not(feature = "tdt"))]
-    pub fn new(_model_dir: &str) -> Result<Self> {
-        anyhow::bail!(
-            "TDT not available. Build with feature 'tdt': cargo build --features tdt"
-        );
-    }
-
     /// Transcribe audio samples to text.
     ///
     /// # Arguments
     /// * `samples` - Audio samples at 16kHz mono
     /// * `_language` - Language hint (currently ignored; TDT uses auto-detection)
-    #[cfg(feature = "tdt")]
     pub fn transcribe(&self, samples: &[f32], _language: Option<&str>) -> Result<String> {
         // ParakeetTDT expects samples at 16kHz as Vec<f32>
         let mut model = self
@@ -75,12 +57,6 @@ impl ParakeetSTT {
             .context("Failed to transcribe audio with Parakeet TDT")?;
 
         Ok(result.text)
-    }
-
-    /// Stub transcribe when TDT feature is disabled.
-    #[cfg(not(feature = "tdt"))]
-    pub fn transcribe(&self, _samples: &[f32], _language: Option<&str>) -> Result<String> {
-        anyhow::bail!("TDT not available. Build with feature 'tdt'.");
     }
 
     /// Get the model directory path.

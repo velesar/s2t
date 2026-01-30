@@ -64,12 +64,7 @@ voice_activity_detector = "0.2.1"
 # Noise suppression (RNNoise-based)
 nnnoiseless = "0.5"
 
-# Speaker diarization with Sortformer (always enabled)
-# TDT: Parakeet TDT backend (optional, enable with --features tdt)
-[features]
-default = []
-tdt = []
-
+# Speaker diarization (Sortformer) and TDT backend (parakeet-rs)
 [dependencies.parakeet-rs]
 version = "0.2"
 features = ["sortformer"]
