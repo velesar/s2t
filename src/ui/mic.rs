@@ -318,11 +318,18 @@ fn handle_simple_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI)
                         }
 
                         if auto_paste_enabled {
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-                            if let Err(e) = crate::infrastructure::paste::paste_from_clipboard() {
-                                eprintln!("Помилка автоматичної вставки: {}", e);
+                            glib::timeout_future(std::time::Duration::from_millis(100)).await;
+                            let (paste_tx, paste_rx) = async_channel::bounded::<Option<String>>(1);
+                            std::thread::spawn(move || {
+                                let err = crate::infrastructure::paste::paste_from_clipboard()
+                                    .err()
+                                    .map(|e| e.to_string());
+                                let _ = paste_tx.send_blocking(err);
+                            });
+                            if let Ok(Some(err)) = paste_rx.recv().await {
+                                eprintln!("Помилка автоматичної вставки: {}", err);
                                 ui.base
-                                    .set_status(&format!("Готово! (помилка вставки: {})", e));
+                                    .set_status(&format!("Готово! (помилка вставки: {})", err));
                             }
                         }
 

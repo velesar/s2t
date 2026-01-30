@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 /// Uses xdotool for X11 (most common on Linux)
 /// Note: On Wayland, this may not work and user may need to manually paste
 pub fn paste_from_clipboard() -> Result<()> {
-    // Small delay to ensure clipboard is ready
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    // Note: callers are responsible for clipboard readiness delay
+    // (UI code uses glib::timeout_future before spawning this on a background thread)
 
     // Use xdotool to simulate Ctrl+V (works on X11)
     let output = std::process::Command::new("xdotool")
