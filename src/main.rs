@@ -221,6 +221,19 @@ fn run_gui() -> Result<()> {
 
     let app = Application::builder().application_id(APP_ID).build();
 
+    // Set up clean shutdown on SIGINT/SIGTERM
+    let (shutdown_tx, shutdown_rx) = async_channel::bounded::<()>(1);
+    let history_for_signal = history.clone();
+    ctrlc::set_handler(move || {
+        eprintln!("Отримано сигнал завершення, зберігаю стан...");
+        let h = history_for_signal.lock();
+        if let Err(e) = save_history(&h) {
+            eprintln!("Помилка збереження історії при завершенні: {}", e);
+        }
+        let _ = shutdown_tx.try_send(());
+    })
+    .expect("Failed to set signal handler");
+
     // Initialize hotkey manager
     let hotkey_manager = Arc::new(Mutex::new(HotkeyManager::new().unwrap_or_else(|e| {
         eprintln!("Помилка ініціалізації гарячих клавіш: {}", e);
@@ -266,6 +279,26 @@ fn run_gui() -> Result<()> {
     app.connect_activate(move |app| {
         ui::build_ui(app, ctx_for_app.clone());
     });
+
+    // Listen for signal-triggered shutdown and quit the GTK application
+    {
+        let app_weak_for_signal = app.downgrade();
+        let history_for_exit = history.clone();
+        glib::spawn_future_local(async move {
+            let _ = shutdown_rx.recv().await;
+            eprintln!("Завершення GTK додатку...");
+            // Save history one more time from the main thread (signal handler
+            // may have been interrupted before completing the save)
+            let h = history_for_exit.lock();
+            if let Err(e) = save_history(&h) {
+                eprintln!("Помилка збереження історії: {}", e);
+            }
+            drop(h);
+            if let Some(app) = app_weak_for_signal.upgrade() {
+                app.quit();
+            }
+        });
+    }
 
     // Use channels from ctx for tray action handling
     let channels_for_tray = ctx.channels.clone();
@@ -319,6 +352,15 @@ fn run_gui() -> Result<()> {
                     break;
                 }
             }
+        }
+    });
+
+    // Save history when GTK application shuts down (covers normal exit, tray quit, window close)
+    let history_for_shutdown = history.clone();
+    app.connect_shutdown(move |_| {
+        let h = history_for_shutdown.lock();
+        if let Err(e) = save_history(&h) {
+            eprintln!("Помилка збереження історії при завершенні: {}", e);
         }
     });
 

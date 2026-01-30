@@ -72,6 +72,7 @@ parking_lot = "0.12"
 
 # Lock-free SPSC ring buffer for real-time audio callback
 rtrb = "0.3"
+ctrlc = "3.5.1"
 
 # Speaker diarization (Sortformer) and TDT backend (parakeet-rs)
 [dependencies.parakeet-rs]
