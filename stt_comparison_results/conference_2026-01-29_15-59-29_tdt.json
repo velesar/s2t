@@ -1,0 +1,19 @@
+{
+  "version": "0.3.0",
+  "input_file": "/home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav",
+  "duration_secs": 49.9003125,
+  "language": "uk",
+  "model": "tdt",
+  "backend": "tdt",
+  "diarization": "none",
+  "denoise": false,
+  "transcription": "Раз, раз, раз, раз, раз. Проєктами в електронний документів. Це дуже багато процесів, які реалізує IT Enterprise, але є у нас інші продукти, які працюють. В тому, наприклад, оптимізація бізнес, але це і смарт-ендер, така майданчик, в якому працює десь більше 100 тисяч користувачів, і він займається електронними закупівлями.",
+  "metrics": {
+    "execution_time_ms": 9390,
+    "audio_duration_ms": 49900,
+    "rtf": 0.18817635270541083,
+    "word_count": 49,
+    "char_count": 325,
+    "segment_count": 0
+  }
+}

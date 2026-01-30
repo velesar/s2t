@@ -4,34 +4,12 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const WHISPER_SAMPLE_RATE: u32 = 16000;
-
-/// Convert multi-channel audio to mono by averaging channels.
-fn to_mono(data: &[f32], channels: usize) -> Vec<f32> {
-    if channels > 1 {
-        data.chunks(channels)
-            .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
-            .collect()
-    } else {
-        data.to_vec()
-    }
-}
-
-/// Calculate normalized RMS amplitude for visualization (0.0 - 1.0).
-fn calculate_rms(samples: &[f32]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum_squares: f32 = samples.iter().map(|s| s * s).sum();
-    let rms = (sum_squares / samples.len() as f32).sqrt();
-    // Normalize: typical speech is ~0.05-0.15 RMS, scale so it reaches ~50%
-    (rms * 6.0).min(1.0)
-}
+use super::core::{calculate_rms, to_mono, RecordingCore, WHISPER_SAMPLE_RATE};
 
 /// Create a high-quality sinc resampler for converting to 16kHz.
 fn create_resampler(sample_rate: u32) -> Result<SincFixedIn<f32>> {
@@ -54,26 +32,25 @@ fn create_resampler(sample_rate: u32) -> Result<SincFixedIn<f32>> {
 }
 
 pub(crate) struct AudioRecorder {
-    pub(crate) samples: Arc<Mutex<Vec<f32>>>,
-    is_recording: Arc<AtomicBool>,
-    completion_rx: Arc<Mutex<Option<Receiver<()>>>>,
-    /// Current audio amplitude (RMS), stored as u32 bits for atomic access
-    current_amplitude: Arc<AtomicU32>,
+    core: RecordingCore,
 }
 
 impl AudioRecorder {
     pub fn new() -> Self {
         Self {
-            samples: Arc::new(Mutex::new(Vec::new())),
-            is_recording: Arc::new(AtomicBool::new(false)),
-            completion_rx: Arc::new(Mutex::new(None)),
-            current_amplitude: Arc::new(AtomicU32::new(0)),
+            core: RecordingCore::new(),
         }
+    }
+
+    /// Get a reference to the shared samples buffer.
+    /// Used by ContinuousRecorder to read accumulated samples.
+    pub fn samples(&self) -> &Arc<Mutex<Vec<f32>>> {
+        &self.core.samples
     }
 
     /// Get current audio amplitude (0.0 - 1.0 range, normalized RMS)
     pub fn get_amplitude(&self) -> f32 {
-        f32::from_bits(self.current_amplitude.load(Ordering::Relaxed))
+        self.core.get_amplitude()
     }
 
     pub fn start_recording(&self) -> Result<()> {
@@ -86,17 +63,13 @@ impl AudioRecorder {
         let sample_rate = config.sample_rate().0;
         let channels = config.channels() as usize;
 
-        self.samples.lock().unwrap().clear();
-        self.is_recording.store(true, Ordering::SeqCst);
+        let handles = self.core.prepare_recording();
 
-        // Create completion channel
-        let (completion_tx, completion_rx) = async_channel::bounded::<()>(1);
-        *self.completion_rx.lock().unwrap() = Some(completion_rx);
-
-        let samples = self.samples.clone();
-        let is_recording = self.is_recording.clone();
-        let is_recording_for_loop = self.is_recording.clone();
-        let current_amplitude = self.current_amplitude.clone();
+        let samples = handles.samples;
+        let is_recording = handles.is_recording.clone();
+        let is_recording_for_loop = handles.is_recording;
+        let current_amplitude = handles.current_amplitude;
+        let completion_tx = handles.completion_tx;
 
         let resampler = Arc::new(Mutex::new(create_resampler(sample_rate)?));
 
@@ -166,12 +139,7 @@ impl AudioRecorder {
     }
 
     pub fn stop_recording(&self) -> (Vec<f32>, Option<Receiver<()>>) {
-        self.is_recording.store(false, Ordering::SeqCst);
-        self.current_amplitude
-            .store(0.0_f32.to_bits(), Ordering::Relaxed);
-        let completion_rx = self.completion_rx.lock().unwrap().take();
-        let samples = self.samples.lock().unwrap().clone();
-        (samples, completion_rx)
+        self.core.stop()
     }
 }
 
@@ -199,7 +167,7 @@ impl AudioRecording for AudioRecorder {
     }
 
     fn is_recording(&self) -> bool {
-        self.is_recording.load(Ordering::SeqCst)
+        self.core.is_recording()
     }
 }
 
@@ -222,15 +190,10 @@ mod tests {
     }
 
     #[test]
-    fn test_whisper_sample_rate_constant() {
-        assert_eq!(WHISPER_SAMPLE_RATE, 16000);
-    }
-
-    #[test]
     fn test_audio_recorder_default() {
         let recorder = AudioRecorder::default();
-        assert!(!recorder.is_recording.load(Ordering::SeqCst));
-        assert!(recorder.samples.lock().unwrap().is_empty());
+        assert!(!recorder.core.is_recording());
+        assert!(recorder.core.samples.lock().unwrap().is_empty());
     }
 
     #[test]
@@ -242,7 +205,7 @@ mod tests {
     #[test]
     fn test_audio_recorder_not_recording_initially() {
         let recorder = AudioRecorder::new();
-        assert!(!recorder.is_recording.load(Ordering::SeqCst));
+        assert!(!recorder.core.is_recording());
     }
 
     #[test]
@@ -266,8 +229,9 @@ mod tests {
     #[test]
     fn test_stop_resets_amplitude() {
         let recorder = AudioRecorder::new();
-        // Manually set amplitude to non-zero
-        recorder
+        // Manually set amplitude to non-zero via prepare + handles
+        let handles = recorder.core.prepare_recording();
+        handles
             .current_amplitude
             .store(0.5_f32.to_bits(), Ordering::Relaxed);
         assert!(recorder.get_amplitude() > 0.0);

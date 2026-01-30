@@ -1,32 +1,24 @@
 use anyhow::{Context, Result};
 use async_channel::Receiver;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
 use std::thread;
 
-const WHISPER_SAMPLE_RATE: u32 = 16000;
+use super::core::{calculate_rms, RecordingCore, WHISPER_SAMPLE_RATE};
 
 pub(crate) struct LoopbackRecorder {
-    samples: Arc<Mutex<Vec<f32>>>,
-    is_recording: Arc<AtomicBool>,
-    completion_rx: Arc<Mutex<Option<Receiver<()>>>>,
-    /// Current audio amplitude (RMS), stored as u32 bits for atomic access
-    current_amplitude: Arc<AtomicU32>,
+    core: RecordingCore,
 }
 
 impl LoopbackRecorder {
     pub fn new() -> Self {
         Self {
-            samples: Arc::new(Mutex::new(Vec::new())),
-            is_recording: Arc::new(AtomicBool::new(false)),
-            completion_rx: Arc::new(Mutex::new(None)),
-            current_amplitude: Arc::new(AtomicU32::new(0)),
+            core: RecordingCore::new(),
         }
     }
 
     /// Get current audio amplitude (0.0 - 1.0 range, normalized RMS)
     pub fn get_amplitude(&self) -> f32 {
-        f32::from_bits(self.current_amplitude.load(Ordering::Relaxed))
+        self.core.get_amplitude()
     }
 
     /// Start recording from PipeWire loopback (system audio monitor)
@@ -37,16 +29,12 @@ impl LoopbackRecorder {
         // This is simpler and works on both PipeWire and PulseAudio
         // TODO: Implement proper PipeWire API integration
 
-        self.samples.lock().unwrap().clear();
-        self.is_recording.store(true, Ordering::SeqCst);
+        let handles = self.core.prepare_recording();
 
-        // Create completion channel
-        let (completion_tx, completion_rx) = async_channel::bounded::<()>(1);
-        *self.completion_rx.lock().unwrap() = Some(completion_rx);
-
-        let samples = self.samples.clone();
-        let is_recording_for_loop = self.is_recording.clone();
-        let current_amplitude = self.current_amplitude.clone();
+        let samples = handles.samples;
+        let is_recording_for_loop = handles.is_recording;
+        let current_amplitude = handles.current_amplitude;
+        let completion_tx = handles.completion_tx;
 
         // Try to get default monitor source using pactl
         let monitor_source = std::process::Command::new("pactl")
@@ -101,13 +89,8 @@ impl LoopbackRecorder {
                         .collect();
 
                     // Calculate RMS amplitude
-                    if !f32_samples.is_empty() {
-                        let sum_squares: f32 = f32_samples.iter().map(|s| s * s).sum();
-                        let rms = (sum_squares / f32_samples.len() as f32).sqrt();
-                        // Use 6.0 multiplier so typical audio reaches ~50% of scale
-                        let normalized = (rms * 6.0).min(1.0);
-                        current_amplitude.store(normalized.to_bits(), Ordering::Relaxed);
-                    }
+                    let amplitude = calculate_rms(&f32_samples);
+                    current_amplitude.store(amplitude.to_bits(), Ordering::Relaxed);
 
                     // Store samples
                     samples.lock().unwrap().extend(&f32_samples);
@@ -127,17 +110,34 @@ impl LoopbackRecorder {
     }
 
     pub fn stop_loopback(&self) -> (Vec<f32>, Option<Receiver<()>>) {
-        self.is_recording.store(false, Ordering::SeqCst);
-        self.current_amplitude
-            .store(0.0_f32.to_bits(), Ordering::Relaxed);
-        let completion_rx = self.completion_rx.lock().unwrap().take();
-        let samples = self.samples.lock().unwrap().clone();
-        (samples, completion_rx)
+        self.core.stop()
     }
 }
 
 impl Default for LoopbackRecorder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// === Trait Implementation ===
+
+use crate::domain::traits::AudioRecording;
+
+impl AudioRecording for LoopbackRecorder {
+    fn start(&self) -> Result<()> {
+        self.start_loopback()
+    }
+
+    fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
+        self.stop_loopback()
+    }
+
+    fn amplitude(&self) -> f32 {
+        self.get_amplitude()
+    }
+
+    fn is_recording(&self) -> bool {
+        self.core.is_recording()
     }
 }

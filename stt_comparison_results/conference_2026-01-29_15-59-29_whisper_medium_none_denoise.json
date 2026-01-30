@@ -1,0 +1,19 @@
+{
+  "version": "0.3.0",
+  "input_file": "/home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav",
+  "duration_secs": 49.9003125,
+  "language": "uk",
+  "model": "ggml-medium.bin",
+  "backend": "whisper",
+  "diarization": "none",
+  "denoise": true,
+  "transcription": "[Продюсерка]  Побліки, кадри зарплата, ремонти, управління проєктом і електронно-документовим обігом – це дуже багато процесів, які реалізує IT Enterprise.  Але є у нас інші продукти, які працюють в тому напрямку оптимізація бізнесу, але це і Smart Tender, така майданчик, у якому працює більше 100 тисяч користувачів і він займається електронною закупівріми.  А яка частина вашого виторгу приходиться на Україну?  [Продюсерка]",
+  "metrics": {
+    "execution_time_ms": 123642,
+    "audio_duration_ms": 49900,
+    "rtf": 2.477795591182365,
+    "word_count": 60,
+    "char_count": 427,
+    "segment_count": 0
+  }
+}

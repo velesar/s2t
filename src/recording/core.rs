@@ -1,0 +1,188 @@
+use async_channel::Receiver;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+
+pub(crate) const WHISPER_SAMPLE_RATE: u32 = 16000;
+
+/// Calculate normalized RMS amplitude for visualization (0.0 - 1.0).
+pub(crate) fn calculate_rms(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum_squares: f32 = samples.iter().map(|s| s * s).sum();
+    let rms = (sum_squares / samples.len() as f32).sqrt();
+    // Normalize: typical speech is ~0.05-0.15 RMS, scale so it reaches ~50%
+    (rms * 6.0).min(1.0)
+}
+
+/// Convert multi-channel audio to mono by averaging channels.
+pub(crate) fn to_mono(data: &[f32], channels: usize) -> Vec<f32> {
+    if channels > 1 {
+        data.chunks(channels)
+            .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
+            .collect()
+    } else {
+        data.to_vec()
+    }
+}
+
+/// Shared recording infrastructure (samples buffer, flags, completion channel).
+///
+/// Both `AudioRecorder` (microphone) and `LoopbackRecorder` compose this
+/// struct to avoid duplicating the identical field set and lifecycle methods.
+pub(crate) struct RecordingCore {
+    pub(crate) samples: Arc<Mutex<Vec<f32>>>,
+    is_recording: Arc<AtomicBool>,
+    completion_rx: Arc<Mutex<Option<Receiver<()>>>>,
+    /// Current audio amplitude (RMS), stored as u32 bits for atomic access
+    current_amplitude: Arc<AtomicU32>,
+}
+
+/// Handles passed to a spawned recording thread so it can write samples,
+/// check the recording flag, update amplitude, and signal completion.
+pub(crate) struct RecordingHandles {
+    pub(crate) samples: Arc<Mutex<Vec<f32>>>,
+    pub(crate) is_recording: Arc<AtomicBool>,
+    pub(crate) current_amplitude: Arc<AtomicU32>,
+    pub(crate) completion_tx: async_channel::Sender<()>,
+}
+
+impl RecordingCore {
+    pub fn new() -> Self {
+        Self {
+            samples: Arc::new(Mutex::new(Vec::new())),
+            is_recording: Arc::new(AtomicBool::new(false)),
+            completion_rx: Arc::new(Mutex::new(None)),
+            current_amplitude: Arc::new(AtomicU32::new(0)),
+        }
+    }
+
+    /// Get current audio amplitude (0.0 - 1.0 range, normalized RMS).
+    pub fn get_amplitude(&self) -> f32 {
+        f32::from_bits(self.current_amplitude.load(Ordering::Relaxed))
+    }
+
+    /// Check if currently recording.
+    pub fn is_recording(&self) -> bool {
+        self.is_recording.load(Ordering::SeqCst)
+    }
+
+    /// Clear samples, set recording flag, create completion channel,
+    /// and return handles for the spawned recording thread.
+    pub fn prepare_recording(&self) -> RecordingHandles {
+        self.samples.lock().unwrap().clear();
+        self.is_recording.store(true, Ordering::SeqCst);
+
+        let (completion_tx, completion_rx) = async_channel::bounded::<()>(1);
+        *self.completion_rx.lock().unwrap() = Some(completion_rx);
+
+        RecordingHandles {
+            samples: self.samples.clone(),
+            is_recording: self.is_recording.clone(),
+            current_amplitude: self.current_amplitude.clone(),
+            completion_tx,
+        }
+    }
+
+    /// Clear recording flag, reset amplitude, and return collected samples
+    /// plus the completion receiver.
+    pub fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
+        self.is_recording.store(false, Ordering::SeqCst);
+        self.current_amplitude
+            .store(0.0_f32.to_bits(), Ordering::Relaxed);
+        let completion_rx = self.completion_rx.lock().unwrap().take();
+        let samples = self.samples.lock().unwrap().clone();
+        (samples, completion_rx)
+    }
+}
+
+impl Default for RecordingCore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_whisper_sample_rate_constant() {
+        assert_eq!(WHISPER_SAMPLE_RATE, 16000);
+    }
+
+    #[test]
+    fn test_calculate_rms_empty() {
+        assert_eq!(calculate_rms(&[]), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_rms_silence() {
+        assert_eq!(calculate_rms(&[0.0; 100]), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_rms_normalized() {
+        // Full-scale signal should clamp to 1.0
+        let loud = vec![1.0; 100];
+        assert_eq!(calculate_rms(&loud), 1.0);
+    }
+
+    #[test]
+    fn test_to_mono_single_channel() {
+        let data = vec![0.1, 0.2, 0.3];
+        assert_eq!(to_mono(&data, 1), data);
+    }
+
+    #[test]
+    fn test_to_mono_stereo() {
+        let data = vec![0.2, 0.4, 0.6, 0.8];
+        let mono = to_mono(&data, 2);
+        assert_eq!(mono.len(), 2);
+        assert!((mono[0] - 0.3).abs() < 1e-6);
+        assert!((mono[1] - 0.7).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_recording_core_new() {
+        let core = RecordingCore::new();
+        assert!(!core.is_recording());
+        assert_eq!(core.get_amplitude(), 0.0);
+        assert!(core.samples.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_recording_core_prepare_and_stop() {
+        let core = RecordingCore::new();
+
+        let handles = core.prepare_recording();
+        assert!(core.is_recording());
+
+        // Simulate writing samples
+        handles.samples.lock().unwrap().extend(&[0.1, 0.2, 0.3]);
+
+        let (samples, completion_rx) = core.stop();
+        assert!(!core.is_recording());
+        assert_eq!(samples, vec![0.1, 0.2, 0.3]);
+        assert!(completion_rx.is_some());
+    }
+
+    #[test]
+    fn test_stop_resets_amplitude() {
+        let core = RecordingCore::new();
+        core.current_amplitude
+            .store(0.5_f32.to_bits(), Ordering::Relaxed);
+        assert!(core.get_amplitude() > 0.0);
+
+        core.stop();
+        assert_eq!(core.get_amplitude(), 0.0);
+    }
+
+    #[test]
+    fn test_stop_without_prepare_returns_none() {
+        let core = RecordingCore::new();
+        let (samples, completion_rx) = core.stop();
+        assert!(samples.is_empty());
+        assert!(completion_rx.is_none());
+    }
+}

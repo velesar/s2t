@@ -1,0 +1,505 @@
+Starting STT comparison at Чт 29 янв 2026 18:48:31 EET
+Binary: ./target/release/voice-dictation
+Output dir: ./stt_comparison_results
+
+
+=== Processing: conference_2026-01-29_15-59-29.wav ===
+Size: 6,1M
+
+--- Whisper tests (9) ---
+[18:48:31] whisper | base | none | denoise=off
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-base.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-base.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 512
+whisper_model_load: n_audio_head  = 8
+whisper_model_load: n_audio_layer = 6
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 512
+whisper_model_load: n_text_head   = 8
+whisper_model_load: n_text_layer  = 6
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 2 (base)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   147.37 MB
+whisper_model_load: model size    =  147.37 MB
+Transcribing (backend: whisper, diarization: None, language: uk)...
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+Done in 15.7s (RTF: 0.31)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_base_none.json
+  RTF: 0.314248496993988 | Words: 63
+[18:48:47] whisper | base | channel | denoise=on
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-base.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-base.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 512
+whisper_model_load: n_audio_head  = 8
+whisper_model_load: n_audio_layer = 6
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 512
+whisper_model_load: n_text_head   = 8
+whisper_model_load: n_text_layer  = 6
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 2 (base)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   147.37 MB
+whisper_model_load: model size    =  147.37 MB
+Transcribing (backend: whisper, diarization: Channel, language: uk)...
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+Done in 45.3s (RTF: 0.91)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_base_channel_denoise.json
+  RTF: 0.9073947895791583 | Words: 119
+[18:49:32] whisper | base | sortformer | denoise=on
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-base.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-base.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 512
+whisper_model_load: n_audio_head  = 8
+whisper_model_load: n_audio_layer = 6
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 512
+whisper_model_load: n_text_head   = 8
+whisper_model_load: n_text_layer  = 6
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 2 (base)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   147.37 MB
+whisper_model_load: model size    =  147.37 MB
+Transcribing (backend: whisper, diarization: Sortformer, language: uk)...
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+whisper_init_state: kv self size  =   18.87 MB
+whisper_init_state: kv cross size =   18.87 MB
+whisper_init_state: kv pad  size  =    3.15 MB
+whisper_init_state: compute buffer (conv)   =   16.39 MB
+whisper_init_state: compute buffer (encode) =  132.07 MB
+whisper_init_state: compute buffer (cross)  =    4.78 MB
+whisper_init_state: compute buffer (decode) =   96.48 MB
+Done in 24.7s (RTF: 0.50)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_base_sortformer_denoise.json
+  RTF: 0.4951503006012024 | Words: 86
+[18:49:57] whisper | small-q8_0 | none | denoise=on
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-small-q8_0.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-small-q8_0.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 768
+whisper_model_load: n_audio_head  = 12
+whisper_model_load: n_audio_layer = 12
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 768
+whisper_model_load: n_text_head   = 12
+whisper_model_load: n_text_layer  = 12
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 7
+whisper_model_load: qntvr         = 2
+whisper_model_load: type          = 3 (small)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   263.87 MB
+whisper_model_load: model size    =  263.87 MB
+Transcribing (backend: whisper, diarization: None, language: uk)...
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+Done in 33.4s (RTF: 0.67)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_small-q8_0_none_denoise.json
+  RTF: 0.6697795591182365 | Words: 76
+[18:50:31] whisper | small-q8_0 | channel | denoise=off
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-small-q8_0.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-small-q8_0.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 768
+whisper_model_load: n_audio_head  = 12
+whisper_model_load: n_audio_layer = 12
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 768
+whisper_model_load: n_text_head   = 12
+whisper_model_load: n_text_layer  = 12
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 7
+whisper_model_load: qntvr         = 2
+whisper_model_load: type          = 3 (small)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   263.87 MB
+whisper_model_load: model size    =  263.87 MB
+Transcribing (backend: whisper, diarization: Channel, language: uk)...
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+Done in 139.8s (RTF: 2.80)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_small-q8_0_channel.json
+  RTF: 2.800681362725451 | Words: 95
+[18:52:51] whisper | small-q8_0 | sortformer | denoise=off
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-small-q8_0.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-small-q8_0.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 768
+whisper_model_load: n_audio_head  = 12
+whisper_model_load: n_audio_layer = 12
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 768
+whisper_model_load: n_text_head   = 12
+whisper_model_load: n_text_layer  = 12
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 7
+whisper_model_load: qntvr         = 2
+whisper_model_load: type          = 3 (small)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   263.87 MB
+whisper_model_load: model size    =  263.87 MB
+Transcribing (backend: whisper, diarization: Sortformer, language: uk)...
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+whisper_init_state: kv self size  =   56.62 MB
+whisper_init_state: kv cross size =   56.62 MB
+whisper_init_state: kv pad  size  =    4.72 MB
+whisper_init_state: compute buffer (conv)   =   22.54 MB
+whisper_init_state: compute buffer (encode) =  280.20 MB
+whisper_init_state: compute buffer (cross)  =    6.31 MB
+whisper_init_state: compute buffer (decode) =   97.40 MB
+Done in 88.1s (RTF: 1.77)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_small-q8_0_sortformer.json
+  RTF: 1.765190380761523 | Words: 83
+[18:54:19] whisper | medium | none | denoise=on
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-medium.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-medium.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 1024
+whisper_model_load: n_audio_head  = 16
+whisper_model_load: n_audio_layer = 24
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 1024
+whisper_model_load: n_text_head   = 16
+whisper_model_load: n_text_layer  = 24
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 4 (medium)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =  1533.14 MB
+whisper_model_load: model size    = 1533.14 MB
+Transcribing (backend: whisper, diarization: None, language: uk)...
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+Done in 123.6s (RTF: 2.48)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_medium_none_denoise.json
+  RTF: 2.477795591182365 | Words: 60
+[18:56:23] whisper | medium | channel | denoise=off
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-medium.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-medium.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 1024
+whisper_model_load: n_audio_head  = 16
+whisper_model_load: n_audio_layer = 24
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 1024
+whisper_model_load: n_text_head   = 16
+whisper_model_load: n_text_layer  = 24
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 4 (medium)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =  1533.14 MB
+whisper_model_load: model size    = 1533.14 MB
+Transcribing (backend: whisper, diarization: Channel, language: uk)...
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+Done in 1058.9s (RTF: 21.22)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_medium_channel.json
+  RTF: 21.221342685370743 | Words: 145
+[19:14:02] whisper | medium | sortformer | denoise=on
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading Whisper model: /home/velesar/.local/share/whisper/ggml-medium.bin
+whisper_init_from_file_with_params_no_state: loading model from '/home/velesar/.local/share/whisper/ggml-medium.bin'
+whisper_init_with_params_no_state: use gpu    = 0
+whisper_init_with_params_no_state: flash attn = 0
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51865
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 1024
+whisper_model_load: n_audio_head  = 16
+whisper_model_load: n_audio_layer = 24
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 1024
+whisper_model_load: n_text_head   = 16
+whisper_model_load: n_text_layer  = 24
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 4 (medium)
+whisper_model_load: adding 1608 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =  1533.14 MB
+whisper_model_load: model size    = 1533.14 MB
+Transcribing (backend: whisper, diarization: Sortformer, language: uk)...
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+whisper_init_state: kv self size  =  150.99 MB
+whisper_init_state: kv cross size =  150.99 MB
+whisper_init_state: kv pad  size  =    6.29 MB
+whisper_init_state: compute buffer (conv)   =   28.68 MB
+whisper_init_state: compute buffer (encode) =  594.22 MB
+whisper_init_state: compute buffer (cross)  =    7.85 MB
+whisper_init_state: compute buffer (decode) =  142.09 MB
+Done in 226.5s (RTF: 4.54)
+Output written to: ./stt_comparison_results/conference_2026-01-29_15-59-29_whisper_medium_sortformer_denoise.json
+  RTF: 4.5387775551102205 | Words: 88
+
+--- TDT tests (2) ---
+[19:17:49] tdt | tdt | none | denoise=on
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading TDT model from: /home/velesar/.local/share/voice-dictation/tdt
+Error: TDT not available. Build with feature 'tdt': cargo build --features tdt
+  [FAILED]
+[19:17:49] tdt | tdt | none | denoise=off
+Reading: /home/velesar/.local/share/voice-dictation/recordings/conference_2026-01-29_15-59-29.wav
+  2 channels, 16000Hz, 49.9s
+Loading TDT model from: /home/velesar/.local/share/voice-dictation/tdt
+Error: TDT not available. Build with feature 'tdt': cargo build --features tdt
+  [FAILED]
+
+=== DONE ===
+Total tests: 11
+Failed tests: 2
+Results in: ./stt_comparison_results
+Total JSON files: 9
+
