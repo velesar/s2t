@@ -77,9 +77,9 @@ impl LoopbackRecorder {
                         break;
                     }
 
-                    // Convert i16 samples to f32
+                    // Convert i16 samples to f32 (chunks_exact safely skips trailing odd byte)
                     let i16_samples: Vec<i16> = buffer[..bytes_read]
-                        .chunks(2)
+                        .chunks_exact(2)
                         .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
                         .collect();
 
@@ -139,5 +139,40 @@ impl AudioRecording for LoopbackRecorder {
 
     fn is_recording(&self) -> bool {
         self.core.is_recording()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_i16_conversion_even_bytes() {
+        let buffer: &[u8] = &[0x00, 0x01, 0xFF, 0x7F]; // 256, 32767
+        let samples: Vec<i16> = buffer
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        assert_eq!(samples, vec![256_i16, 32767_i16]);
+    }
+
+    #[test]
+    fn test_i16_conversion_odd_bytes_does_not_panic() {
+        // Odd byte count: trailing byte must be silently skipped (not panic)
+        let buffer: &[u8] = &[0x00, 0x01, 0xFF, 0x7F, 0xAB];
+        let samples: Vec<i16> = buffer
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        // Only complete pairs converted; trailing 0xAB is dropped
+        assert_eq!(samples, vec![256_i16, 32767_i16]);
+    }
+
+    #[test]
+    fn test_i16_conversion_single_byte_does_not_panic() {
+        let buffer: &[u8] = &[0xAB];
+        let samples: Vec<i16> = buffer
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        assert!(samples.is_empty());
     }
 }

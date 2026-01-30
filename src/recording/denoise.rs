@@ -22,22 +22,29 @@ const FRAME_SIZE: usize = 480;
 /// Chunk size for rubato resampler
 const RESAMPLE_CHUNK: usize = 1024;
 
+/// Internal state protected by a single mutex to prevent ABBA deadlock.
+struct DenoiseInner {
+    state: Box<DenoiseState<'static>>,
+    buffer: Vec<f32>,
+}
+
 /// RNNoise-based denoiser using nnnoiseless.
 ///
 /// Accepts 16kHz audio, resamples to 48kHz for RNNoise processing,
 /// then resamples back to 16kHz. This ensures RNNoise operates at
 /// its trained sample rate for correct noise suppression.
 pub struct NnnoiselessDenoiser {
-    state: Mutex<Box<DenoiseState<'static>>>,
-    buffer: Mutex<Vec<f32>>,
+    inner: Mutex<DenoiseInner>,
 }
 
 impl NnnoiselessDenoiser {
     /// Create a new nnnoiseless denoiser.
     pub fn new() -> Self {
         Self {
-            state: Mutex::new(DenoiseState::new()),
-            buffer: Mutex::new(Vec::with_capacity(FRAME_SIZE)),
+            inner: Mutex::new(DenoiseInner {
+                state: DenoiseState::new(),
+                buffer: Vec::with_capacity(FRAME_SIZE),
+            }),
         }
     }
 
@@ -137,33 +144,33 @@ impl NnnoiselessDenoiser {
             return Ok(Vec::new());
         }
 
-        // 16kHz → 48kHz
+        // 16kHz → 48kHz (no lock needed — pure function)
         let upsampled = Self::upsample(samples)?;
 
-        // Run RNNoise at 48kHz
-        let mut state = self.state.lock().unwrap();
-        let mut buffer = self.buffer.lock().unwrap();
+        // Run RNNoise at 48kHz (single lock — no ordering issue)
+        let denoised_48k = {
+            let mut inner = self.inner.lock().unwrap();
 
-        let mut denoised_48k = Vec::with_capacity(upsampled.len());
-        buffer.extend_from_slice(&upsampled);
+            let mut denoised = Vec::with_capacity(upsampled.len());
+            inner.buffer.extend_from_slice(&upsampled);
 
-        while buffer.len() >= FRAME_SIZE {
-            let frame: Vec<f32> = buffer.drain(..FRAME_SIZE).collect();
-            let mut frame_out = vec![0.0f32; FRAME_SIZE];
-            state.process_frame(&mut frame_out, &frame);
-            denoised_48k.extend_from_slice(&frame_out);
-        }
+            while inner.buffer.len() >= FRAME_SIZE {
+                let frame: Vec<f32> = inner.buffer.drain(..FRAME_SIZE).collect();
+                let mut frame_out = vec![0.0f32; FRAME_SIZE];
+                inner.state.process_frame(&mut frame_out, &frame);
+                denoised.extend_from_slice(&frame_out);
+            }
 
-        // Flush remaining buffered samples (pass through unprocessed)
-        if !buffer.is_empty() {
-            denoised_48k.extend_from_slice(&buffer);
-            buffer.clear();
-        }
+            // Flush remaining buffered samples (pass through unprocessed)
+            if !inner.buffer.is_empty() {
+                denoised.extend_from_slice(&inner.buffer);
+                inner.buffer.clear();
+            }
 
-        drop(buffer);
-        drop(state);
+            denoised
+        };
 
-        // 48kHz → 16kHz
+        // 48kHz → 16kHz (no lock needed — pure function)
         Self::downsample(&denoised_48k)
     }
 }
@@ -184,10 +191,9 @@ impl AudioDenoising for NnnoiselessDenoiser {
     }
 
     fn reset(&self) {
-        let mut buffer = self.buffer.lock().unwrap();
-        let mut state = self.state.lock().unwrap();
-        buffer.clear();
-        *state = DenoiseState::new();
+        let mut inner = self.inner.lock().unwrap();
+        inner.buffer.clear();
+        inner.state = DenoiseState::new();
     }
 }
 
@@ -300,5 +306,39 @@ mod tests {
     fn test_create_denoiser_disabled() {
         let denoiser = create_denoiser(false);
         assert_eq!(denoiser.required_sample_rate(), 16000);
+    }
+
+    /// Stress test: concurrent denoise_buffer() and reset() must not deadlock.
+    /// Before the fix, two separate mutexes were locked in opposite order
+    /// (state→buffer vs buffer→state), causing ABBA deadlock.
+    #[test]
+    fn test_concurrent_denoise_and_reset_no_deadlock() {
+        use std::sync::Arc;
+        use std::thread;
+        use std::time::Duration;
+
+        let denoiser = Arc::new(NnnoiselessDenoiser::new());
+        let iterations = 20;
+
+        let d1 = Arc::clone(&denoiser);
+        let t1 = thread::spawn(move || {
+            let input = vec![0.1f32; 1600]; // 100ms of audio
+            for _ in 0..iterations {
+                let _ = d1.denoise_buffer(&input);
+            }
+        });
+
+        let d2 = Arc::clone(&denoiser);
+        let t2 = thread::spawn(move || {
+            for _ in 0..iterations {
+                d2.reset();
+                thread::sleep(Duration::from_millis(1));
+            }
+        });
+
+        // If deadlock exists, these joins will hang forever.
+        // Test runner timeout will catch it.
+        t1.join().expect("denoise thread panicked");
+        t2.join().expect("reset thread panicked");
     }
 }
