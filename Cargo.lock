@@ -4049,6 +4049,7 @@ dependencies = [
  "rubato",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "toml 0.8.23",
  "uuid",

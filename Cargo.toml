@@ -64,6 +64,9 @@ voice_activity_detector = "0.2.1"
 # Noise suppression (RNNoise-based)
 nnnoiseless = "0.5"
 
+# Cryptographic hashing for model integrity verification
+sha2 = "0.10"
+
 # Speaker diarization (Sortformer) and TDT backend (parakeet-rs)
 [dependencies.parakeet-rs]
 version = "0.2"

@@ -1,8 +1,9 @@
 use crate::app::config::models_dir;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use futures_util::StreamExt;
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct ModelInfo {
@@ -10,6 +11,24 @@ pub struct ModelInfo {
     pub display_name: String,
     pub size_bytes: u64,
     pub description: String,
+    pub sha256: Option<String>,
+}
+
+fn verify_checksum(path: &Path, expected: &str) -> Result<()> {
+    let mut file = fs::File::open(path)
+        .with_context(|| format!("Не вдалося відкрити файл для перевірки: {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher).context("Помилка при обчисленні контрольної суми")?;
+    let hash = format!("{:x}", hasher.finalize());
+    if hash != expected {
+        bail!(
+            "Контрольна сума не збігається для {}: очікувано {}, отримано {}",
+            path.display(),
+            expected,
+            hash
+        );
+    }
+    Ok(())
 }
 
 const HUGGINGFACE_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";
@@ -20,69 +39,80 @@ pub fn get_available_models() -> Vec<ModelInfo> {
         ModelInfo {
             filename: "ggml-tiny-q5_1.bin".to_string(),
             display_name: "Tiny Q5".to_string(),
-            size_bytes: 32_000_000,
+            size_bytes: 32_152_673,
             description: "Найшвидша квантована, ~2x швидше".to_string(),
+            sha256: Some("818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7".to_string()),
         },
         ModelInfo {
             filename: "ggml-base-q5_1.bin".to_string(),
             display_name: "Base Q5 (Рекомендовано)".to_string(),
-            size_bytes: 60_000_000,
+            size_bytes: 59_707_625,
             description: "Швидка + якісна, оптимальний баланс".to_string(),
+            sha256: Some("422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898".to_string()),
         },
         ModelInfo {
             filename: "ggml-base-q8_0.bin".to_string(),
             display_name: "Base Q8".to_string(),
-            size_bytes: 83_000_000,
+            size_bytes: 81_768_585,
             description: "Квантована, найкраща якість серед Q".to_string(),
+            sha256: Some("c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9".to_string()),
         },
         ModelInfo {
             filename: "ggml-small-q5_1.bin".to_string(),
             display_name: "Small Q5".to_string(),
-            size_bytes: 190_000_000,
+            size_bytes: 190_085_487,
             description: "Хороша якість, швидша за звичайну".to_string(),
+            sha256: Some("ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb".to_string()),
         },
         ModelInfo {
             filename: "ggml-small-q8_0.bin".to_string(),
             display_name: "Small Q8".to_string(),
-            size_bytes: 264_000_000,
+            size_bytes: 264_464_607,
             description: "Висока якість серед квантованих".to_string(),
+            sha256: Some("49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f".to_string()),
         },
         ModelInfo {
             filename: "ggml-medium-q5_0.bin".to_string(),
             display_name: "Medium Q5".to_string(),
-            size_bytes: 539_000_000,
+            size_bytes: 539_212_467,
             description: "Велика квантована, хороша якість".to_string(),
+            sha256: Some("19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f".to_string()),
         },
         // Full precision models
         ModelInfo {
             filename: "ggml-tiny.bin".to_string(),
             display_name: "Tiny".to_string(),
-            size_bytes: 75_000_000,
+            size_bytes: 77_691_713,
             description: "Найшвидша, найменша точність".to_string(),
+            sha256: Some("be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21".to_string()),
         },
         ModelInfo {
             filename: "ggml-base.bin".to_string(),
             display_name: "Base".to_string(),
-            size_bytes: 148_000_000,
+            size_bytes: 147_951_465,
             description: "Баланс швидкості та точності".to_string(),
+            sha256: Some("60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe".to_string()),
         },
         ModelInfo {
             filename: "ggml-small.bin".to_string(),
             display_name: "Small".to_string(),
-            size_bytes: 488_000_000,
+            size_bytes: 487_601_967,
             description: "Хороша точність".to_string(),
+            sha256: Some("1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b".to_string()),
         },
         ModelInfo {
             filename: "ggml-medium.bin".to_string(),
             display_name: "Medium".to_string(),
-            size_bytes: 1_500_000_000,
+            size_bytes: 1_533_763_059,
             description: "Висока точність".to_string(),
+            sha256: Some("6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208".to_string()),
         },
         ModelInfo {
             filename: "ggml-large-v3.bin".to_string(),
             display_name: "Large v3".to_string(),
-            size_bytes: 3_100_000_000,
+            size_bytes: 3_095_033_483,
             description: "Найвища точність".to_string(),
+            sha256: Some("64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2".to_string()),
         },
     ]
 }
@@ -126,6 +156,11 @@ pub async fn download_model<F>(filename: &str, progress_callback: F) -> Result<(
 where
     F: Fn(u64, u64) + Send + 'static,
 {
+    let expected_sha256 = get_available_models()
+        .iter()
+        .find(|m| m.filename == filename)
+        .and_then(|m| m.sha256.clone());
+
     let url = format!("{}{}", HUGGINGFACE_BASE_URL, filename);
     let dir = models_dir();
 
@@ -165,6 +200,20 @@ where
         progress_callback(downloaded, total_size);
     }
 
+    drop(file);
+
+    if let Some(expected) = &expected_sha256 {
+        if let Err(e) = verify_checksum(&temp_path, expected) {
+            let _ = fs::remove_file(&temp_path);
+            return Err(e);
+        }
+    } else {
+        eprintln!(
+            "Попередження: контрольна сума для {} невідома, пропускаємо перевірку",
+            filename
+        );
+    }
+
     fs::rename(&temp_path, &final_path).with_context(|| {
         format!(
             "Не вдалося перейменувати {} -> {}",
@@ -200,6 +249,7 @@ pub fn get_sortformer_model_info() -> ModelInfo {
         size_bytes: 492_000_000, // ~492MB
         description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)"
             .to_string(),
+        sha256: None, // Third-party model, hash TBD
     }
 }
 
@@ -266,6 +316,16 @@ where
         progress_callback(downloaded, total_size);
     }
 
+    drop(file);
+
+    let info = get_sortformer_model_info();
+    if let Some(expected) = &info.sha256 {
+        if let Err(e) = verify_checksum(&temp_path, expected) {
+            let _ = fs::remove_file(&temp_path);
+            return Err(e);
+        }
+    }
+
     fs::rename(&temp_path, &final_path).with_context(|| {
         format!(
             "Не вдалося перейменувати {} -> {}",
@@ -300,18 +360,21 @@ pub fn get_tdt_model_info() -> TdtModelFiles {
             display_name: "TDT Encoder (INT8)".to_string(),
             size_bytes: 652_000_000,
             description: "Parakeet TDT encoder model".to_string(),
+            sha256: None, // Third-party model, hash TBD
         },
         decoder: ModelInfo {
             filename: "decoder_joint-model.int8.onnx".to_string(),
             display_name: "TDT Decoder (INT8)".to_string(),
             size_bytes: 18_200_000,
             description: "Parakeet TDT decoder model".to_string(),
+            sha256: None,
         },
         vocab: ModelInfo {
             filename: "vocab.txt".to_string(),
             display_name: "TDT Vocabulary".to_string(),
             size_bytes: 94_000,
             description: "Parakeet TDT vocabulary".to_string(),
+            sha256: None,
         },
     }
 }
@@ -412,6 +475,15 @@ where
             progress_callback(total_downloaded, total_size);
         }
 
+        drop(file);
+
+        if let Some(expected) = &model_file.sha256 {
+            if let Err(e) = verify_checksum(&temp_path, expected) {
+                let _ = fs::remove_file(&temp_path);
+                return Err(e);
+            }
+        }
+
         fs::rename(&temp_path, &final_path).with_context(|| {
             format!(
                 "Не вдалося перейменувати {} -> {}",
@@ -495,13 +567,74 @@ mod tests {
     #[test]
     fn test_model_info_has_all_fields() {
         let models = get_available_models();
-        for model in models {
+        for model in &models {
             assert!(!model.filename.is_empty());
             assert!(!model.display_name.is_empty());
             assert!(!model.description.is_empty());
             assert!(model.size_bytes > 0);
             assert!(model.filename.ends_with(".bin"));
         }
+    }
+
+    #[test]
+    fn test_all_whisper_models_have_sha256() {
+        let models = get_available_models();
+        for model in &models {
+            assert!(
+                model.sha256.is_some(),
+                "Model {} is missing SHA256 hash",
+                model.filename
+            );
+            let hash = model.sha256.as_ref().unwrap();
+            assert_eq!(hash.len(), 64, "SHA256 hash for {} should be 64 hex chars", model.filename);
+            assert!(
+                hash.chars().all(|c| c.is_ascii_hexdigit()),
+                "SHA256 hash for {} should contain only hex digits",
+                model.filename
+            );
+        }
+    }
+
+    #[test]
+    fn test_verify_checksum_valid() {
+        let dir = std::env::temp_dir().join("s2t_test_checksum");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("test_valid.bin");
+        fs::write(&path, b"hello world").unwrap();
+
+        // SHA256 of "hello world"
+        let expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        assert!(verify_checksum(&path, expected).is_ok());
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_verify_checksum_mismatch() {
+        let dir = std::env::temp_dir().join("s2t_test_checksum_mismatch");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("test_mismatch.bin");
+        fs::write(&path, b"hello world").unwrap();
+
+        let wrong_hash = "0000000000000000000000000000000000000000000000000000000000000000";
+        let result = verify_checksum(&path, wrong_hash);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Контрольна сума не збігається"));
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_verify_checksum_file_not_found() {
+        let path = std::env::temp_dir().join("s2t_test_nonexistent_file.bin");
+        let result = verify_checksum(
+            &path,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        );
+        assert!(result.is_err());
     }
 
     #[test]
