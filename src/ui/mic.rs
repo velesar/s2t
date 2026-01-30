@@ -423,9 +423,12 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
             let _ = rx.recv().await;
         }
 
-        // Wait for all transcriptions to complete
+        // Wait for all transcriptions to complete (with 5-minute safety timeout)
         let poll_interval = std::time::Duration::from_millis(100);
+        let poll_timeout = std::time::Duration::from_secs(5 * 60);
+        let poll_start = std::time::Instant::now();
         let mut was_cancelled = false;
+        let mut was_timed_out = false;
 
         loop {
             let sent = SEGMENTS_SENT.with(|c| c.get());
@@ -438,6 +441,15 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
             if PROCESSING_CANCELLED.with(|c| c.get()) {
                 was_cancelled = true;
                 eprintln!("Processing cancelled by user: {}/{}", completed, sent);
+                break;
+            }
+
+            if poll_start.elapsed() >= poll_timeout {
+                was_timed_out = true;
+                eprintln!(
+                    "Segment processing timed out after {:?}: {}/{} completed",
+                    poll_timeout, completed, sent
+                );
                 break;
             }
 
@@ -459,6 +471,13 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
                 let completed = SEGMENTS_COMPLETED.with(|c| c.get());
                 ui.base
                     .set_status(&format!("Скасовано (оброблено {}/{})", completed, sent));
+            } else if was_timed_out {
+                let sent = SEGMENTS_SENT.with(|c| c.get());
+                let completed = SEGMENTS_COMPLETED.with(|c| c.get());
+                ui.base.set_status(&format!(
+                    "Тайм-аут обробки (оброблено {}/{})",
+                    completed, sent
+                ));
             } else {
                 ui.base.set_status("Готово!");
             }
@@ -471,6 +490,9 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
             }
         } else if was_cancelled {
             ui.base.set_status("Скасовано (нічого не оброблено)");
+        } else if was_timed_out {
+            ui.base
+                .set_status("Тайм-аут обробки (нічого не оброблено)");
         } else {
             ui.base.set_status("Не вдалося розпізнати мову");
         }

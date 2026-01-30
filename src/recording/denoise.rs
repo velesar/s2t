@@ -23,9 +23,162 @@ const FRAME_SIZE: usize = 480;
 const RESAMPLE_CHUNK: usize = 1024;
 
 /// Internal state protected by a single mutex to prevent ABBA deadlock.
+///
+/// Resamplers and frame buffers are cached here to avoid repeated FFT kernel
+/// computation and heap allocation on every `denoise_buffer()` call.
 struct DenoiseInner {
     state: Box<DenoiseState<'static>>,
     buffer: Vec<f32>,
+    /// Pre-allocated input frame buffer for RNNoise (480 samples at 48kHz).
+    frame_in: Vec<f32>,
+    /// Pre-allocated output frame buffer for RNNoise (480 samples at 48kHz).
+    frame_out: Vec<f32>,
+    /// Cached 16kHz→48kHz resampler (FFT kernel computed once).
+    upsampler: Option<FftFixedIn<f32>>,
+    /// Cached 48kHz→16kHz resampler (FFT kernel computed once).
+    downsampler: Option<FftFixedIn<f32>>,
+}
+
+impl DenoiseInner {
+    /// Lazily create resamplers on first use. The FFT kernels are computed once
+    /// and reused across all subsequent `denoise_buffer()` calls.
+    fn ensure_resamplers(&mut self) -> Result<()> {
+        if self.upsampler.is_none() {
+            self.upsampler = Some(
+                FftFixedIn::<f32>::new(
+                    INPUT_SAMPLE_RATE,
+                    NNNOISELESS_SAMPLE_RATE,
+                    RESAMPLE_CHUNK,
+                    2, // sub chunks
+                    1, // channels
+                )
+                .context("Failed to create upsampler")?,
+            );
+        }
+        if self.downsampler.is_none() {
+            self.downsampler = Some(
+                FftFixedIn::<f32>::new(
+                    NNNOISELESS_SAMPLE_RATE,
+                    INPUT_SAMPLE_RATE,
+                    RESAMPLE_CHUNK,
+                    2, // sub chunks
+                    1, // channels
+                )
+                .context("Failed to create downsampler")?,
+            );
+        }
+        Ok(())
+    }
+
+    /// Upsample 16kHz audio to 48kHz using the cached resampler.
+    fn resample_up(&mut self, samples: &[f32]) -> Result<Vec<f32>> {
+        if samples.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let resampler = self.upsampler.as_mut().expect("upsampler not initialized");
+        let mut output = Vec::with_capacity(samples.len() * 3);
+        let mut pos = 0;
+        let frames_needed = resampler.input_frames_next();
+
+        while pos + frames_needed <= samples.len() {
+            let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
+            let resampled = resampler
+                .process(&chunk, None)
+                .context("Upsample failed")?;
+            output.extend_from_slice(&resampled[0]);
+            pos += frames_needed;
+        }
+
+        // Process remaining samples with zero-padding
+        if pos < samples.len() {
+            let remaining = &samples[pos..];
+            let mut padded = remaining.to_vec();
+            padded.resize(frames_needed, 0.0);
+            let chunk = vec![padded];
+            let resampled = resampler
+                .process(&chunk, None)
+                .context("Upsample final chunk failed")?;
+            let remaining_duration = remaining.len() as f64 / INPUT_SAMPLE_RATE as f64;
+            let expected =
+                (remaining_duration * NNNOISELESS_SAMPLE_RATE as f64).ceil() as usize;
+            let actual = expected.min(resampled[0].len());
+            output.extend_from_slice(&resampled[0][..actual]);
+        }
+
+        Ok(output)
+    }
+
+    /// Run RNNoise on 48kHz audio using pre-allocated frame buffers.
+    ///
+    /// Uses `frame_in` and `frame_out` fields to avoid per-frame heap allocations.
+    /// Fields are destructured to satisfy the borrow checker (split borrows).
+    fn process_rnnoise(&mut self, upsampled: &[f32]) -> Vec<f32> {
+        let DenoiseInner {
+            ref mut state,
+            ref mut buffer,
+            ref mut frame_in,
+            ref mut frame_out,
+            ..
+        } = *self;
+
+        let mut denoised = Vec::with_capacity(upsampled.len());
+        buffer.extend_from_slice(upsampled);
+
+        while buffer.len() >= FRAME_SIZE {
+            frame_in.copy_from_slice(&buffer[..FRAME_SIZE]);
+            buffer.drain(..FRAME_SIZE);
+            state.process_frame(frame_out, frame_in);
+            denoised.extend_from_slice(frame_out);
+        }
+
+        // Flush remaining buffered samples (pass through unprocessed)
+        if !buffer.is_empty() {
+            denoised.extend_from_slice(buffer);
+            buffer.clear();
+        }
+
+        denoised
+    }
+
+    /// Downsample 48kHz audio back to 16kHz using the cached resampler.
+    fn resample_down(&mut self, samples: &[f32]) -> Result<Vec<f32>> {
+        if samples.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let resampler = self.downsampler.as_mut().expect("downsampler not initialized");
+        let mut output = Vec::with_capacity(samples.len() / 3);
+        let mut pos = 0;
+        let frames_needed = resampler.input_frames_next();
+
+        while pos + frames_needed <= samples.len() {
+            let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
+            let resampled = resampler
+                .process(&chunk, None)
+                .context("Downsample failed")?;
+            output.extend_from_slice(&resampled[0]);
+            pos += frames_needed;
+        }
+
+        // Process remaining samples with zero-padding
+        if pos < samples.len() {
+            let remaining = &samples[pos..];
+            let mut padded = remaining.to_vec();
+            padded.resize(frames_needed, 0.0);
+            let chunk = vec![padded];
+            let resampled = resampler
+                .process(&chunk, None)
+                .context("Downsample final chunk failed")?;
+            let remaining_duration =
+                remaining.len() as f64 / NNNOISELESS_SAMPLE_RATE as f64;
+            let expected = (remaining_duration * INPUT_SAMPLE_RATE as f64).ceil() as usize;
+            let actual = expected.min(resampled[0].len());
+            output.extend_from_slice(&resampled[0][..actual]);
+        }
+
+        Ok(output)
+    }
 }
 
 /// RNNoise-based denoiser using nnnoiseless.
@@ -39,139 +192,42 @@ pub struct NnnoiselessDenoiser {
 
 impl NnnoiselessDenoiser {
     /// Create a new nnnoiseless denoiser.
+    ///
+    /// Resamplers are lazily initialized on first use (see `ensure_resamplers`).
     pub fn new() -> Self {
         Self {
             inner: Mutex::new(DenoiseInner {
                 state: DenoiseState::new(),
                 buffer: Vec::with_capacity(FRAME_SIZE),
+                frame_in: vec![0.0f32; FRAME_SIZE],
+                frame_out: vec![0.0f32; FRAME_SIZE],
+                upsampler: None,
+                downsampler: None,
             }),
         }
-    }
-
-    /// Upsample 16kHz audio to 48kHz using rubato.
-    fn upsample(samples: &[f32]) -> Result<Vec<f32>> {
-        if samples.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut resampler = FftFixedIn::<f32>::new(
-            INPUT_SAMPLE_RATE,
-            NNNOISELESS_SAMPLE_RATE,
-            RESAMPLE_CHUNK,
-            2, // sub chunks
-            1, // channels
-        )
-        .context("Failed to create upsampler")?;
-
-        let mut output = Vec::with_capacity(samples.len() * 3);
-        let mut pos = 0;
-        let frames_needed = resampler.input_frames_next();
-
-        while pos + frames_needed <= samples.len() {
-            let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
-            let resampled = resampler.process(&chunk, None)
-                .context("Upsample failed")?;
-            output.extend_from_slice(&resampled[0]);
-            pos += frames_needed;
-        }
-
-        // Process remaining samples with zero-padding
-        if pos < samples.len() {
-            let remaining = &samples[pos..];
-            let mut padded = remaining.to_vec();
-            padded.resize(frames_needed, 0.0);
-            let chunk = vec![padded];
-            let resampled = resampler.process(&chunk, None)
-                .context("Upsample final chunk failed")?;
-            let remaining_duration = remaining.len() as f64 / INPUT_SAMPLE_RATE as f64;
-            let expected = (remaining_duration * NNNOISELESS_SAMPLE_RATE as f64).ceil() as usize;
-            let actual = expected.min(resampled[0].len());
-            output.extend_from_slice(&resampled[0][..actual]);
-        }
-
-        Ok(output)
-    }
-
-    /// Downsample 48kHz audio back to 16kHz using rubato.
-    fn downsample(samples: &[f32]) -> Result<Vec<f32>> {
-        if samples.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut resampler = FftFixedIn::<f32>::new(
-            NNNOISELESS_SAMPLE_RATE,
-            INPUT_SAMPLE_RATE,
-            RESAMPLE_CHUNK,
-            2, // sub chunks
-            1, // channels
-        )
-        .context("Failed to create downsampler")?;
-
-        let mut output = Vec::with_capacity(samples.len() / 3);
-        let mut pos = 0;
-        let frames_needed = resampler.input_frames_next();
-
-        while pos + frames_needed <= samples.len() {
-            let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
-            let resampled = resampler.process(&chunk, None)
-                .context("Downsample failed")?;
-            output.extend_from_slice(&resampled[0]);
-            pos += frames_needed;
-        }
-
-        // Process remaining samples with zero-padding
-        if pos < samples.len() {
-            let remaining = &samples[pos..];
-            let mut padded = remaining.to_vec();
-            padded.resize(frames_needed, 0.0);
-            let chunk = vec![padded];
-            let resampled = resampler.process(&chunk, None)
-                .context("Downsample final chunk failed")?;
-            let remaining_duration = remaining.len() as f64 / NNNOISELESS_SAMPLE_RATE as f64;
-            let expected = (remaining_duration * INPUT_SAMPLE_RATE as f64).ceil() as usize;
-            let actual = expected.min(resampled[0].len());
-            output.extend_from_slice(&resampled[0][..actual]);
-        }
-
-        Ok(output)
     }
 
     /// Denoise a complete buffer of 16kHz audio.
     ///
     /// Resamples to 48kHz, runs RNNoise, resamples back to 16kHz.
+    /// Resamplers and frame buffers are cached across calls to avoid
+    /// repeated FFT kernel computation and heap allocations.
     pub fn denoise_buffer(&self, samples: &[f32]) -> Result<Vec<f32>> {
         if samples.is_empty() {
             return Ok(Vec::new());
         }
 
-        // 16kHz → 48kHz (no lock needed — pure function)
-        let upsampled = Self::upsample(samples)?;
+        let mut inner = self.inner.lock();
+        inner.ensure_resamplers()?;
 
-        // Run RNNoise at 48kHz (single lock — no ordering issue)
-        let denoised_48k = {
-            let mut inner = self.inner.lock();
+        // 16kHz → 48kHz
+        let upsampled = inner.resample_up(samples)?;
 
-            let mut denoised = Vec::with_capacity(upsampled.len());
-            inner.buffer.extend_from_slice(&upsampled);
+        // Run RNNoise at 48kHz (uses pre-allocated frame buffers)
+        let denoised_48k = inner.process_rnnoise(&upsampled);
 
-            while inner.buffer.len() >= FRAME_SIZE {
-                let frame: Vec<f32> = inner.buffer.drain(..FRAME_SIZE).collect();
-                let mut frame_out = vec![0.0f32; FRAME_SIZE];
-                inner.state.process_frame(&mut frame_out, &frame);
-                denoised.extend_from_slice(&frame_out);
-            }
-
-            // Flush remaining buffered samples (pass through unprocessed)
-            if !inner.buffer.is_empty() {
-                denoised.extend_from_slice(&inner.buffer);
-                inner.buffer.clear();
-            }
-
-            denoised
-        };
-
-        // 48kHz → 16kHz (no lock needed — pure function)
-        Self::downsample(&denoised_48k)
+        // 48kHz → 16kHz
+        inner.resample_down(&denoised_48k)
     }
 }
 
@@ -193,7 +249,14 @@ impl AudioDenoising for NnnoiselessDenoiser {
     fn reset(&self) {
         let mut inner = self.inner.lock();
         inner.buffer.clear();
+        inner.frame_in.fill(0.0);
+        inner.frame_out.fill(0.0);
         inner.state = DenoiseState::new();
+        // Drop cached resamplers so they are re-created fresh on next use.
+        // FftFixedIn maintains internal overlap buffers that may contain stale
+        // audio from the previous session.
+        inner.upsampler = None;
+        inner.downsampler = None;
     }
 }
 
