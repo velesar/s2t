@@ -152,19 +152,18 @@ pub fn delete_model(filename: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn download_model<F>(filename: &str, progress_callback: F) -> Result<()>
-where
-    F: Fn(u64, u64) + Send + 'static,
-{
-    let expected_sha256 = get_available_models()
-        .iter()
-        .find(|m| m.filename == filename)
-        .and_then(|m| m.sha256.clone());
-
-    let url = format!("{}{}", HUGGINGFACE_BASE_URL, filename);
-    let dir = models_dir();
-
-    fs::create_dir_all(&dir)
+/// Download a single file via HTTP with progress reporting, checksum verification,
+/// and atomic rename from temp to final path.
+async fn download_file(
+    url: &str,
+    dir: &Path,
+    filename: &str,
+    expected_sha256: Option<&str>,
+    downloaded_offset: u64,
+    total_size_override: u64,
+    progress_callback: &(dyn Fn(u64, u64) + Send + Sync),
+) -> Result<PathBuf> {
+    fs::create_dir_all(dir)
         .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
 
     let temp_path = dir.join(format!("{}.downloading", filename));
@@ -172,20 +171,26 @@ where
 
     let client = reqwest::Client::new();
     let response = client
-        .get(&url)
+        .get(url)
         .send()
         .await
         .with_context(|| format!("Не вдалося підключитися: {}", url))?;
 
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(
-            "Помилка завантаження: HTTP {}",
+            "Помилка завантаження {}: HTTP {}",
+            filename,
             response.status()
         ));
     }
 
-    let total_size = response.content_length().unwrap_or(0);
-    let mut downloaded: u64 = 0;
+    let content_length = response.content_length().unwrap_or(0);
+    let total_size = if total_size_override > 0 {
+        total_size_override
+    } else {
+        content_length
+    };
+    let mut downloaded: u64 = downloaded_offset;
 
     let mut file = fs::File::create(&temp_path)
         .with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
@@ -202,16 +207,11 @@ where
 
     drop(file);
 
-    if let Some(expected) = &expected_sha256 {
+    if let Some(expected) = expected_sha256 {
         if let Err(e) = verify_checksum(&temp_path, expected) {
             let _ = fs::remove_file(&temp_path);
             return Err(e);
         }
-    } else {
-        eprintln!(
-            "Попередження: контрольна сума для {} невідома, пропускаємо перевірку",
-            filename
-        );
     }
 
     fs::rename(&temp_path, &final_path).with_context(|| {
@@ -221,6 +221,38 @@ where
             final_path.display()
         )
     })?;
+
+    Ok(final_path)
+}
+
+pub async fn download_model<F>(filename: &str, progress_callback: F) -> Result<()>
+where
+    F: Fn(u64, u64) + Send + Sync + 'static,
+{
+    let expected_sha256 = get_available_models()
+        .iter()
+        .find(|m| m.filename == filename)
+        .and_then(|m| m.sha256.clone());
+
+    let url = format!("{}{}", HUGGINGFACE_BASE_URL, filename);
+
+    if expected_sha256.is_none() {
+        eprintln!(
+            "Попередження: контрольна сума для {} невідома, пропускаємо перевірку",
+            filename
+        );
+    }
+
+    download_file(
+        &url,
+        &models_dir(),
+        filename,
+        expected_sha256.as_deref(),
+        0,
+        0,
+        &progress_callback,
+    )
+    .await?;
 
     Ok(())
 }
@@ -272,67 +304,24 @@ pub fn delete_sortformer_model() -> Result<()> {
 
 pub async fn download_sortformer_model<F>(progress_callback: F) -> Result<()>
 where
-    F: Fn(u64, u64) + Send + 'static,
+    F: Fn(u64, u64) + Send + Sync + 'static,
 {
-    // Download from HuggingFace (altunenes/parakeet-rs contains pre-converted ONNX models)
-    let url =
-        "https://huggingface.co/altunenes/parakeet-rs/resolve/main/diar_streaming_sortformer_4spk-v2.1.onnx";
-    let dir = crate::app::config::sortformer_models_dir();
-    let filename = "diar_streaming_sortformer_4spk-v2.1.onnx";
-
-    fs::create_dir_all(&dir)
-        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
-
-    let temp_path = dir.join(format!("{}.downloading", filename));
-    let final_path = dir.join(filename);
-
-    let client = reqwest::Client::new();
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .with_context(|| format!("Не вдалося підключитися: {}", url))?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Помилка завантаження: HTTP {}",
-            response.status()
-        ));
-    }
-
-    let total_size = response.content_length().unwrap_or(0);
-    let mut downloaded: u64 = 0;
-
-    let mut file = fs::File::create(&temp_path)
-        .with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
-
-    let mut stream = response.bytes_stream();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.context("Помилка при завантаженні")?;
-        std::io::Write::write_all(&mut file, &chunk).context("Не вдалося записати дані")?;
-
-        downloaded += chunk.len() as u64;
-        progress_callback(downloaded, total_size);
-    }
-
-    drop(file);
-
     let info = get_sortformer_model_info();
-    if let Some(expected) = &info.sha256 {
-        if let Err(e) = verify_checksum(&temp_path, expected) {
-            let _ = fs::remove_file(&temp_path);
-            return Err(e);
-        }
-    }
+    let url = format!(
+        "https://huggingface.co/altunenes/parakeet-rs/resolve/main/{}",
+        info.filename
+    );
 
-    fs::rename(&temp_path, &final_path).with_context(|| {
-        format!(
-            "Не вдалося перейменувати {} -> {}",
-            temp_path.display(),
-            final_path.display()
-        )
-    })?;
+    download_file(
+        &url,
+        &crate::app::config::sortformer_models_dir(),
+        &info.filename,
+        info.sha256.as_deref(),
+        0,
+        0,
+        &progress_callback,
+    )
+    .await?;
 
     Ok(())
 }
@@ -429,68 +418,33 @@ pub fn delete_tdt_model() -> Result<()> {
 /// - vocab.txt
 pub async fn download_tdt_model<F>(progress_callback: F) -> Result<()>
 where
-    F: Fn(u64, u64) + Send + Clone + 'static,
+    F: Fn(u64, u64) + Send + Sync + 'static,
 {
     const BASE_URL: &str = "https://huggingface.co/altunenes/parakeet-rs/resolve/main/tdt/";
 
     let dir = crate::app::config::tdt_models_dir();
-    fs::create_dir_all(&dir)
-        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
-
     let info = get_tdt_model_info();
     let total_size = get_tdt_total_size();
     let mut total_downloaded: u64 = 0;
 
-    // Download each file
     for model_file in [&info.encoder, &info.decoder, &info.vocab] {
         let url = format!("{}{}", BASE_URL, model_file.filename);
-        let final_path = dir.join(&model_file.filename);
-        let temp_path = dir.join(format!("{}.downloading", model_file.filename));
 
-        let client = reqwest::Client::new();
-        let response = client
-            .get(&url)
-            .send()
-            .await
-            .with_context(|| format!("Не вдалося підключитися: {}", url))?;
+        let final_path = download_file(
+            &url,
+            &dir,
+            &model_file.filename,
+            model_file.sha256.as_deref(),
+            total_downloaded,
+            total_size,
+            &progress_callback,
+        )
+        .await?;
 
-        if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "Помилка завантаження {}: HTTP {}",
-                model_file.filename,
-                response.status()
-            ));
-        }
-
-        let mut file = fs::File::create(&temp_path)
-            .with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
-
-        let mut stream = response.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.context("Помилка при завантаженні")?;
-            std::io::Write::write_all(&mut file, &chunk).context("Не вдалося записати дані")?;
-
-            total_downloaded += chunk.len() as u64;
-            progress_callback(total_downloaded, total_size);
-        }
-
-        drop(file);
-
-        if let Some(expected) = &model_file.sha256 {
-            if let Err(e) = verify_checksum(&temp_path, expected) {
-                let _ = fs::remove_file(&temp_path);
-                return Err(e);
-            }
-        }
-
-        fs::rename(&temp_path, &final_path).with_context(|| {
-            format!(
-                "Не вдалося перейменувати {} -> {}",
-                temp_path.display(),
-                final_path.display()
-            )
-        })?;
+        // Update offset for cumulative progress across files
+        total_downloaded += fs::metadata(&final_path)
+            .map(|m| m.len())
+            .unwrap_or(model_file.size_bytes);
     }
 
     Ok(())
