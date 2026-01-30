@@ -6,12 +6,16 @@
 
 ## Tech Stack
 
-- **Language:** Rust 2021 Edition
+- **Language:** Rust 2021 Edition (1.93.0)
 - **GUI:** GTK4 0.9 + glib/gio 0.20
-- **Audio:** CPAL 0.15 (capture) + Rubato 0.16 (resampling)
-- **Speech Recognition:** whisper-rs 0.12 (whisper.cpp bindings)
-- **Async:** Tokio 1.x + async-channel
-- **System Tray:** ksni 0.2
+- **Audio:** CPAL 0.15 (capture) + Rubato 0.16 (resampling) + nnnoiseless 0.5 (denoise)
+- **Speech Recognition:** whisper-rs 0.12 (whisper.cpp) + parakeet-rs 0.2 (NVIDIA TDT)
+- **Diarization:** parakeet-rs 0.2 (Sortformer speaker identification)
+- **VAD:** webrtc-vad 0.4 + voice_activity_detector 0.2.1 (Silero)
+- **Async:** Tokio 1.x + async-channel 2.3
+- **System Tray:** ksni 0.3
+- **Hotkeys:** global-hotkey 0.5
+- **HTTP:** reqwest 0.12 (model downloads)
 
 ## Quick Commands
 
@@ -36,46 +40,83 @@ cargo clippy
 
 ```
 src/
-├── main.rs               # Thin entry point, app orchestration
+├── main.rs                   # Entry point, GUI init, hotkey polling (327 LOC)
 │
-├── domain/               # Core contracts
-│   ├── traits.rs         # Trait definitions (AudioRecording, Transcription, etc.)
-│   └── types.rs          # AppState, AudioSegment, ConferenceRecording, SharedHistory
+├── domain/                   # Core contracts
+│   ├── traits.rs             # 7 traits: AudioRecording, Transcription, VoiceDetection,
+│   │                         #   HistoryRepository, AudioDenoising, ConfigProvider, UIStateUpdater
+│   └── types.rs              # AppState, AudioSegment, ConferenceRecording, SharedHistory
 │
-├── recording/            # Audio capture
-│   ├── microphone.rs     # AudioRecorder (CPAL mic input)
-│   ├── loopback.rs       # LoopbackRecorder (PipeWire system audio)
-│   ├── continuous.rs     # ContinuousRecorder + VAD segmentation
-│   ├── conference.rs     # ConferenceRecorder (mic + loopback)
-│   ├── ring_buffer.rs    # Circular buffer for streaming
-│   ├── denoise.rs        # RNNoise denoising
-│   └── service.rs        # AudioService (facade for all recorders)
+├── app/                      # Application orchestration
+│   ├── context.rs            # AppContext (DI container: audio, transcription, config, history, diarization, channels)
+│   ├── channels.rs           # UIChannels (5 async channels: models, history, settings, recording, hotkeys)
+│   └── config.rs             # Config (18 fields) + save/load + directory paths
 │
-├── transcription/        # Speech-to-text
-│   ├── whisper.rs        # WhisperSTT (whisper.cpp bindings)
-│   ├── tdt.rs            # ParakeetSTT (NVIDIA TDT, feature-gated)
-│   ├── service.rs        # TranscriptionService (backend abstraction)
-│   └── diarization.rs    # Speaker identification (Sortformer)
+├── recording/                # Audio capture (8 files)
+│   ├── microphone.rs         # AudioRecorder (CPAL mic input + Rubato resampling)
+│   ├── loopback.rs           # LoopbackRecorder (parec system audio capture)
+│   ├── conference.rs         # ConferenceRecorder (mic + loopback combined)
+│   ├── core.rs               # RecordingCore (shared recorder boilerplate)
+│   ├── segmentation.rs       # SegmentationMonitor (VAD-based audio chunking)
+│   ├── ring_buffer.rs        # Circular buffer for streaming (30 sec at 16kHz)
+│   ├── denoise.rs            # NnnoiselessDenoiser (RNNoise 48kHz with resampling)
+│   └── service.rs            # AudioService (facade for all recorders)
 │
-├── app/                  # Application orchestration
-│   ├── context.rs        # AppContext (DI container)
-│   ├── channels.rs       # UIChannels (event bus)
-│   └── config.rs         # Config + save/load + directory paths
+├── transcription/            # Speech-to-text (4 files)
+│   ├── whisper.rs            # WhisperSTT (whisper.cpp bindings)
+│   ├── tdt.rs                # ParakeetSTT (NVIDIA TDT ONNX backend)
+│   ├── service.rs            # TranscriptionService (Whisper/TDT backend abstraction)
+│   └── diarization.rs        # DiarizationEngine (Sortformer speaker identification)
 │
-├── infrastructure/       # External system adapters
-│   ├── hotkeys.rs        # Global hotkey registration
-│   ├── tray.rs           # System tray (ksni)
-│   ├── paste.rs          # xdotool paste
-│   ├── recordings.rs     # WAV file storage
-│   └── models.rs         # Model catalog, download, management
+├── infrastructure/           # External system adapters (5 files)
+│   ├── hotkeys.rs            # Global hotkey registration (global-hotkey crate)
+│   ├── tray.rs               # System tray (ksni StatusNotifierItem)
+│   ├── paste.rs              # Auto-paste (xdotool key ctrl+v)
+│   ├── recordings.rs         # WAV file storage (conference recordings)
+│   └── models.rs             # Model catalog, download, management (Whisper/TDT/Sortformer)
 │
-├── ui/                   # GTK user interface
-├── dialogs/              # Dialog windows (settings, models, history)
-├── vad/                  # Voice activity detection (WebRTC, Silero)
-├── history/              # Transcription history persistence
-├── cli/                  # CLI interface (transcribe, list-models)
-└── test_support/         # Test mocks
+├── ui/                       # GTK user interface (7 files)
+│   ├── mod.rs                # Window setup, build_ui(), tray event loop
+│   ├── state.rs              # UIContext, RecordingContext, ModeUIs
+│   ├── dispatch.rs           # Recording mode routing (dictation/conference/continuous)
+│   ├── mic.rs                # Dictation mode handler (record -> transcribe -> output)
+│   ├── conference.rs         # Conference mode handler (mic + loopback -> diarize)
+│   ├── conference_file.rs    # Conference file mode (record-only)
+│   └── widgets.rs            # Common widget builders
+│
+├── dialogs/                  # Dialog windows (8 files)
+│   ├── settings.rs           # Settings dialog (language, backend, VAD, hotkeys)
+│   ├── model/                # Model management dialog
+│   │   ├── mod.rs            # Dialog entry point
+│   │   ├── download.rs       # Download progress UI
+│   │   └── list.rs           # Model list rows
+│   └── history/              # History browser dialog
+│       ├── mod.rs            # Dialog entry point
+│       ├── list.rs           # History list rows
+│       └── export.rs         # Export to text
+│
+├── vad/                      # Voice activity detection (3 files)
+│   ├── mod.rs                # VAD factory and configuration
+│   ├── webrtc.rs             # WebRTC VAD (energy-based, fast)
+│   └── silero.rs             # Silero VAD (neural network, accurate)
+│
+├── history/                  # Transcription history (4 files)
+│   ├── mod.rs                # History struct, search, cleanup, HistoryRepository impl
+│   ├── entry.rs              # HistoryEntry struct
+│   ├── persistence.rs        # JSON load/save
+│   └── export.rs             # Export to text format
+│
+├── cli/                      # CLI interface (4 files)
+│   ├── args.rs               # Clap argument definitions
+│   ├── transcribe.rs         # CLI transcription pipeline (WAV -> STT -> output)
+│   ├── denoise_eval.rs       # Denoiser evaluation tool
+│   └── wav_reader.rs         # WAV file parsing utilities
+│
+└── test_support/             # Test infrastructure
+    └── mocks.rs              # 6 mock implementations for domain traits (592 LOC)
 ```
+
+**Codebase size:** 57 files, 10,929 LOC, 1,246 symbols, 152 unit tests
 
 ## Key Patterns
 
@@ -131,10 +172,11 @@ Use for accessing audit findings and architecture info:
 5. Run `cargo clippy` and `cargo test`
 
 ### Known Technical Debt
-See `docs/audit/RECOMMENDATIONS.md` for prioritized improvements:
-- **P1:** Context structs for UI functions, Arc/Rc fix in vad.rs
-- **P2:** Split ui.rs into smaller modules
-- **P3:** CI/CD pipeline, integration tests
+See `docs/audit/REMEDIATION-PLAN.md` for the comprehensive fix plan (113 findings):
+- **P0:** ABBA deadlock in denoise.rs, panic on odd bytes, no model checksum, buffer clone
+- **P1:** parking_lot::Mutex migration (70+ sites), lock-free audio buffer, Drop impls, signal handlers
+- **P2:** Triplicated download code, 429-line settings function, integration tests, path validation
+- **P3:** Dead code cleanup, async model loading, doc comments, resampler quality
 
 ## File Locations
 

@@ -1,401 +1,93 @@
 # Audit Recommendations
 
 **Project:** Voice Dictation (s2t)
-**Audit Date:** 2026-01-28
+**Audit Date:** 2026-01-30
+**Supersedes:** Previous recommendations from 2026-01-28
 
 ---
 
 ## Priority Matrix
 
-| Priority | Category | Effort | Impact | Items |
-|----------|----------|--------|--------|-------|
-| P1 | Must Fix | Low-Medium | High | 3 |
-| P2 | Should Fix | Medium | Medium | 3 |
-| P3 | Nice to Have | Low-High | Low | 4 |
+| Priority | Category | Findings | Key Actions |
+|----------|----------|----------|-------------|
+| **P0** | Fix Now | 8 HIGH | Deadlock, panics, SHA256 verification, buffer clone |
+| **P1** | Next Sprint | 20 MEDIUM | parking_lot, lock-free audio, Drop impls, signal handlers |
+| **P2** | Tech Debt | 30 MEDIUM | Download dedup, settings split, tests, validation |
+| **P3** | Hardening | 55 LOW+INFO | Dead code, docs, async model loading, permissions |
 
 ---
 
-## Priority 1: Must Fix
+## P0: Must Fix (crash/data-integrity)
 
-These issues should be addressed in the next development cycle.
+| # | Action | Finding | File | Effort |
+|---|--------|---------|------|--------|
+| 0.1 | Fix ABBA deadlock in denoise | F-565811D6 | recording/denoise.rs | Low |
+| 0.2 | Use chunks_exact(2) in loopback | F-AE877B80 | recording/loopback.rs | Low |
+| 0.3 | Handle CPAL stream errors | F-C9E210CD | recording/microphone.rs | Low |
+| 0.4 | Add SHA256 model verification | F-752F5717 | infrastructure/models.rs | Medium |
+| 0.5 | Fix segmentation buffer clone | F-F00B80FC | recording/segmentation.rs | Low |
 
-### 1.1 Create Context Structs for UI Functions
+## P1: Should Fix (reliability + performance)
 
-**Related Finding:** F-EECA451D
-**Effort:** Medium
-**Files:** src/ui.rs
+| # | Action | Finding | File | Effort |
+|---|--------|---------|------|--------|
+| 1.1 | Switch to parking_lot::Mutex | F-D0663E4B | All (~15 files) | Medium |
+| 1.2 | Lock-free ring buffer for audio | F-B1A4B2AE | recording/microphone.rs | Medium |
+| 1.3 | Add Drop implementations | F-EDDDE3A1 | core.rs, loopback.rs, hotkeys.rs | Low |
+| 1.4 | Fix thread::sleep on GTK thread | F-447B7279 | ui/mic.rs, ui/conference.rs | Low |
+| 1.5 | Add signal handlers | F-EDBBC05E | main.rs | Medium |
+| 1.6 | Fix silent error swallowing | F-C485F5A8 | ui/mic.rs, segmentation.rs | Low |
+| 1.7 | Fix lock ordering issues | F-F7242D62 | main.rs, conference.rs, tray.rs | Low |
+| 1.8 | Store JoinHandle for segmentation | F-CD32DE8A | recording/segmentation.rs | Low |
+| 1.9 | Add timeout to polling loop | F-4178C565 | ui/mic.rs | Low |
+| 1.10 | Pre-allocate and reuse denoiser | F-28A76F6A | ui/mic.rs, recording/denoise.rs | Medium |
 
-**Problem:**
-Functions with 10-21 parameters are error-prone and hard to maintain.
+## P2: Should Fix (maintainability + testability)
 
-**Solution:**
-Create grouped context structs:
+| # | Action | Finding | File | Effort |
+|---|--------|---------|------|--------|
+| 2.1 | Extract shared download_file() | F-0FAD129D | infrastructure/models.rs | Medium |
+| 2.2 | Decompose settings dialog | F-2880938A | dialogs/settings.rs | Medium |
+| 2.3 | Add AppContext::for_testing() | F-2F3EE753 | app/context.rs | Low |
+| 2.4 | Add MockUIStateUpdater | F-8FF6D3DF | test_support/mocks.rs | Low |
+| 2.5 | Add RingBuffer/Segmentation tests | F-0EF51150 | recording/ | Medium |
+| 2.6 | Create integration test suite | F-789CDE98 | tests/ | Medium |
+| 2.7 | Extract duplicated UI patterns | F-29817E5B | ui/mic.rs, conference.rs | Medium |
+| 2.8 | Add path traversal guards | F-15C26F89 | infrastructure/models.rs | Low |
+| 2.9 | Add config validation | F-D50B6D79 | app/config.rs | Low |
+| 2.10 | Set restrictive file permissions | F-38F99208 | app/config.rs | Low |
 
-```rust
-// src/ui/context.rs
+## P3: Nice to Have (hardening)
 
-/// Shared UI components for recording operations
-pub struct RecordingUiContext {
-    pub button: Button,
-    pub status_label: Label,
-    pub result_text_view: TextView,
-    pub timer_label: Label,
-    pub level_bar: LevelBar,
-}
-
-/// State shared across recording operations
-pub struct RecordingState {
-    pub whisper: Arc<Mutex<Option<WhisperSTT>>>,
-    pub config: Arc<Mutex<Config>>,
-    pub history: Arc<Mutex<History>>,
-    pub app_state: Rc<Cell<AppState>>,
-    pub recording_start_time: Rc<Cell<Option<Instant>>>,
-}
-
-/// Continuous mode specific components
-pub struct ContinuousModeContext {
-    pub vad_indicator: Label,
-    pub segment_indicators_box: GtkBox,
-    pub segment_row: GtkBox,
-    pub continuous_recorder: Arc<ContinuousRecorder>,
-}
-```
-
-**Refactored function signature:**
-```rust
-// Before: 21 parameters
-fn setup_record_button(button: &Button, ...) { }
-
-// After: 3-4 context parameters
-fn setup_record_button(
-    ui: &RecordingUiContext,
-    state: &RecordingState,
-    continuous: Option<&ContinuousModeContext>,
-) { }
-```
+| # | Action | Finding | Effort |
+|---|--------|---------|--------|
+| 3.1 | Clean up dead code (12 items) | F-E519DEFD | Low |
+| 3.2 | Fix domain layering violation | F-60997C54 | Low |
+| 3.3 | Add xvfb to CI | F-300742DF | Low |
+| 3.4 | Clean stale .downloading files | F-1E1D9EF0 | Low |
+| 3.5 | Error on missing XDG dirs | multiple | Low |
+| 3.6 | Async model loading | F-FC3AE82A | Medium |
+| 3.7 | Reduce resampler quality | F-202485F0 | Low |
+| 3.8 | Add public API doc comments | multiple | Low |
+| 3.9 | Pre-allocate sample buffers | F-85E44ECE | Low |
+| 3.10 | Extract UI business logic for testing | F-31C9E22E | High |
 
 ---
 
-### 1.2 Fix Arc Usage for Non-Thread-Safe Type
+## Detailed Plan
 
-**Related Finding:** F-F1F2F032
-**Effort:** Low
-**Files:** src/vad.rs
-
-**Problem:**
-`Arc<Mutex<Vad>>` is used but `Vad` is not `Send + Sync`.
-
-**Solution:**
-Determine actual threading model and fix accordingly:
-
-**Option A: Single-threaded (if VadDetector stays on main thread)**
-```rust
-use std::rc::Rc;
-use std::cell::RefCell;
-
-pub struct VadDetector {
-    vad: Rc<RefCell<Vad>>,
-}
-```
-
-**Option B: Thread-local (if created per-thread)**
-```rust
-thread_local! {
-    static VAD: RefCell<Option<Vad>> = RefCell::new(None);
-}
-```
-
-**Option C: Verify thread safety (if webrtc-vad is actually safe)**
-```rust
-// Add safety documentation if Vad can be safely shared
-// despite missing Send+Sync bounds
-#[allow(clippy::arc_with_non_send_sync)]
-```
-
----
-
-### 1.3 Address Vulnerable Dependency
-
-**Related Finding:** F-0E5EAC4D
-**Effort:** Low
-**Files:** Cargo.toml, Cargo.lock
-
-**Problem:**
-`atty 0.2.14` has GHSA-g98v-hv3f-hcfr (low severity, Windows-only).
-
-**Solution:**
-
-1. Find which dependency brings in `atty`:
-```bash
-cargo tree -i atty
-```
-
-2. Options based on findings:
-   - If direct dependency: remove or replace with `std::io::IsTerminal`
-   - If transitive: check for updated version of parent crate
-   - If unavoidable: document as known low-risk issue
-
-**Mitigation:**
-Since the application targets Linux and the vulnerability affects Windows with custom allocators, the actual risk is minimal. However, `atty` is unmaintained, so migration is recommended.
-
----
-
-## Priority 2: Should Fix
-
-These improve code quality and maintainability.
-
-### 2.1 Split ui.rs into Smaller Modules
-
-**Related Finding:** F-6FF78A81
-**Effort:** Medium-High
-**Files:** src/ui.rs (1555 lines)
-
-**Proposed Structure:**
-```
-src/
-├── ui/
-│   ├── mod.rs              # Re-exports, common utilities
-│   ├── context.rs          # Context structs (from 1.1)
-│   ├── recording.rs        # Dictation mode handlers
-│   ├── continuous.rs       # Continuous mode (move from nested module)
-│   ├── conference.rs       # Conference mode handlers
-│   ├── widgets.rs          # Custom widget builders
-│   └── state.rs            # AppState enum and transitions
-```
-
-**Migration Steps:**
-1. Create `src/ui/` directory
-2. Move `AppState` enum to `src/ui/state.rs`
-3. Extract nested `ui_continuous` module to `src/ui/continuous.rs`
-4. Move conference handlers to `src/ui/conference.rs`
-5. Create `src/ui/mod.rs` with re-exports
-6. Update imports in main.rs
-
----
-
-### 2.2 Reduce Module Coupling
-
-**Related Finding:** F-B7926CF8
-**Effort:** Medium
-**Files:** src/main.rs, src/ui.rs
-
-**Problem:**
-Both orchestration modules depend on all 19 other modules.
-
-**Solution:**
-Introduce service layer facades:
-
-```rust
-// src/services/mod.rs
-pub mod audio;
-pub mod transcription;
-pub mod storage;
-
-// src/services/audio.rs
-pub struct AudioService {
-    mic_recorder: AudioRecorder,
-    continuous_recorder: ContinuousRecorder,
-    loopback_recorder: LoopbackRecorder,
-    conference_recorder: ConferenceRecorder,
-    vad_detector: VadDetector,
-    ring_buffer: RingBuffer,
-}
-
-impl AudioService {
-    pub fn start_dictation(&mut self) -> Result<()> { ... }
-    pub fn start_continuous(&mut self) -> Result<()> { ... }
-    pub fn stop(&mut self) -> Vec<f32> { ... }
-}
-```
-
-This reduces main.rs dependencies from 19 to ~5 services.
-
----
-
-### 2.3 Extract Complex Return Types
-
-**Related Finding:** F-3BC3393E
-**Effort:** Low
-**Files:** src/conference_recorder.rs
-
-**Before:**
-```rust
-fn stop_conference(&self) -> (
-    Vec<f32>,
-    Vec<f32>,
-    Option<Receiver<()>>,
-    Option<Receiver<()>>,
-)
-```
-
-**After:**
-```rust
-pub struct ConferenceRecordingResult {
-    pub mic_samples: Vec<f32>,
-    pub loopback_samples: Vec<f32>,
-    pub mic_completion: Option<Receiver<()>>,
-    pub loopback_completion: Option<Receiver<()>>,
-}
-
-fn stop_conference(&self) -> ConferenceRecordingResult
-```
-
----
-
-## Priority 3: Nice to Have
-
-These are improvements for future consideration.
-
-### 3.1 Implement Native PipeWire API
-
-**Related Finding:** F-C1708BE0
-**Effort:** High
-**Files:** src/loopback.rs
-
-**Current State:**
-Uses `pactl` and `parec` CLI tools via `std::process::Command`.
-
-**Improvement:**
-The `pipewire` crate (0.9) is already in dependencies. Implement native API:
-
-```rust
-use pipewire::{Context, MainLoop, stream::Stream};
-
-impl LoopbackRecorder {
-    pub fn start_loopback_native(&self) -> Result<()> {
-        // Use PipeWire stream API directly
-        // Benefits: No subprocess overhead, better error handling
-    }
-}
-```
-
-**Note:** The CLI approach works well as an MVP. Native API is an optimization.
-
----
-
-### 3.2 Add CI/CD Pipeline
-
-**Effort:** Medium
-**Files:** .github/workflows/ (new)
-
-**Suggested Workflow:**
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: [push, pull_request]
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings
-
-      - name: Build
-        run: cargo build --release
-
-      - name: Test
-        run: cargo test
-```
-
----
-
-### 3.3 Add Integration Tests
-
-**Effort:** Medium
-**Files:** tests/ (new)
-
-**Areas to Test:**
-- Config serialization/deserialization
-- Audio resampling pipeline
-- History management
-- Model path resolution
-
-**Example:**
-```rust
-// tests/integration_test.rs
-
-#[test]
-fn test_audio_resampling_preserves_duration() {
-    let input_samples = generate_sine_wave(44100, 1.0);  // 1 second at 44.1kHz
-    let output = resample_to_16khz(&input_samples);
-
-    let expected_samples = 16000;  // 1 second at 16kHz
-    assert_eq!(output.len(), expected_samples);
-}
-```
-
----
-
-### 3.4 Document External Dependencies
-
-**Related Findings:** F-76F6B43D, F-C1708BE0
-**Effort:** Low
-**Files:** README.md
-
-**Add Section:**
-```markdown
-## Runtime Dependencies
-
-The following system tools are used at runtime:
-
-| Tool | Package | Used For | Required |
-|------|---------|----------|----------|
-| xdotool | `xdotool` | Auto-paste feature | Optional |
-| pactl | `pulseaudio-utils` | Audio source detection | For conference mode |
-| parec | `pulseaudio-utils` | System audio capture | For conference mode |
-
-Install on Fedora:
-```bash
-sudo dnf install xdotool pulseaudio-utils
-```
-```
-
----
-
-## Implementation Order
-
-Suggested order for addressing recommendations:
-
-```
-Week 1-2:
-├── 1.3 Address vulnerable dependency (quick win)
-├── 2.3 Extract complex return types (quick win)
-└── 1.2 Fix Arc usage (targeted fix)
-
-Week 3-4:
-├── 1.1 Create context structs (enables 2.1)
-└── 3.4 Document dependencies (documentation)
-
-Week 5-8:
-├── 2.1 Split ui.rs (major refactor)
-└── 3.2 Add CI/CD (infrastructure)
-
-Future:
-├── 2.2 Reduce module coupling (architecture)
-├── 3.1 Native PipeWire (optimization)
-└── 3.3 Integration tests (quality)
-```
+See [REMEDIATION-PLAN.md](./REMEDIATION-PLAN.md) for implementation details, code examples, and verification steps for each action item.
 
 ---
 
 ## Metrics to Track
 
-After implementing recommendations, verify improvements:
-
 | Metric | Current | Target |
 |--------|---------|--------|
-| Largest file (LOC) | 1,555 | < 500 |
-| Max function parameters | 21 | < 7 |
-| Clippy warnings | 20 | 0 |
-| Module dependencies (main.rs) | 19 | < 8 |
-| Dependency vulnerabilities | 1 | 0 |
-| Test coverage | ~10% | > 60% |
+| HIGH findings | 16 | 0 |
+| MEDIUM findings | 54 | 0 |
+| Deadlock risks | 1 | 0 |
+| Panic-on-error sites | 70+ | 0 |
+| Integration tests | 0 | 10+ |
+| Largest file (LOC) | 625 | < 500 |
+| Code duplication | ~150 lines | 0 |

@@ -1,375 +1,215 @@
 # Audit Findings
 
 **Project:** Voice Dictation (s2t)
-**Audit Date:** 2026-01-28
+**Audit Date:** 2026-01-30
+**Total Findings:** 113
 
 ---
 
 ## Summary
 
-| Category | Critical | High | Medium | Low | Info | Total |
-|----------|----------|------|--------|-----|------|-------|
-| Security | 0 | 0 | 0 | 1 | 2 | 3 |
-| Maintainability | 0 | 0 | 4 | 2 | 0 | 6 |
-| **Total** | **0** | **0** | **4** | **3** | **2** | **9** |
+| Category | HIGH | MEDIUM | LOW | INFO | Total |
+|----------|------|--------|-----|------|-------|
+| Reliability | 5 | 15 | 5 | 0 | 25 |
+| Maintainability | 3 | 11 | 4 | 0 | 18 |
+| Security | 2 | 3 | 5 | 13 | 23 |
+| Performance | 3 | 10 | 9 | 0 | 22 |
+| Testability | 3 | 10 | 4 | 2 | 19 |
+| Domain (VP-S02) | 0 | 2 | 0 | 0 | 2 |
+| **Total** | **16** | **54** | **34** | **9** | **113** |
 
 ---
 
-## Security Findings
+## HIGH Severity Findings
 
-### F-0E5EAC4D: Vulnerable dependency: atty 0.2.14
+### Reliability
 
-| Field | Value |
-|-------|-------|
-| **Severity** | LOW |
-| **Category** | Security |
-| **File** | Cargo.lock:108 |
-| **Rule ID** | GHSA-g98v-hv3f-hcfr |
-| **Viewpoint** | VP-Q01 |
+#### F-565811D6: Denoise module ABBA deadlock
+- **File:** `src/recording/denoise.rs:144`
+- **Description:** `denoise_buffer()` acquires state then buffer; `reset()` acquires buffer then state. Classic deadlock if called concurrently.
+- **Fix:** Consolidate into single `Mutex<(DenoiseState, Vec<f32>)>` or enforce consistent lock ordering.
 
-**Description:**
-The `atty` crate has a potential unaligned pointer dereference on Windows (GHSA-g98v-hv3f-hcfr). This is a transitive dependency brought in by another crate. The vulnerability has low severity and only affects Windows, while this application targets Linux.
+#### F-AE877B80: Loopback panic on odd byte count
+- **File:** `src/recording/loopback.rs:83`
+- **Description:** `.chunks(2)` with `chunk[1]` access panics if pipe read returns odd bytes.
+- **Fix:** Use `.chunks_exact(2)` to safely skip trailing bytes.
 
-**Risk:**
-- Linux: No impact
-- Windows: Potential crash with custom allocators (unlikely scenario)
+#### F-C9E210CD: CPAL stream build/play unwrap panics
+- **File:** `src/recording/microphone.rs:126`
+- **Description:** `build_input_stream().unwrap()` and `stream.play().unwrap()` crash if audio device disappears mid-session.
+- **Fix:** Return `Result` and propagate errors through the completion channel.
 
-**Recommendation:**
-Remove the `atty` dependency or replace with `std::io::IsTerminal` which is stable since Rust 1.70.0. Check which dependency brings in `atty` using `cargo tree -i atty`.
+#### F-D0663E4B: Mutex poison cascade (70+ sites)
+- **File:** `src/app/context.rs:62` (systemic)
+- **Description:** 70+ `.lock().unwrap()` calls. One panicking thread poisons a mutex, cascading panics across the entire app.
+- **Fix:** Use `parking_lot::Mutex` (no poisoning) or `.unwrap_or_else(|e| e.into_inner())`.
 
----
+#### F-F00B80FC: Segmentation clones entire buffer every 500ms
+- **File:** `src/recording/segmentation.rs:115`
+- **Description:** Full `samples.clone()` grows with recording duration. At 30 min: ~115 MB cloned every 500ms.
+- **Fix:** Track last-read offset, copy only new samples.
 
-### F-76F6B43D: External command execution in paste.rs
+### Security
 
-| Field | Value |
-|-------|-------|
-| **Severity** | INFO |
-| **Category** | Security |
-| **File** | src/paste.rs:11 |
-| **Rule ID** | external-command |
-| **Viewpoint** | VP-Q01 |
+#### F-752F5717: No integrity verification for downloaded models
+- **File:** `src/infrastructure/models.rs:125`
+- **Description:** Model files downloaded over HTTPS loaded into native C/C++ code without SHA256 verification.
+- **Fix:** Add checksum verification against known-good hashes stored in `ModelInfo`.
 
-**Description:**
-Uses `std::process::Command` to execute `xdotool key ctrl+v` for auto-paste functionality. The command is hardcoded and does not accept user input, making it safe from command injection.
+#### F-C69D1AA0: (Duplicate confirmation of F-752F5717)
 
-**Code:**
-```rust
-let output = std::process::Command::new("xdotool")
-    .arg("key")
-    .arg("ctrl+v")
-    .output()
-```
+### Performance
 
-**Risk:**
-None - command is hardcoded with no user-controllable parameters.
+#### F-03F55E2A: Heap allocations in CPAL audio callback
+- **File:** `src/recording/microphone.rs:83`
+- **Description:** `to_mono()`, `to_vec()`, resampler buffers allocate on every ~5ms callback invocation.
+- **Fix:** Pre-allocate reusable buffers outside the callback.
 
-**Recommendation:**
-Document `xdotool` as a runtime dependency in README. Note Wayland compatibility limitations.
+#### F-B1A4B2AE: Mutex lock blocks real-time audio thread
+- **File:** `src/recording/microphone.rs:94`
+- **Description:** Two mutex acquisitions in the callback can block when segmentation or stop_recording holds the lock.
+- **Fix:** Use lock-free SPSC ring buffer (`ringbuf` or `rtrb` crate).
 
----
+#### F-BC68140E: Full buffer clone in segmentation poll
+- **File:** `src/recording/segmentation.rs:115`
+- **Description:** Same root cause as reliability F-F00B80FC, from performance perspective.
 
-### F-C1708BE0: External command execution in loopback.rs
+### Maintainability
 
-| Field | Value |
-|-------|-------|
-| **Severity** | INFO |
-| **Category** | Security |
-| **File** | src/loopback.rs:52 |
-| **Rule ID** | external-command |
-| **Viewpoint** | VP-Q01 |
+#### F-2AFBAE9C: models.rs exceeds 400-line threshold (535 lines)
+- **File:** `src/infrastructure/models.rs:1`
+- **Description:** Three model types with duplicated get/download/delete functions.
+- **Fix:** Extract generic model manager parameterized by type.
 
-**Description:**
-Uses `pactl list sources short` to enumerate audio sources and `parec` to capture system audio. Both commands are hardcoded without user input.
+#### F-0FAD129D: Triplicated HTTP download logic
+- **File:** `src/infrastructure/models.rs:125`
+- **Description:** `download_model()`, `download_sortformer_model()`, `download_tdt_model()` repeat ~50 lines each (~150 lines duplication).
+- **Fix:** Extract shared `download_file()` helper.
 
-**Code:**
-```rust
-let monitor_source = std::process::Command::new("pactl")
-    .args(&["list", "sources", "short"])
-    .output()
-// ...
-let mut child = std::process::Command::new("parec")
-    .arg("--format=s16le")
-    .arg(format!("--rate={}", WHISPER_SAMPLE_RATE))
-    .arg("--channels=1")
-    .arg("--device")
-    .arg(&monitor_source)  // From pactl output, not user input
-    .spawn()
-```
+#### F-2880938A: settings.rs is a single 429-line function
+- **File:** `src/dialogs/settings.rs:8`
+- **Description:** Monolithic `show_settings_dialog()` with 14 clone variables.
+- **Fix:** Decompose into per-section builders + extracted save handler.
 
-**Risk:**
-None - commands are hardcoded, `monitor_source` is from system output.
+### Testability
 
-**Recommendation:**
-Consider implementing native PipeWire API (`pipewire` crate is already in dependencies) for better integration and performance. The current CLI approach is an MVP solution.
+#### F-789CDE98: No integration tests
+- **File:** `tests/` (absent)
+- **Description:** 152 unit tests but zero cross-module integration tests.
+- **Fix:** Create `tests/` with CLI workflow, pipeline, and persistence round-trip tests.
 
----
+#### F-31C9E22E: UI modules completely untested
+- **File:** `src/ui/mod.rs`
+- **Description:** 7 files (~700+ lines) with critical business logic have zero tests.
+- **Fix:** Extract state machine logic from GTK handlers into testable functions.
 
-## Maintainability Findings
-
-### F-EECA451D: Functions with too many arguments in ui.rs
-
-| Field | Value |
-|-------|-------|
-| **Severity** | MEDIUM |
-| **Category** | Maintainability |
-| **File** | src/ui.rs:914 |
-| **Rule ID** | clippy::too_many_arguments |
-| **Viewpoint** | VP-Q02 |
-
-**Description:**
-Multiple functions in ui.rs have excessive parameter counts:
-
-| Function | Parameters | Location |
-|----------|------------|----------|
-| `setup_record_button` | 21 | Line 914 |
-| `handle_stop_continuous` | 15 | Line 255 |
-| `handle_stop_conference` | 14 | Line 1377 |
-| `handle_start_continuous` | 13 | Line 39 |
-| `handle_stop_recording` | 12 | Line 1148 |
-| `build_ui` | 10 | Line 431 |
-
-**Impact:**
-- Difficult to understand function signatures
-- Easy to make mistakes when calling
-- Hard to add new parameters
-- Indicates missing abstractions
-
-**Recommendation:**
-Create context structs to group related parameters:
-
-```rust
-// Before
-fn setup_record_button(
-    button: &Button,
-    status_label: &Label,
-    result_text_view: &TextView,
-    timer_label: &Label,
-    // ... 17 more parameters
-) { }
-
-// After
-struct RecordingContext {
-    button: Button,
-    status_label: Label,
-    result_text_view: TextView,
-    timer_label: Label,
-    // ...
-}
-
-fn setup_record_button(ctx: &RecordingContext) { }
-```
+#### F-2F3EE753: AppContext untestable
+- **File:** `src/app/context.rs:55`
+- **Description:** Constructor accesses real audio hardware, no mock-friendly alternative.
+- **Fix:** Add `AppContext::for_testing()` that accepts pre-built mock services.
 
 ---
 
-### F-6FF78A81: Large UI module (1555 lines)
+## MEDIUM Severity Findings (54)
 
-| Field | Value |
-|-------|-------|
-| **Severity** | MEDIUM |
-| **Category** | Maintainability |
-| **File** | src/ui.rs:1 |
-| **Rule ID** | file-size |
-| **Viewpoint** | VP-S02 |
+### Reliability (15 MEDIUM)
 
-**Description:**
-The ui.rs file contains 1555 lines of code and 473 symbols, making it the largest file in the project by far. It includes a nested module `ui_continuous` and handles multiple recording modes (dictation, continuous, conference).
+| ID | Title | File | Line |
+|----|-------|------|------|
+| F-EDDDE3A1 | No Drop for audio recorders - streams/parec leak | recording/core.rs | 33 |
+| F-6FC84772 | Tokio runtime unwrap in download/tray threads | dialogs/model/download.rs | 85 |
+| F-AE91F1FF | Hotkey polling busy loop with no shutdown | main.rs | 254 |
+| F-F7242D62 | Hotkey reload double-lock pattern (fragile ordering) | main.rs | 244 |
+| F-11AA0296 | Conference mode dual-lock (transcription + diarization) | ui/conference.rs | 153 |
+| F-CD32DE8A | Segmentation stop relies on sleep(100ms) not JoinHandle | recording/segmentation.rs | 196 |
+| F-C485F5A8 | Transcription error swallowed silently in segmented mode | ui/mic.rs | 211 |
+| F-EAEDFBCB | VAD creation failure silently ignored | recording/segmentation.rs | 104 |
+| F-E90DACC3 | Window close hides - recording continues invisibly | ui/mod.rs | 137 |
+| F-447B7279 | thread::sleep blocks GTK main thread (100ms) | ui/mic.rs | 321 |
+| F-1E1D9EF0 | Download temp files not cleaned up on failure | infrastructure/models.rs | 135 |
+| F-98D52FD7 | Tray model switch holds lock during slow load | infrastructure/tray.rs | 59 |
+| F-EDBBC05E | No signal handler for SIGTERM/SIGINT | main.rs | 119 |
+| F-4178C565 | Segmented mode stop polling can spin indefinitely | ui/mic.rs | 394 |
+| F-53EA4617 | Model set-default holds config lock during model load | dialogs/model/list.rs | 108 |
 
-**Module Size Comparison:**
-| File | Lines | % of Total |
-|------|-------|------------|
-| ui.rs | 1,555 | 27.8% |
-| model_dialog.rs | 532 | 9.5% |
-| history_dialog.rs | 418 | 7.5% |
-| All others | 3,089 | 55.2% |
+### Performance (10 MEDIUM)
 
-**Impact:**
-- Difficult to navigate and understand
-- Higher chance of merge conflicts
-- Harder to test individual components
-- Cognitive overload for maintainers
+| ID | Title | File | Line |
+|----|-------|------|------|
+| F-85E44ECE | Samples buffer grows unboundedly during recording | recording/core.rs | 34 |
+| F-3BB96A00 | Ring buffer write is sample-by-sample with mutex held | recording/ring_buffer.rs | 37 |
+| F-C782CACD | Denoiser creates new resamplers per call | recording/denoise.rs | 50 |
+| F-C5DD03E6 | Denoiser allocates intermediate Vec per frame | recording/denoise.rs | 151 |
+| F-28A76F6A | New NnnoiselessDenoiser per transcription call | ui/mic.rs | 39 |
+| F-FC3AE82A | Eager model loading blocks startup | main.rs | 164 |
+| F-383A4B16 | thread::sleep blocks GTK main thread (auto-paste) | ui/mic.rs | 321 |
+| F-A045CC87 | to_mono() allocates for single-channel audio | recording/core.rs | 19 |
+| F-45913997 | WebRTC VAD allocates Vec<i16> on every is_speech | vad/webrtc.rs | 70 |
+| F-BFCDC0B4 | Transcription mutex held for entire inference | ui/mic.rs | 209 |
 
-**Recommendation:**
-Split into focused modules:
-- `src/ui/mod.rs` - Common UI utilities and re-exports
-- `src/ui/recording.rs` - Dictation mode recording
-- `src/ui/continuous.rs` - Continuous mode (extract from nested module)
-- `src/ui/conference.rs` - Conference mode recording
-- `src/ui/widgets.rs` - Custom widget builders
+### Maintainability (11 MEDIUM)
 
----
+| ID | Title | File | Line |
+|----|-------|------|------|
+| F-29817E5B | Duplicated timer/level bar update loops | ui/mic.rs | 114 |
+| F-1F5DAF71 | Duplicated post-transcription handling | ui/mic.rs | 306 |
+| F-1A29C690 | Duplicated denoising pattern | ui/conference.rs | 129 |
+| F-999055EE | Duplicated model resolution in CLI | cli/transcribe.rs | - |
+| F-4A574FFF | Config struct approaching god object (18 fields) | app/config.rs | 7 |
+| F-60997C54 | Domain layer imports from history (layering violation) | domain/types.rs | - |
+| F-3C913733 | Inconsistent RMS function naming | recording/core.rs | - |
+| F-E519DEFD | Dead code: NoOpDenoiser, create_denoiser | recording/denoise.rs | 197 |
+| F-2E5359CF | cli/transcribe.rs at 625 lines | cli/transcribe.rs | 1 |
+| F-5D347824 | ui/mic.rs at 448 lines | ui/mic.rs | 1 |
+| F-9A631714 | history/mod.rs at 427 lines | history/mod.rs | 1 |
 
-### F-B7926CF8: High module coupling
+### Security (3 MEDIUM)
 
-| Field | Value |
-|-------|-------|
-| **Severity** | MEDIUM |
-| **Category** | Maintainability |
-| **File** | src/main.rs:1 |
-| **Rule ID** | high-coupling |
-| **Viewpoint** | VP-S02 |
+| ID | Title | File | Line |
+|----|-------|------|------|
+| F-15C26F89 | Path traversal in model filename parameter | infrastructure/models.rs | 108 |
+| F-38F99208 | Config/history files world-readable (default umask) | app/config.rs | 204 |
+| F-D50B6D79 | Config fields used without semantic validation | app/config.rs | 183 |
 
-**Description:**
-Both `main.rs` and `ui.rs` have direct dependencies on all 19 other modules in the project:
+### Testability (10 MEDIUM)
 
-```
-main.rs depends on: audio, config, conference_recorder, continuous,
-    diarization, history, history_dialog, hotkeys, loopback,
-    model_dialog, models, paste, recordings, ring_buffer,
-    settings_dialog, tray, ui, vad, whisper
-
-ui.rs depends on: (same 19 modules)
-```
-
-**Impact:**
-- Changes in any module may affect main.rs and ui.rs
-- Difficult to reason about dependencies
-- Harder to unit test in isolation
-- Indicates thin/missing application layer
-
-**Recommendation:**
-Introduce service facades to group related functionality:
-
-```rust
-// src/services/audio_service.rs
-pub struct AudioService {
-    recorder: AudioRecorder,
-    continuous: ContinuousRecorder,
-    loopback: LoopbackRecorder,
-    vad: VadDetector,
-}
-
-// src/services/transcription_service.rs
-pub struct TranscriptionService {
-    whisper: WhisperSTT,
-    diarization: DiarizationEngine,
-}
-```
+| ID | Title | File | Line |
+|----|-------|------|------|
+| F-8FF6D3DF | No MockUIStateUpdater | test_support/mocks.rs | - |
+| F-DDF32CB4 | Dialog modules have zero tests | dialogs/ | - |
+| F-04B5B7B1 | Infrastructure mostly untested (hotkeys parsing) | infrastructure/hotkeys.rs | - |
+| F-55386DF4 | LoopbackRecorder directly spawns subprocesses | recording/loopback.rs | - |
+| F-0B7151CE | ConferenceRecorder hardcodes concrete types | recording/conference.rs | - |
+| F-0EF51150 | RingBuffer has zero tests | recording/ring_buffer.rs | - |
+| F-F6B2C631 | SegmentationMonitor has zero tests | recording/segmentation.rs | - |
+| F-6A8E8BD6 | TranscriptionService conference methods untested | transcription/service.rs | - |
+| F-1EC4A944 | thread_local! state prevents test isolation | ui/mic.rs | 29 |
+| F-300742DF | CI lacks headless display (xvfb) | .github/workflows/ci.yml | - |
 
 ---
 
-### F-F1F2F032: Arc with non-Send/Sync type
+## LOW and INFO Findings
 
-| Field | Value |
-|-------|-------|
-| **Severity** | MEDIUM |
-| **Category** | Maintainability |
-| **File** | src/vad.rs:29 |
-| **Rule ID** | clippy::arc_with_non_send_sync |
-| **Viewpoint** | VP-Q02 |
+Low and INFO findings are available in the exported JSON at `docs/audit/findings-export.json`.
 
-**Description:**
-The `VadDetector` struct wraps `Vad` in `Arc<Mutex<Vad>>`, but the underlying `Vad` type from `webrtc-vad` is not `Send` or `Sync`.
+Key LOW findings include:
+- Loopback recorder unvalidated monitor source name
+- Temporary download files not cleaned up on crash
+- Fallback to current directory when XDG dirs unavailable
+- CLI accepts arbitrary file paths without sandboxing
+- Tray thread has no graceful shutdown
+- Settings dialog reads config lock 15+ times individually
+- Excessive resampler quality settings for speech
 
-**Code:**
-```rust
-pub struct VadDetector {
-    vad: Arc<Mutex<Vad>>,  // Vad is not Send+Sync
-}
-
-impl VadDetector {
-    pub fn new() -> Result<Self> {
-        let vad = Vad::new()?;
-        Ok(Self {
-            vad: Arc::new(Mutex::new(vad)),  // Warning here
-        })
-    }
-}
-```
-
-**Impact:**
-- `Arc` is designed for multi-threaded sharing
-- If `Vad` is not thread-safe, `Arc` provides false sense of security
-- May compile but cause undefined behavior if actually shared between threads
-
-**Recommendation:**
-If `VadDetector` is only used in a single thread:
-```rust
-pub struct VadDetector {
-    vad: Rc<RefCell<Vad>>,  // Single-threaded alternative
-}
-```
-
-If multi-threaded access is needed, verify `Vad` safety or use a thread-local pattern.
+Key INFO findings (positive observations):
+- Subprocess calls use safe `.arg()` passing (no shell injection)
+- HTTPS with TLS validation for all downloads
+- No secrets/credentials in source code
+- Strong mock infrastructure (6 mocks, 21 self-tests)
+- Good domain/data test coverage
 
 ---
 
-### F-3BC3393E: Complex return type in conference_recorder
+## Full Findings Data
 
-| Field | Value |
-|-------|-------|
-| **Severity** | LOW |
-| **Category** | Maintainability |
-| **File** | src/conference_recorder.rs:42 |
-| **Rule ID** | clippy::type_complexity |
-| **Viewpoint** | VP-Q02 |
-
-**Description:**
-Function returns a 4-element tuple which is difficult to understand:
-
-```rust
-pub fn stop_conference(&self) -> (
-    Vec<f32>,                    // mic_samples
-    Vec<f32>,                    // loopback_samples
-    Option<Receiver<()>>,        // mic_completion
-    Option<Receiver<()>>,        // loopback_completion
-) {
-```
-
-**Recommendation:**
-Extract into a named struct:
-
-```rust
-pub struct ConferenceRecordingResult {
-    pub mic_samples: Vec<f32>,
-    pub loopback_samples: Vec<f32>,
-    pub mic_completion: Option<Receiver<()>>,
-    pub loopback_completion: Option<Receiver<()>>,
-}
-```
-
----
-
-### F-0F12223F: Redundant closure in continuous.rs
-
-| Field | Value |
-|-------|-------|
-| **Severity** | LOW |
-| **Category** | Maintainability |
-| **File** | src/continuous.rs:153 |
-| **Rule ID** | clippy::redundant_closure |
-| **Viewpoint** | VP-Q02 |
-
-**Description:**
-Using a closure where the function can be passed directly:
-
-```rust
-// Current code
-let start_time = last_segment_time.lock().unwrap()
-    .unwrap_or_else(|| Instant::now());
-
-// Suggested fix
-let start_time = last_segment_time.lock().unwrap()
-    .unwrap_or_else(Instant::now);
-```
-
-**Impact:**
-Minor - slightly more verbose than necessary.
-
-**Recommendation:**
-Replace `|| Instant::now()` with `Instant::now` for cleaner code.
-
----
-
-## Additional Clippy Warnings
-
-The following clippy warnings were detected but not elevated to findings:
-
-| Rule | Count | Files |
-|------|-------|-------|
-| `writeln_empty_string` | 3 | history.rs |
-| `map_flatten` | 1 | history_dialog.rs |
-| `collapsible_else_if` | 1 | ui.rs |
-| `needless_borrows_for_generic_args` | 1 | loopback.rs |
-| `single_char_add_str` | 1 | whisper.rs |
-
-These are style improvements that can be addressed when modifying the affected files.
+All 113 findings are exported to `docs/audit/findings-export.json` and persisted in the mental model at `.audit/mental_model.yaml`.

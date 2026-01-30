@@ -1,0 +1,1757 @@
+[
+  {
+    "id": "F-3BC3393E",
+    "viewpoint": "VP-Q02",
+    "category": "maintainability",
+    "title": "Complex return type in conference_recorder",
+    "description": "Function returns tuple of 4 elements (Vec<f32>, Vec<f32>, Option<Receiver<()>>, Option<Receiver<()>>). Consider using a struct.",
+    "file_path": "src/conference_recorder.rs",
+    "line_number": 42,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "clippy::type_complexity",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract return type into a named struct for clarity"
+  },
+  {
+    "id": "F-0F12223F",
+    "viewpoint": "VP-Q02",
+    "category": "maintainability",
+    "title": "Redundant closure in continuous.rs",
+    "description": "Using closure || Instant::now() where Instant::now can be passed directly",
+    "file_path": "src/continuous.rs",
+    "line_number": 153,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "clippy::redundant_closure",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Replace closure with Instant::now directly"
+  },
+  {
+    "id": "F-EECA451D",
+    "viewpoint": "VP-Q02",
+    "category": "maintainability",
+    "title": "Functions with too many arguments in ui.rs",
+    "description": "Multiple functions have 8-21 arguments (setup_record_button has 21). This indicates need for struct-based parameter passing.",
+    "file_path": "src/ui.rs",
+    "line_number": 914,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "clippy::too_many_arguments",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Create context structs to group related parameters"
+  },
+  {
+    "id": "F-F1F2F032",
+    "viewpoint": "VP-Q02",
+    "category": "maintainability",
+    "title": "Arc with non-Send/Sync type",
+    "description": "VAD struct wrapped in Arc<Mutex<Vad>> but Vad is not Send+Sync. Should use Rc if single-threaded or ensure thread safety.",
+    "file_path": "src/vad.rs",
+    "line_number": 29,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "clippy::arc_with_non_send_sync",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use Rc instead of Arc if single-threaded, or ensure underlying type is Send+Sync"
+  },
+  {
+    "id": "F-0E5EAC4D",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Vulnerable dependency: atty 0.2.14",
+    "description": "atty crate has potential unaligned pointer dereference on Windows (GHSA-g98v-hv3f-hcfr). Low severity on Linux but crate is unmaintained.",
+    "file_path": "Cargo.lock",
+    "line_number": 108,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "GHSA-g98v-hv3f-hcfr",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Remove atty dependency or replace with std::io::IsTerminal (Rust 1.70+)"
+  },
+  {
+    "id": "F-76F6B43D",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "External command execution in paste.rs",
+    "description": "Uses std::process::Command to execute xdotool. Command is hardcoded and safe, but depends on external binary.",
+    "file_path": "src/paste.rs",
+    "line_number": 11,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "external-command",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Document xdotool dependency requirement clearly in README"
+  },
+  {
+    "id": "F-C1708BE0",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "External command execution in loopback.rs",
+    "description": "Uses std::process::Command to execute pactl and parec for audio capture. Commands are hardcoded and safe.",
+    "file_path": "src/loopback.rs",
+    "line_number": 52,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "external-command",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Consider implementing native PipeWire API instead of CLI tools"
+  },
+  {
+    "id": "F-6FF78A81",
+    "viewpoint": "VP-S02",
+    "category": "maintainability",
+    "title": "Large UI module (1555 lines)",
+    "description": "ui.rs contains 1555 lines and 473 symbols. Contains nested module ui_continuous. Consider splitting into separate UI components.",
+    "file_path": "src/ui.rs",
+    "line_number": 1,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "file-size",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Split ui.rs into smaller focused modules (recording_ui.rs, conference_ui.rs, etc.)"
+  },
+  {
+    "id": "F-B7926CF8",
+    "viewpoint": "VP-S02",
+    "category": "maintainability",
+    "title": "High module coupling",
+    "description": "Both main.rs and ui.rs depend on all 19 other modules. This creates a highly coupled architecture.",
+    "file_path": "src/main.rs",
+    "line_number": 1,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "high-coupling",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Consider introducing facade patterns or service layer to reduce direct dependencies"
+  },
+  {
+    "id": "F-752F5717",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "No integrity verification for downloaded model files",
+    "description": "Model files (Whisper, Sortformer, TDT) are downloaded over HTTPS from HuggingFace but no checksum (SHA256) or signature verification is performed after download. A compromised CDN, MITM on TLS termination proxy, or HuggingFace account compromise could deliver malicious model files. ONNX/GGML model files are loaded into native C/C++ code (whisper.cpp, ort) which could trigger memory corruption if the model file is crafted maliciously. The download_model(), download_sortformer_model(), and download_tdt_model() functions all write the HTTP response body directly to disk and rename it to the final path without any integrity check.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 125,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "security.network.no-download-integrity-check",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add SHA256 checksum verification after download. Store expected checksums alongside the ModelInfo definitions. Compute the hash of the downloaded temp file and compare before renaming to the final path. Consider also verifying file size matches expected size_bytes."
+  },
+  {
+    "id": "F-15C26F89",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Path traversal possible in model filename parameter",
+    "description": "The functions get_model_path(), delete_model(), download_model(), and is_model_downloaded() all accept a 'filename' parameter of type &str and use it directly with dir.join(filename). If a malicious config file or manipulated tray menu could supply a filename containing path traversal sequences (e.g., '../../.bashrc'), the join() operation would resolve to a path outside the models directory. While the current code flow passes filenames from a hardcoded list (get_available_models()), the config.default_model field is deserialized from user-editable config.toml and passed to get_model_path() in tray.rs line 58 and main.rs line 94. A crafted config.toml with default_model = '../../.ssh/authorized_keys' would cause the app to attempt loading that file as a model.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 108,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "security.path-traversal.filename-join",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Validate that the filename parameter does not contain path separators ('/' or '\\') or parent directory references ('..') before calling dir.join(). Add a sanitize_filename() function that rejects any filename containing these characters. Apply this validation in get_model_path(), delete_model(), and download_model()."
+  },
+  {
+    "id": "F-38F99208",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Loopback recorder uses unvalidated monitor source name from pactl output",
+    "description": "In the LoopbackRecorder::start_loopback() method, the monitor source name is obtained by parsing the text output of 'pactl list sources short' and extracting the second whitespace-delimited field from lines containing '.monitor'. This source name is then passed as an argument to 'parec --device'. While pactl output is system-controlled (not user-controlled), a malicious PulseAudio/PipeWire module could register a source with a specially crafted name. However, since the name is passed via .arg() (not shell interpolation), it is properly escaped and cannot cause command injection. The risk is limited to denial-of-service or unexpected device selection.",
+    "file_path": "src/recording/loopback.rs",
+    "line_number": 40,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "security.subprocess.unvalidated-external-input",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Validate that the extracted monitor source name matches expected patterns (e.g., alphanumeric with dots, underscores, and hyphens only). Consider using PulseAudio/PipeWire APIs directly instead of shell-out for more robust source enumeration."
+  },
+  {
+    "id": "F-D50B6D79",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Temporary download files (.downloading) not cleaned up on application crash",
+    "description": "When downloading models, temporary files with '.downloading' suffix are created (e.g., 'ggml-base.bin.downloading'). If the application crashes or is killed during download, these partial files remain on disk and are never cleaned up. While not a direct vulnerability, abandoned partial files consume disk space and could be confusing. Additionally, there is no check for existing .downloading files before starting a new download, which could indicate a concurrent download of the same file.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 135,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "reliability.temp-file-cleanup",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Clean up stale .downloading files on application startup. Before starting a download, check for and remove any existing .downloading file for the same model. Consider using a temp directory or the tempfile crate for automatic cleanup."
+  },
+  {
+    "id": "F-61C2EF3C",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Config and history files created with default permissions (world-readable)",
+    "description": "Config (config.toml), history (history.json), and recording files are created using fs::write() and fs::File::create() which inherit the process umask. On most systems, the default umask is 0022, making files world-readable (mode 644). While this application does not store secrets, the history.json file contains all transcription texts which may include sensitive dictated content (private conversations, medical notes, legal dictations, etc.). The config file may also contain paths to user files.",
+    "file_path": "src/app/config.rs",
+    "line_number": 204,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "security.permissions.world-readable-sensitive-files",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Set restrictive permissions (0600) on config.toml and history.json files after creation. On Unix, use std::os::unix::fs::PermissionsExt to set mode. Alternatively, ensure the parent directory (~/.config/voice-dictation/, ~/.local/share/voice-dictation/) is created with mode 0700."
+  },
+  {
+    "id": "F-04CD327B",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Deserialized config.toml fields used without validation",
+    "description": "The Config struct is deserialized from a user-editable TOML file. Several fields are used without validation: (1) default_model is passed to get_model_path() which joins it into a path -- path traversal risk. (2) sortformer_model_path and tdt_model_path are converted to PathBuf and used to load model files from arbitrary locations. (3) hotkey string is parsed but errors are handled. (4) history_max_entries (usize) and history_max_age_days (i64) could be set to extreme values causing unexpected behavior. (5) segment_interval_secs (u32) set to 0 could cause tight loops. While serde/toml deserialization is memory-safe, the semantics of values are not validated.",
+    "file_path": "src/app/config.rs",
+    "line_number": 183,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "security.deserialization.unvalidated-config-fields",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add validation after deserialization: (1) Ensure default_model contains no path separators. (2) Validate segment_interval_secs >= 1. (3) Clamp history_max_entries to a reasonable range. (4) Validate that sortformer_model_path/tdt_model_path, if set, point to files within expected directories or are absolute paths to existing files."
+  },
+  {
+    "id": "F-9D5C71A4",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Fallback to current directory when XDG dirs unavailable",
+    "description": "The functions config_dir(), models_dir(), recordings_dir(), sortformer_models_dir(), and tdt_models_dir() all fall back to PathBuf::from('.') when dirs::config_dir() or dirs::data_local_dir() returns None. This means that if XDG directories are not available (e.g., in a minimal container or when HOME is unset), model files, config, and recordings would be written to the current working directory, which could be unexpected and potentially writable by other users depending on the context.",
+    "file_path": "src/app/config.rs",
+    "line_number": 148,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "security.permissions.fallback-to-cwd",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Return an error instead of falling back to '.' when XDG directories are unavailable. The application cannot function correctly without proper data directories, so failing early is safer than silently writing to an unexpected location."
+  },
+  {
+    "id": "F-696BAE76",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Unsafe Send/Sync impls for TestRecorder in non-test module",
+    "description": "In src/domain/traits.rs, TestRecorder has manual 'unsafe impl Send' and 'unsafe impl Sync' declarations. The comment says 'Safety: TestRecorder uses AtomicBool for thread safety', which is correct for the AtomicBool field but does not account for the Vec<f32> 'samples' field. However, Vec<f32> is already Send+Sync, so this is technically sound. The concern is minor because (1) it's in a #[cfg(test)] block so it's test-only code, and (2) Vec<f32> is inherently Send+Sync. The unsafe impls are redundant -- TestRecorder should auto-derive Send+Sync since all its fields are Send+Sync.",
+    "file_path": "src/domain/traits.rs",
+    "line_number": 226,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "security.unsafe.redundant-send-sync",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Remove the manual 'unsafe impl Send/Sync for TestRecorder' since TestRecorder's fields (AtomicBool, Vec<f32>) are already Send+Sync. The compiler will auto-derive these traits. Having unnecessary unsafe blocks reduces code auditability."
+  },
+  {
+    "id": "F-2C70DB93",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Subprocess calls use safe argument passing (no shell injection)",
+    "description": "All subprocess invocations use std::process::Command with .arg() for argument passing: (1) xdotool in paste.rs with hardcoded args ['key', 'ctrl+v'], (2) pactl in loopback.rs with hardcoded args, (3) parec in loopback.rs with arguments built via .arg(). None of these use shell interpretation (no .arg('-c') with string building, no sh -c usage). This is the correct pattern and prevents command injection. The xdotool invocation is particularly safe since it uses only constant arguments.",
+    "file_path": "src/infrastructure/paste.rs",
+    "line_number": 11,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "security.subprocess.safe-arg-passing",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "No changes needed. The current subprocess invocation pattern using .arg() with individual arguments is safe against command injection. Continue using this pattern for any future subprocess calls."
+  },
+  {
+    "id": "F-F9F52855",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "HTTPS used for all network downloads (TLS validation enabled by default)",
+    "description": "All download URLs use HTTPS (https://huggingface.co/...). The reqwest::Client is constructed with Client::new() which has TLS certificate validation enabled by default. No .danger_accept_invalid_certs(true) or equivalent is used. This is correct. However, reqwest follows redirects by default (up to 10), which means a server-side redirect to HTTP could silently downgrade the connection, though reqwest 0.12 mitigates this for cross-scheme redirects.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 138,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "security.network.tls-validation-enabled",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Consider explicitly configuring the reqwest client with .redirect(Policy::limited(5)) and potentially disabling cross-scheme (HTTPS to HTTP) redirects for defense in depth. The current configuration is adequate for most threat models."
+  },
+  {
+    "id": "F-0B9B6CFA",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "No secrets, API keys, or credentials found in source code",
+    "description": "A thorough search of the codebase found no hardcoded API keys, tokens, passwords, or credentials. All network requests are to public HuggingFace model repositories that require no authentication. The application is entirely offline after model download.",
+    "file_path": "src/main.rs",
+    "line_number": 1,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "security.secrets.none-found",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "No action needed. Continue avoiding hardcoded credentials."
+  },
+  {
+    "id": "F-572B8889",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "History export path controlled by user via file chooser dialog",
+    "description": "The history export feature uses GTK4 FileChooserNative (save dialog) to let the user choose the export destination. The path comes from the file chooser (not from text input), and is passed directly to fs::File::create(). While a user could theoretically select a sensitive system path, this is standard desktop application behavior where the user is intentionally choosing where to save. The file chooser provides appropriate sandboxing on Flatpak/Snap deployments.",
+    "file_path": "src/dialogs/history/export.rs",
+    "line_number": 60,
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "rule_id": "security.file-io.user-selected-path",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "No changes needed for a desktop application. If the app is ever distributed via Flatpak, the file chooser portal will handle sandboxing automatically."
+  },
+  {
+    "id": "F-8086708E",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "CLI accepts arbitrary file paths without sandboxing",
+    "description": "The CLI transcribe and denoise-eval commands accept arbitrary file paths for input (--input), output (--output), config (--config), model (--model, --tdt-model, --sortformer-model), and output-dir (--output-dir). These paths are used directly for file I/O operations. While this is standard for CLI tools and not a vulnerability per se, it means a script calling the CLI with untrusted input could be tricked into reading/writing arbitrary files. The resolve_whisper_model() function is notable: it checks if a user-provided model path exists and loads it directly, which means a user could point it at any file on the filesystem.",
+    "file_path": "src/cli/transcribe.rs",
+    "line_number": 177,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "security.input-validation.cli-path-arguments",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "For a desktop CLI tool, this is acceptable behavior. If security contexts become a concern, consider adding optional path restriction flags or validate that model files have expected extensions (.bin, .onnx). Document that CLI arguments should come from trusted sources."
+  },
+  {
+    "id": "F-A332FD7E",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Mutex poisoning causes unwrap() panics instead of graceful degradation",
+    "description": "Throughout the codebase, Mutex::lock().unwrap() is used extensively (config.lock().unwrap(), samples.lock().unwrap(), etc.). If any thread holding a mutex panics, the mutex becomes poisoned and all subsequent lock attempts will panic, potentially cascading through the application. This is not a direct security vulnerability but affects availability/reliability. Key locations: config access in tray.rs, recording core's samples access in loopback.rs line 96, denoise.rs state access.",
+    "file_path": "src/recording/loopback.rs",
+    "line_number": 96,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "reliability.mutex-poison-unwrap",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Consider using .lock().unwrap_or_else(|e| e.into_inner()) for non-critical mutexes where the data is still valid after a panic. For critical mutexes, at minimum log the error before panicking to aid debugging."
+  },
+  {
+    "id": "F-000D083D",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "cli/transcribe.rs exceeds 400-line threshold (625 lines)",
+    "description": "cli/transcribe.rs is the largest source file at 625 lines. It contains multiple model resolution functions (resolve_whisper_model, resolve_tdt_model, resolve_sortformer_model) that share identical patterns, JSON output formatting, and test code. The module has too many responsibilities.",
+    "file_path": "src/cli/transcribe.rs",
+    "line_number": 1,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract model resolution into a separate cli/model_resolver.rs module. Extract output formatting into cli/output.rs. The three resolve_*_model functions share a common pattern (CLI arg -> config -> default location) that could be generalized."
+  },
+  {
+    "id": "F-B2B01E98",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "test_support/mocks.rs exceeds 400-line threshold (592 lines)",
+    "description": "The mocks module at 592 lines is the second-largest file. It contains 6 mock implementations and extensive test coverage. While test code is less critical, the size makes it harder to maintain and find relevant mocks.",
+    "file_path": "src/test_support/mocks.rs",
+    "line_number": 1,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Consider splitting into separate files per mock (mock_recorder.rs, mock_transcription.rs, etc.) within a test_support/ directory. Each mock and its tests would be co-located."
+  },
+  {
+    "id": "F-2AFBAE9C",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "infrastructure/models.rs exceeds 400-line threshold (535 lines)",
+    "description": "models.rs at 535 lines contains model management for three distinct model types (Whisper, Sortformer, TDT). Each type has duplicate get_info/is_downloaded/delete/download functions with nearly identical HTTP download logic.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 1,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract a generic download_file(url, dir, filename, progress_callback) function to eliminate the triplicated download logic (lines 125-177, 223-278, 367-425). Consider a ModelManager struct parameterized by model type."
+  },
+  {
+    "id": "F-0FAD129D",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Triplicated HTTP download logic in models.rs",
+    "description": "download_model(), download_sortformer_model(), and download_tdt_model() all contain nearly identical HTTP download code: create reqwest client, stream response, write to temp file, rename. This is ~50 lines repeated 3 times (150 lines of duplication).",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 125,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract a shared async fn download_file(url: &str, dir: &Path, filename: &str, progress_callback: F, total_offset: u64, total_size: u64) -> Result<()> helper. All three download functions should delegate to it."
+  },
+  {
+    "id": "F-29817E5B",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "ui/mic.rs exceeds 400-line threshold (448 lines)",
+    "description": "mic.rs at 448 lines handles both dictation and segmented recording with complex async pipeline logic. The spawn_segment_pipeline function (lines 157-261) is a 104-line function containing deeply nested async closures.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 157,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract spawn_segment_pipeline into its own module (e.g., ui/segment_pipeline.rs). The segment result processing loop (lines 227-261) could also be a separate function."
+  },
+  {
+    "id": "F-2880938A",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "dialogs/settings.rs is a single 429-line function",
+    "description": "show_settings_dialog() is a monolithic 429-line function that builds the entire settings UI, sets up all event handlers, reads/writes config, and handles save logic. This violates the single responsibility principle and makes it extremely hard to modify individual settings sections.",
+    "file_path": "src/dialogs/settings.rs",
+    "line_number": 8,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Decompose into smaller functions: build_language_section(), build_backend_section(), build_recording_section(), build_hotkey_section(), build_history_section(). Extract the save handler (lines 345-422) into a separate save_settings() function. Consider a SettingsState struct to reduce the 14 clone variables at lines 329-343."
+  },
+  {
+    "id": "F-1F5DAF71",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Duplicated timer and level bar loops across UI handlers",
+    "description": "Timer update loops and level bar update loops are duplicated across ui/mic.rs (lines 114-154), ui/conference.rs (lines 34-59), and ui/conference_file.rs (lines 27-51). Each has the identical pattern: glib::timeout_add_local with is_recording() check and ControlFlow::Break/Continue.",
+    "file_path": "src/ui/conference.rs",
+    "line_number": 34,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract shared helper functions: start_timer_loop(rec, ui) and start_conference_level_loop(ctx, rec, ui) that can be reused from all three handler modules. mic.rs already has private helpers but they're not shared."
+  },
+  {
+    "id": "F-1A29C690",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Duplicated post-transcription result handling in UI handlers",
+    "description": "The pattern of checking empty text, calling auto_copy/auto_paste, saving to history, and showing error messages is duplicated between ui/mic.rs (lines 306-340) and ui/conference.rs (lines 167-207). Both follow the same sequence: check empty -> set_status -> set_result_text -> auto_copy -> auto_paste -> save_history.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 306,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract a handle_transcription_result(ctx, ui, text, duration_secs, language) helper function that handles the common post-transcription workflow (clipboard, paste, history save)."
+  },
+  {
+    "id": "F-999055EE",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "12 clippy dead code warnings",
+    "description": "cargo clippy reports 12 warnings for unused code: AudioDenoising trait (traits.rs:126), ConfigProvider methods default_model/recording_mode (traits.rs:150,154), NoOpDenoiser struct and new() (denoise.rs:197,200), create_denoiser function (denoise.rs:231), WhisperSTT::model_path field (whisper.rs:6), VadEngine::as_str (vad/mod.rs:41), SileroVoiceDetector::threshold (silero.rs:62), WebRtcVoiceDetector::frame_size (webrtc.rs:52).",
+    "file_path": "src/domain/traits.rs",
+    "line_number": 126,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Address each warning: (1) AudioDenoising trait, NoOpDenoiser, and create_denoiser are used only in mocks - mark with #[allow(dead_code)] or remove if the trait abstraction isn't needed outside tests. (2) Remove unused model_path field from WhisperSTT. (3) Remove or use the as_str/threshold/frame_size methods."
+  },
+  {
+    "id": "F-4A574FFF",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Missing doc comments on 8 public functions in config.rs",
+    "description": "Public functions config_dir(), config_path(), models_dir(), recordings_dir(), sortformer_models_dir(), tdt_models_dir(), load_config(), save_config() lack doc comments. These are core infrastructure functions used across the codebase.",
+    "file_path": "src/app/config.rs",
+    "line_number": 146,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add /// doc comments to all public functions explaining what they return and any important behavior (e.g., load_config returns Default if file doesn't exist)."
+  },
+  {
+    "id": "F-60997C54",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Missing doc comments on 7 public functions in models.rs",
+    "description": "Public functions get_available_models, list_downloaded_models, is_model_downloaded, get_model_path, delete_model, format_size, and download_model lack doc comments despite being part of the public API used by CLI, GUI dialogs, and tray.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 17,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add /// doc comments to all public functions. The model catalog function get_available_models() especially needs documentation about what models are included and why."
+  },
+  {
+    "id": "F-3C913733",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Config struct has 18 fields - approaching god object",
+    "description": "The Config struct has 18 fields covering language, models, history, hotkeys, VAD, denoising, recording mode, diarization, and STT backend. This makes the struct a catch-all for all configuration, creating broad coupling since many modules depend on it.",
+    "file_path": "src/app/config.rs",
+    "line_number": 7,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Group related fields into sub-structs: VadConfig (use_vad, vad_silence_threshold_ms, vad_min_speech_ms, vad_engine, silero_threshold), HistoryConfig (history_max_entries, history_max_age_days), HotkeyConfig (hotkey_enabled, hotkey). Use #[serde(flatten)] to maintain backward compatibility."
+  },
+  {
+    "id": "F-E519DEFD",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "output_result function takes 7 parameters",
+    "description": "The output_result function in cli/transcribe.rs accepts 7 parameters (result, args, duration_secs, language, diarization, denoise, metrics). This exceeds the project guideline of max 7 parameters and makes the function hard to call correctly.",
+    "file_path": "src/cli/transcribe.rs",
+    "line_number": 476,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Bundle parameters into an OutputContext struct containing the non-result parameters, reducing the function signature to output_result(result, output_ctx)."
+  },
+  {
+    "id": "F-2E5359CF",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "thread_local! mutable state for segment tracking in mic.rs",
+    "description": "SEGMENTS_SENT, SEGMENTS_COMPLETED, and PROCESSING_CANCELLED use thread_local! Cell<> for inter-coroutine communication within the GTK main thread. This is a fragile pattern - the state persists across recordings and must be manually reset. A missed reset could cause the next recording to behave incorrectly.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 29,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Replace thread_local! state with Rc<Cell<>> fields on a SegmentState struct that is created fresh per recording session. This eliminates the risk of stale state and makes the lifecycle explicit."
+  },
+  {
+    "id": "F-5D347824",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Domain types.rs imports from history module",
+    "description": "domain/types.rs imports crate::history::HistoryEntry to define SharedHistory type alias. This creates a dependency from the domain layer to the history implementation, violating the intended architecture where domain/ should only contain contracts.",
+    "file_path": "src/domain/types.rs",
+    "line_number": 6,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Move HistoryEntry to domain/types.rs or define a HistoryEntryLike trait in domain/traits.rs. Alternatively, make SharedHistory generic: type SharedHistory<E> = Arc<Mutex<dyn HistoryRepository<Entry = E>>>."
+  },
+  {
+    "id": "F-9A631714",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Duplicated denoising pattern in conference.rs",
+    "description": "In ui/conference.rs handle_stop (lines 129-152), the denoising logic is duplicated for mic_samples and loopback_samples with identical code blocks: create NnnoiselessDenoiser, call denoise_buffer, handle error with fallback. This is also different from the maybe_denoise() helper used in mic.rs.",
+    "file_path": "src/ui/conference.rs",
+    "line_number": 129,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Reuse the maybe_denoise() function from ui/mic.rs (or move it to a shared location like recording/denoise.rs) to eliminate the duplicated denoising block."
+  },
+  {
+    "id": "F-E393A94B",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Duplicated model resolution patterns between CLI modules",
+    "description": "cli/transcribe.rs and cli/denoise_eval.rs both implement model resolution logic with the same cascade pattern: CLI arg -> config path -> default location -> error. The compute_transcription_metrics function in denoise_eval.rs (lines 263-339) duplicates 30+ lines of model resolution from transcribe.rs.",
+    "file_path": "src/cli/denoise_eval.rs",
+    "line_number": 263,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract a shared resolve_model(args_model, config) function into a cli/model_resolver.rs module that both CLI commands can use."
+  },
+  {
+    "id": "F-02244B78",
+    "viewpoint": "VP-Q03",
+    "category": "maintainability",
+    "title": "Inconsistent naming: rms function duplicated with different signatures",
+    "description": "There are two RMS calculation implementations: recording/core.rs::calculate_rms() (returns normalized 0.0-1.0) and cli/denoise_eval.rs::rms() (returns raw RMS). Both compute RMS but with different normalization. The naming doesn't indicate the difference.",
+    "file_path": "src/cli/denoise_eval.rs",
+    "line_number": 175,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Rename to make the difference explicit: calculate_rms_normalized() vs calculate_rms_raw(), or consolidate into a single utility with an optional normalization parameter."
+  },
+  {
+    "id": "F-C9E210CD",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "CPAL stream build/play unwrap panics if audio device unavailable",
+    "description": "In microphone.rs lines 126 and 128, `build_input_stream(...).unwrap()` and `stream.play().unwrap()` will panic if the audio device is disconnected, busy, or unavailable after the initial config check. This runs inside a spawned thread, meaning the panic will kill the thread silently but the UI will hang waiting for the completion signal that never comes.",
+    "file_path": "src/recording/microphone.rs",
+    "line_number": 126,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "unwrap-on-fallible-audio-device",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Replace .unwrap() with proper error handling. Return a Result from the thread closure and send the error through the completion channel, or use a dedicated error channel so the UI can display the failure."
+  },
+  {
+    "id": "F-D0663E4B",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "All Mutex::lock() calls use .unwrap() - no poisoned mutex recovery",
+    "description": "There are approximately 70+ instances of `.lock().unwrap()` across the codebase (context.rs, segmentation.rs, denoise.rs, ring_buffer.rs, mic.rs, conference.rs, settings.rs, tray.rs, main.rs, etc.). In a multi-threaded desktop app, if any thread panics while holding a mutex (e.g., the audio thread panics in the CPAL callback), the mutex becomes poisoned. All subsequent .lock().unwrap() calls on that mutex will also panic, causing a cascade of panics across the entire application.",
+    "file_path": "src/app/context.rs",
+    "line_number": 62,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "mutex-poison-cascade",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use `.lock().unwrap_or_else(|e| e.into_inner())` to recover from poisoned mutexes where the data is still valid, or use `parking_lot::Mutex` which does not have poisoning semantics. At minimum, wrap critical lock sites in match blocks with user-visible error messages."
+  },
+  {
+    "id": "F-AE877B80",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Loopback recorder i16 conversion panics on odd byte count",
+    "description": "In loopback.rs line 81-84, raw bytes from parec are converted to i16 using `.chunks(2).map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))`. If the read returns an odd number of bytes, the last chunk will have only 1 byte, and accessing `chunk[1]` will panic with index out of bounds. This is a realistic scenario since reads from a pipe can return any number of bytes.",
+    "file_path": "src/recording/loopback.rs",
+    "line_number": 83,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "index-out-of-bounds-panic",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use `.chunks_exact(2)` instead of `.chunks(2)`, which will silently skip the trailing odd byte. Alternatively, accumulate a byte buffer across reads and only process complete 2-byte pairs."
+  },
+  {
+    "id": "F-EDDDE3A1",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "No Drop implementation for audio recorders - CPAL streams leak on early exit",
+    "description": "Neither AudioRecorder, LoopbackRecorder, ConferenceRecorder, nor RecordingCore implement the Drop trait. If the application exits abnormally (e.g., during recording), CPAL audio streams, the parec child process, and the recording threads are not explicitly cleaned up. The parec child process in LoopbackRecorder is only killed inside the recording thread's closure, which may not execute if the thread is interrupted.",
+    "file_path": "src/recording/core.rs",
+    "line_number": 33,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "missing-drop-impl",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Implement Drop for RecordingCore to set is_recording to false. Implement Drop for LoopbackRecorder to kill the parec child process. Store the CPAL stream handle so it can be dropped properly."
+  },
+  {
+    "id": "F-6FC84772",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Tokio runtime unwrap in download and tray threads",
+    "description": "In dialogs/model/list.rs:175, dialogs/model/download.rs:85, dialogs/model/download.rs:231, and main.rs:207, `tokio::runtime::Runtime::new().unwrap()` is used. While unlikely to fail, if it does (e.g., OS resource exhaustion), it panics inside spawned threads. The tray thread panic (main.rs:207) would cause the tray icon to disappear without any user notification.",
+    "file_path": "src/dialogs/model/download.rs",
+    "line_number": 85,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "tokio-runtime-unwrap",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use .expect() with a descriptive message at minimum, or handle the error gracefully by showing a user-visible error message and skipping the operation."
+  },
+  {
+    "id": "F-565811D6",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Denoise module acquires two mutexes in inconsistent order",
+    "description": "In denoise.rs, the denoise_buffer method at line 144-145 acquires `self.state.lock()` then `self.buffer.lock()`, but the reset method at lines 187-188 acquires `self.buffer.lock()` then `self.state.lock()`. This is a classic deadlock pattern: if two threads call denoise_buffer() and reset() simultaneously, they could each hold one lock and wait for the other.",
+    "file_path": "src/recording/denoise.rs",
+    "line_number": 144,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "inconsistent-lock-ordering-deadlock",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Always acquire locks in the same order (e.g., state first, then buffer). Or consolidate state and buffer into a single Mutex<(DenoiseState, Vec<f32>)> to eliminate the possibility of deadlock entirely."
+  },
+  {
+    "id": "F-AE91F1FF",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Main hotkey polling thread uses busy loop with try_recv",
+    "description": "In main.rs lines 254-261, the hotkey event listener uses `GlobalHotKeyEvent::receiver().try_recv()` in a loop with 50ms sleep. This is a busy-wait polling pattern that wastes CPU cycles and introduces up to 50ms latency. More importantly, this thread runs indefinitely without any shutdown mechanism - it will outlive the application window.",
+    "file_path": "src/main.rs",
+    "line_number": 254,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "busy-wait-no-shutdown",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use a blocking recv() with a timeout, or signal the thread to stop when the application exits. Consider using the channel's blocking receive if available, or add an AtomicBool flag checked in the loop."
+  },
+  {
+    "id": "F-E25F669F",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Tray thread runs indefinitely with std::future::pending",
+    "description": "In main.rs line 214, the tray background thread uses `std::future::pending::<()>().await` to keep the tokio runtime alive forever. This thread has no shutdown mechanism and will be forcefully killed when the process exits. While typically harmless, it prevents clean shutdown and could cause issues with D-Bus connection cleanup.",
+    "file_path": "src/main.rs",
+    "line_number": 214,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "no-graceful-shutdown-tray",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use a shutdown channel (e.g., tokio::sync::oneshot) to signal the tray thread to exit gracefully. Close the ksni handle before the runtime shuts down."
+  },
+  {
+    "id": "F-F7242D62",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Hotkey reload thread acquires config and hotkey_manager locks sequentially",
+    "description": "In main.rs lines 244-245, the hotkey reload thread acquires config.lock() and then hotkey_manager.lock() in sequence. The same order is used at lines 231-232. While currently consistent, this double-lock pattern is fragile. If any other code path ever acquires these locks in reverse order, a deadlock will occur.",
+    "file_path": "src/main.rs",
+    "line_number": 244,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "double-lock-fragile",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract the needed config values under the config lock first, then drop it before acquiring the hotkey_manager lock. This reduces the lock scope and eliminates the risk of future deadlock."
+  },
+  {
+    "id": "F-11AA0296",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Conference mode acquires transcription and diarization locks simultaneously",
+    "description": "In ui/conference.rs lines 153-154, the transcription thread acquires `ctx.transcription.lock().unwrap()` and then `ctx.diarization.lock().unwrap()` sequentially. If any other code path (e.g., a settings reload or tray model switch) acquires these locks in reverse order while a conference transcription is in progress, a deadlock will occur.",
+    "file_path": "src/ui/conference.rs",
+    "line_number": 153,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "multi-lock-deadlock-risk",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Document the lock ordering convention. Prefer acquiring locks one at a time and releasing before acquiring the next. For conference mode, consider extracting the needed data from one lock before acquiring the second."
+  },
+  {
+    "id": "F-CD32DE8A",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Segmentation monitor has no join handle - stop relies on sleep(100ms)",
+    "description": "In segmentation.rs, the monitoring thread is spawned without saving the JoinHandle (line 92). The stop method at line 196 uses `std::thread::sleep(Duration::from_millis(100))` to 'hope' the thread finishes its current iteration. This is a race condition: if the thread's iteration takes longer than 100ms (e.g., VAD processing on a loaded CPU), the stop method will proceed before the thread has exited, potentially missing the final segment or causing data races.",
+    "file_path": "src/recording/segmentation.rs",
+    "line_number": 196,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "thread-stop-race-condition",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Store the JoinHandle returned by thread::spawn and call .join() in stop() to ensure the thread has fully exited before proceeding. Alternatively, use a channel or condvar for synchronization instead of sleep."
+  },
+  {
+    "id": "F-C485F5A8",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Transcription error swallowed silently in segmented mode",
+    "description": "In ui/mic.rs line 211, `ts.transcribe(...).unwrap_or_default()` silently converts transcription errors to empty strings. The only indication is a stderr message about empty result. If the model is corrupted, out of memory, or has a systematic error, every segment will fail silently and the user will see no transcription text with no clear error message in the UI.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 211,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "silent-error-swallow",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Propagate the error through the result channel and show segment-level errors in the UI. At minimum, display a counter of failed segments to alert the user."
+  },
+  {
+    "id": "F-EAEDFBCB",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "VAD creation failure silently ignored in segmentation",
+    "description": "In segmentation.rs line 104, `create_vad(&config).ok()` silently discards the VAD creation error. If VAD initialization fails (e.g., Silero model can't be loaded), the segmentation monitor falls back to fixed-interval mode without any log message or user notification. The user configured VAD but it's not active.",
+    "file_path": "src/recording/segmentation.rs",
+    "line_number": 104,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "silent-vad-failure",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Log a warning when VAD creation fails, and consider propagating this to the UI so the user knows their VAD setting is not being respected."
+  },
+  {
+    "id": "F-F00B80FC",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Segmentation clones entire samples buffer every 500ms",
+    "description": "In segmentation.rs line 115, `samples.clone()` clones the entire accumulated recording buffer every 500ms to check for new samples. For a long recording (e.g., 30 minutes at 16kHz), this is cloning 28.8 million f32 values (~115 MB) every 500ms. This causes significant memory pressure and CPU waste, and could lead to OOM on constrained systems.",
+    "file_path": "src/recording/segmentation.rs",
+    "line_number": 115,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "expensive-buffer-clone",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Instead of cloning the entire buffer, only track the last-read offset and copy only new samples since the last check. This reduces the copy from O(total_recording_length) to O(new_samples_per_interval)."
+  },
+  {
+    "id": "F-CE967047",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "history_path() unwrap on parent() could panic for root paths",
+    "description": "In history/persistence.rs line 29, `path.parent().unwrap()` is used to get the parent directory of the history file path. While unlikely to fail in normal operation (since the path includes 'voice-dictation/history.json'), if `dirs::data_local_dir()` ever returns a path that results in a root-level file, `.parent()` returns Some(\"\") or an empty path, which is not None. However, the code has a fallback to '.' in history_path() for dirs::data_local_dir() failure, which would make the path './voice-dictation/history.json' - parent of that is './voice-dictation' which is fine.",
+    "file_path": "src/history/persistence.rs",
+    "line_number": 29,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "parent-unwrap-edge-case",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Replace `.unwrap()` with `.unwrap_or_else(|| Path::new(\".\"))` for defensive coding, even though it's unlikely to fail in practice."
+  },
+  {
+    "id": "F-E90DACC3",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Window close hides instead of closing - no cleanup on hide",
+    "description": "In ui/mod.rs lines 137-140, the window close request handler hides the window instead of closing it (returns Propagation::Stop). While this is intentional for the tray icon pattern, it means recording state is preserved when the window is hidden. If the user hides the window during recording, the recording continues in the background with no visible UI feedback. There's no mechanism to stop recording when the window is hidden.",
+    "file_path": "src/ui/mod.rs",
+    "line_number": 137,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "hidden-window-recording-continues",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Either stop recording when the window is hidden, or provide a system tray indication that recording is in progress. Consider adding a tray icon state change when recording is active."
+  },
+  {
+    "id": "F-447B7279",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Thread::sleep on GTK main thread in auto-paste path",
+    "description": "In ui/mic.rs line 321 and ui/conference.rs line 185, `std::thread::sleep(Duration::from_millis(100))` is called inside a glib::spawn_future_local block. While this is technically an async context, the sleep blocks the GTK main thread for 100ms, causing UI jank. During this 100ms, the UI cannot process events, update widgets, or respond to user input.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 321,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "thread-sleep-on-gtk-main",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use `glib::timeout_future(Duration::from_millis(100)).await` instead of `std::thread::sleep()` to yield control back to the GTK event loop during the wait."
+  },
+  {
+    "id": "F-DF6E20FD",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "HotkeyManager has no Drop implementation for cleanup",
+    "description": "The HotkeyManager struct holds a GlobalHotKeyManager and a registered HotKey, but does not implement Drop. If the HotkeyManager is dropped without calling unregister(), the hotkey remains registered at the OS level. While the GlobalHotKeyManager's own Drop might handle this, the explicit current_hotkey tracking suggests intentional management that should include cleanup.",
+    "file_path": "src/infrastructure/hotkeys.rs",
+    "line_number": 8,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "missing-drop-hotkey",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Implement Drop for HotkeyManager that calls self.unregister() to ensure the hotkey is always cleaned up."
+  },
+  {
+    "id": "F-1E1D9EF0",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Download temp files not cleaned up on failure",
+    "description": "In infrastructure/models.rs, during model downloads (lines 135-176, 236-278, 384-421), a .downloading temp file is created. If the download is interrupted (network failure, app crash), the temp file remains on disk. There's no cleanup of stale .downloading files on startup, and they may confuse subsequent download attempts or waste disk space (up to 3GB for large models).",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 135,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "temp-file-leak-on-failure",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add cleanup logic to remove .downloading files before starting a new download. Consider adding a startup routine that cleans stale temp files in the models directory."
+  },
+  {
+    "id": "F-98D52FD7",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Tray model switch can hold transcription lock during slow model load",
+    "description": "In infrastructure/tray.rs lines 48-65, select_model() acquires the config lock, saves config, then acquires the transcription lock and loads a new model. Model loading (Whisper initialization) can take several seconds. During this time, the transcription mutex is held, blocking any other thread trying to transcribe (e.g., if a recording finishes processing while a model switch is happening).",
+    "file_path": "src/infrastructure/tray.rs",
+    "line_number": 59,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "long-held-lock-model-load",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Load the model outside the lock scope: create the new WhisperSTT instance first, then briefly lock the mutex to swap it in. This minimizes the time the transcription service is unavailable."
+  },
+  {
+    "id": "F-EDBBC05E",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "No application-level signal handler for SIGTERM/SIGINT",
+    "description": "The application does not install signal handlers for SIGTERM, SIGINT, or SIGHUP. On Ctrl+C or system shutdown, the process is killed immediately without stopping recordings, saving state, or cleaning up child processes (parec). The GTK run loop handles some signals, but spawned threads (tray, hotkey listener, recording threads) have no shutdown coordination.",
+    "file_path": "src/main.rs",
+    "line_number": 119,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "no-signal-handler",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Install signal handlers that set a global shutdown flag, stop active recordings, save history, and kill child processes before exiting. The GTK application's quit signal can be connected to cleanup logic."
+  },
+  {
+    "id": "F-3BF0EBB9",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Settings dialog reads config lock 15+ times individually",
+    "description": "In dialogs/settings.rs, the settings dialog acquires config.lock().unwrap() individually for each setting field (lines 57, 94, 126, 148, 173, 183, 193, 204, 222, 239, 254, 285, 304). Each lock/unlock is a separate acquisition. While not a correctness bug, it means the dialog could display an inconsistent snapshot if config is modified by another thread (e.g., tray) between individual reads.",
+    "file_path": "src/dialogs/settings.rs",
+    "line_number": 57,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "inconsistent-config-snapshot",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Acquire the config lock once at the beginning, clone the entire Config struct, and use the cloned copy to populate all UI fields. This ensures a consistent snapshot."
+  },
+  {
+    "id": "F-4178C565",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Segmented mode stop polling loop can spin indefinitely",
+    "description": "In ui/mic.rs lines 394-412, the segmented mode stop handler polls SEGMENTS_SENT vs SEGMENTS_COMPLETED in a loop with 100ms intervals. If a transcription thread panics or the channel is lost, segments_completed will never reach segments_sent, causing the loop to spin until the user clicks the cancel button. There's no timeout fallback.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 394,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "infinite-poll-loop",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add a maximum timeout (e.g., 5 minutes) after which the loop breaks automatically with a warning message. This prevents the UI from hanging indefinitely if a transcription thread fails silently."
+  },
+  {
+    "id": "F-53EA4617",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Model set-default holds config lock while loading model",
+    "description": "In dialogs/model/list.rs lines 107-121, the set_default_button click handler acquires config_clone.lock() at line 108, saves config, then acquires transcription_clone.lock() at line 116 to load the model - all while the config lock is still held. Loading a Whisper model can take several seconds, during which the config mutex blocks all other threads.",
+    "file_path": "src/dialogs/model/list.rs",
+    "line_number": 108,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "long-held-config-lock",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Drop the config lock after saving, before acquiring the transcription lock. The model loading does not need the config lock to be held."
+  },
+  {
+    "id": "F-3EE5AA24",
+    "viewpoint": "VP-Q02",
+    "category": "reliability",
+    "title": "Loopback recorder has no timeout or retry for parec startup",
+    "description": "In loopback.rs lines 40-63, the loopback recorder tries to find a monitor source and spawn parec. If parec is not installed, the error is properly propagated. However, if parec starts but produces no output (e.g., wrong monitor source), the recording thread will block on read() indefinitely or until the recording is stopped, producing empty recordings with no user feedback about the problem.",
+    "file_path": "src/recording/loopback.rs",
+    "line_number": 72,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "silent-empty-recording",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add a check after a few seconds of recording: if no samples have been captured, log a warning and/or notify the user that system audio capture may not be working."
+  },
+  {
+    "id": "F-03F55E2A",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Heap allocations in CPAL audio callback (hot path)",
+    "description": "The CPAL input callback in microphone.rs performs multiple heap allocations on every audio callback invocation: to_mono() allocates a new Vec<f32> (line 88), vec![chunk.to_vec()] creates nested Vecs for the resampler (lines 100, 106, 108), and padded chunks allocate additional vectors. Audio callbacks run at real-time priority (~5ms intervals for 48kHz/1024 frames) and heap allocation can cause unpredictable latency spikes due to allocator contention or page faults.",
+    "file_path": "src/recording/microphone.rs",
+    "line_number": 83,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "perf.audio-callback-allocation",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Pre-allocate reusable buffers outside the callback (in the thread::spawn closure before build_input_stream). Use a pre-allocated mono buffer, a pre-allocated resampler input buffer, and write directly into them. Consider using a lock-free ring buffer (e.g., ringbuf crate) instead of Arc<Mutex<Vec>> to pass samples to the consumer."
+  },
+  {
+    "id": "F-B1A4B2AE",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Mutex lock in audio callback blocks real-time thread",
+    "description": "The CPAL audio callback acquires two mutex locks: resampler.lock().unwrap() (line 94) and samples.lock().unwrap() (lines 102, 115-118). If another thread (e.g., the segmentation monitor polling at 500ms intervals, or stop_recording cloning samples) holds the samples lock, the audio callback will block. Blocking in a real-time audio callback causes audio glitches (dropouts) because the callback has a hard deadline.",
+    "file_path": "src/recording/microphone.rs",
+    "line_number": 94,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "perf.mutex-in-audio-callback",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Replace Arc<Mutex<Vec<f32>>> with a lock-free SPSC (single-producer single-consumer) ring buffer such as the `ringbuf` or `rtrb` crate. The audio callback writes without blocking, and consumer threads read without blocking the producer. The resampler mutex could be removed by owning the resampler directly in the callback closure (it's already moved there)."
+  },
+  {
+    "id": "F-BC68140E",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Full samples buffer cloned on every segmentation poll cycle",
+    "description": "In segmentation.rs line 115, the segmentation monitor thread clones the entire recorder samples buffer (samples.clone()) every 500ms. As recording progresses, this buffer grows unboundedly -- a 10-minute recording at 16kHz = 9.6M samples = ~38MB. Each clone allocates and copies this entire buffer, causing O(n) memory allocation and copy on each poll where n is total recording duration.",
+    "file_path": "src/recording/segmentation.rs",
+    "line_number": 115,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "rule_id": "perf.unbounded-buffer-clone",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Instead of cloning the entire buffer, track the last-read position (already done via last_samples_len) and only read the new slice. Use samples[last_samples_len..].to_vec() or better, copy directly from the locked buffer into the ring buffer without an intermediate allocation. Alternatively, restructure so the audio callback writes directly to the ring buffer."
+  },
+  {
+    "id": "F-85E44ECE",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Samples buffer grows unboundedly during recording",
+    "description": "RecordingCore.samples is a Vec<f32> that grows without bound via extend() in the audio callback (microphone.rs line 102). For a long recording (e.g., 1 hour continuous conference), this accumulates 57.6M samples (~230MB). The Vec undergoes geometric reallocation as it grows, causing periodic large allocations. Additionally, RecordingCore::stop() clones the entire buffer (core.rs line 94), doubling peak memory usage momentarily.",
+    "file_path": "src/recording/core.rs",
+    "line_number": 34,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.unbounded-growth",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "For dictation mode, pre-allocate the samples buffer with a reasonable capacity (e.g., Vec::with_capacity(16000 * 300) for up to 5 minutes). For continuous/segmented mode, consider using only the ring buffer and not accumulating all samples. In stop(), take ownership via std::mem::take() instead of cloning."
+  },
+  {
+    "id": "F-3BB96A00",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Ring buffer write is sample-by-sample with mutex held",
+    "description": "RingBuffer::write() (ring_buffer.rs line 37-47) acquires a mutex lock and then iterates sample-by-sample. For a typical write of 8000 samples (0.5s at 16kHz), the mutex is held for 8000 iterations of index arithmetic. This is suboptimal and holds the lock longer than necessary, potentially contending with concurrent peek_last() or read_all() calls.",
+    "file_path": "src/recording/ring_buffer.rs",
+    "line_number": 37,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.ring-buffer-write-granularity",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use memcpy-style batch writes with at most two slice copies (for wrap-around). Replace the per-sample loop with: calculate contiguous segments, use copy_from_slice() for each segment. This reduces lock hold time significantly. Alternatively, use a lock-free ring buffer crate."
+  },
+  {
+    "id": "F-C782CACD",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Denoiser creates new resamplers per call (no reuse)",
+    "description": "NnnoiselessDenoiser::upsample() and downsample() (denoise.rs lines 50, 94) create new FftFixedIn resamplers on every call. FFT-based resamplers involve significant initialization cost (computing FFT plans, allocating internal buffers). For segmented mode where denoise_buffer is called per segment, this overhead is repeated unnecessarily.",
+    "file_path": "src/recording/denoise.rs",
+    "line_number": 50,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.resampler-recreation",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Cache the upsample and downsample resamplers as fields of NnnoiselessDenoiser (behind Mutex if needed for thread safety). Create them once in new() and reset between calls if the rubato API supports it, or simply reuse them since chunk-based processing is stateless between calls."
+  },
+  {
+    "id": "F-C5DD03E6",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Denoiser allocates intermediate Vec per frame via drain(..FRAME_SIZE).collect()",
+    "description": "In denoise_buffer() at line 151, each RNNoise frame is extracted via buffer.drain(..FRAME_SIZE).collect() which allocates a new Vec<f32> for every 480-sample frame. For 1 second of 48kHz audio this is 100 allocations. Combined with the vec![0.0f32; FRAME_SIZE] output allocation at line 152, there are 200 allocations per second of audio.",
+    "file_path": "src/recording/denoise.rs",
+    "line_number": 151,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.per-frame-allocation",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Pre-allocate frame_in and frame_out buffers once (before the while loop) and reuse them. Instead of drain().collect(), copy data from the buffer into the pre-allocated frame using copy_from_slice, then drain to advance the buffer position."
+  },
+  {
+    "id": "F-28A76F6A",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "New NnnoiselessDenoiser created per transcription call",
+    "description": "In mic.rs line 39 (maybe_denoise) and conference.rs lines 130,142, a new NnnoiselessDenoiser is instantiated for every transcription. This means DenoiseState::new() (which allocates RNNoise model state) is called per segment/recording. In segmented mode with frequent segments, this adds unnecessary overhead.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 39,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.denoiser-recreation",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Create the denoiser once and store it in AppContext, resetting its state between uses via the reset() method. This avoids repeated RNNoise model initialization."
+  },
+  {
+    "id": "F-FC3AE82A",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Parakeet TDT transcribe copies entire sample buffer via to_vec()",
+    "description": "ParakeetSTT::transcribe() at line 56 calls samples.to_vec() to create a copy of the audio samples before passing to the transcription engine. For a 30-second segment at 16kHz, this copies 480,000 floats (~1.9MB). This is in addition to any copies already made by the caller.",
+    "file_path": "src/transcription/tdt.rs",
+    "line_number": 56,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.unnecessary-copy",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "If the parakeet-rs API accepts a slice (&[f32]) instead of Vec<f32>, use that. If not, consider whether the caller can pass an owned Vec to avoid the copy (take ownership via function signature change)."
+  },
+  {
+    "id": "F-383A4B16",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Diarization copies entire audio buffer via to_vec()",
+    "description": "DiarizationEngine::diarize() at line 62 calls audio_samples.to_vec() to pass audio to the Sortformer engine. For a long conference recording, this duplicates potentially hundreds of megabytes of audio data.",
+    "file_path": "src/transcription/diarization.rs",
+    "line_number": 62,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.unnecessary-copy",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "If the sortformer API accepts &[f32], use that directly. Otherwise, take ownership of the Vec in the function signature to avoid the copy."
+  },
+  {
+    "id": "F-A045CC87",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Eager model loading blocks application startup",
+    "description": "In main.rs, init_transcription_service() (line 164) loads the STT model synchronously during GUI startup. Whisper and TDT models can be hundreds of megabytes, and loading involves GGML/ONNX initialization. The Sortformer diarization model is also loaded eagerly (lines 167-188). This means the application window does not appear until all models are loaded, which can take several seconds.",
+    "file_path": "src/main.rs",
+    "line_number": 164,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.eager-model-loading",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Load models asynchronously in a background thread. Show the application window immediately with a loading indicator, and enable the record button only after the model is ready. This provides much better perceived startup performance."
+  },
+  {
+    "id": "F-45913997",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "std::thread::sleep blocks GTK main thread during auto-paste",
+    "description": "In mic.rs line 321 and conference.rs line 185, std::thread::sleep(Duration::from_millis(100)) is called on the GTK main loop future. While glib::spawn_future_local uses cooperative scheduling, the sleep is a synchronous blocking call that freezes the UI for 100ms. This breaks GTK's event loop responsiveness.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 321,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.sleep-on-main-thread",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Replace std::thread::sleep with glib::timeout_future(Duration::from_millis(100)).await to yield control back to the GTK event loop during the delay."
+  },
+  {
+    "id": "F-BFCDC0B4",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "History save_history writes entire history file on each transcription",
+    "description": "Every completed transcription (mic.rs line 332, conference.rs line 204) serializes the entire history to JSON and writes it to disk synchronously while holding the history Mutex. For a history with 500 entries, this involves serializing all entries, then a full file write. This is file I/O performed indirectly from the GTK main loop (via glib::spawn_future_local).",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 332,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.sync-io-on-main-thread",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Move history saving to a background thread or use glib::MainContext::spawn to offload. Consider debouncing saves (e.g., save at most once every 5 seconds) to avoid excessive I/O during rapid segmented transcription."
+  },
+  {
+    "id": "F-7DD6668F",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Config saved to disk on every mode combo change",
+    "description": "In ui/mod.rs line 57, save_config() is called synchronously inside the GTK combo box change handler. This performs file I/O (TOML serialization + disk write) on the GTK main thread for every user interaction with the mode selector.",
+    "file_path": "src/ui/mod.rs",
+    "line_number": 57,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.sync-io-on-main-thread",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Debounce config saves or defer them to a background thread. For a combo box change, the save can be deferred until the next recording starts or the app exits."
+  },
+  {
+    "id": "F-5626F1D6",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Loopback recorder allocates two intermediate Vecs per read cycle",
+    "description": "In loopback.rs lines 81-88, the audio reading loop creates two temporary Vecs per read: one Vec<i16> (via .collect()) and one Vec<f32> (via .collect()). With 4096-byte reads at 16kHz/16-bit, this is ~31 read cycles per second, producing 62 allocations/second.",
+    "file_path": "src/recording/loopback.rs",
+    "line_number": 81,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.allocation-in-audio-loop",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Pre-allocate i16_samples and f32_samples buffers outside the while loop and reuse them. Use fixed-size arrays or pre-sized Vecs with clear()/extend() pattern."
+  },
+  {
+    "id": "F-B3EC5824",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "to_mono() allocates even for single-channel audio",
+    "description": "In core.rs line 25, to_mono() for a single channel returns data.to_vec(), allocating a full copy of the input even though no transformation is needed. In the audio callback, this is called on every callback invocation.",
+    "file_path": "src/recording/core.rs",
+    "line_number": 19,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.unnecessary-copy",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Return a Cow<[f32]> instead of Vec<f32>, so single-channel audio can pass through without allocation. Or restructure the callback to handle mono/stereo with different code paths that avoid the copy."
+  },
+  {
+    "id": "F-CB45347E",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "WebRTC VAD allocates Vec<i16> conversion on every is_speech call",
+    "description": "WebRtcVoiceDetector::is_speech() at line 70 allocates a Vec<i16> by collecting the entire input samples slice converted to i16. In segmentation mode, is_speech() and detect_speech_end() are called every 500ms with up to 5 seconds of audio (80,000 samples). detect_speech_end() calls is_speech() in a loop for each frame, creating many allocations.",
+    "file_path": "src/vad/webrtc.rs",
+    "line_number": 70,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.vad-allocation",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Pre-allocate a reusable i16 buffer as a field of WebRtcVoiceDetector. Only convert the minimum needed frame (FRAME_SIZE_SAMPLES = 480 samples) rather than the entire input, since only the first frame is checked. In detect_speech_end(), convert one frame at a time."
+  },
+  {
+    "id": "F-744DBA92",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Silero VAD detect_speech_end collects all chunks into Vec before iterating",
+    "description": "SileroVoiceDetector::detect_speech_end() at line 101 collects all chunks into a Vec via .chunks().collect::<Vec<_>>() before iterating in reverse. This allocates a Vec of slice references unnecessarily. For 5 seconds of audio at 512-sample chunks, this allocates a Vec of ~156 elements.",
+    "file_path": "src/vad/silero.rs",
+    "line_number": 101,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.unnecessary-collect",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Use DoubleEndedIterator directly. Since chunks() returns an iterator that implements DoubleEndedIterator via ExactSizeIterator, you can use .chunks(CHUNK_SIZE).rev() directly if using a reversible iterator, or manually index from the end of the slice."
+  },
+  {
+    "id": "F-202485F0",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Resampler sinc_len=256 and oversampling_factor=256 is excessive",
+    "description": "In microphone.rs line 18-23, the SincInterpolationParameters use sinc_len=256 and oversampling_factor=256. These are very high-quality settings more appropriate for mastering-grade audio. For speech recognition input, sinc_len=64 and oversampling_factor=128 (or even 64) would be sufficient, with significantly lower CPU usage per resampled chunk.",
+    "file_path": "src/recording/microphone.rs",
+    "line_number": 18,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.excessive-resampler-quality",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Reduce sinc_len to 64-128 and oversampling_factor to 128 or less. Speech recognition models like Whisper are robust to minor resampling artifacts, and the quality difference will be inaudible/irrelevant for STT accuracy. This will reduce CPU usage in the audio callback."
+  },
+  {
+    "id": "F-2216755F",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "NoOpDenoiser::denoise clones entire sample buffer unnecessarily",
+    "description": "NoOpDenoiser::denoise() at line 213 returns Ok(samples.to_vec()), creating a full copy of the audio even though no processing is done. For a 30-second recording, this copies ~1.9MB of data needlessly.",
+    "file_path": "src/recording/denoise.rs",
+    "line_number": 213,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.noop-copy",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Change the AudioDenoising trait to return Cow<[f32]> so that NoOpDenoiser can return Cow::Borrowed(samples) without copying. Alternatively, change the maybe_denoise function in mic.rs to avoid calling denoise() when disabled."
+  },
+  {
+    "id": "F-AC4D65AA",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Transcription mutex held for entire inference duration",
+    "description": "In mic.rs line 209 and conference.rs line 153, ctx.transcription.lock().unwrap() acquires the transcription Mutex and holds it for the entire duration of the transcribe() call, which can take seconds to minutes for long audio. During this time, no other thread can use the transcription service, serializing all transcription requests even in segmented mode where parallel transcription would be beneficial.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 209,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "rule_id": "perf.long-mutex-hold",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "For Whisper backend, create separate WhisperState instances per transcription (the WhisperContext can be shared as it's read-only after creation). For TDT, consider using a tokio::sync::Semaphore or parking_lot::Mutex with try_lock and queuing to allow better throughput management."
+  },
+  {
+    "id": "F-892E5B54",
+    "viewpoint": "VP-Q04",
+    "category": "performance",
+    "title": "Segmentation monitor peek_last called twice per poll with overlapping data",
+    "description": "In segmentation.rs, the monitoring loop calls ring_buffer.peek_last() twice per iteration: once with 5 seconds of samples (line 131) for detect_speech_end, and once with 1 second (line 134) for is_speech check. Each peek acquires the ring buffer mutex and copies data. The 1-second data is a subset of the 5-second data, so only one peek is needed.",
+    "file_path": "src/recording/segmentation.rs",
+    "line_number": 131,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "rule_id": "perf.redundant-peek",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Peek 5 seconds once, and use the last 1 second (slice of the returned Vec) for the is_speech check. This reduces mutex contention and halves the copy operations."
+  },
+  {
+    "id": "F-789CDE98",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "No integration tests directory (tests/ is empty)",
+    "description": "The project has zero integration tests. The tests/ directory does not exist. All 152 tests are unit tests inside src/ modules. Integration tests are critical for verifying end-to-end workflows like: record -> transcribe -> history save, config load -> model selection -> transcription, CLI transcribe command with actual WAV files. Without integration tests, regressions in cross-module interactions go undetected.",
+    "file_path": "tests/",
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Create a tests/ directory with integration tests covering: (1) CLI transcribe workflow with mock WAV, (2) AudioService -> TranscriptionService pipeline using mocks, (3) Config load/save round-trip, (4) History persistence round-trip."
+  },
+  {
+    "id": "F-31C9E22E",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "UI modules have zero tests (7 files, ~700+ lines untested)",
+    "description": "The entire ui/ directory (mod.rs, mic.rs, conference.rs, conference_file.rs, dispatch.rs, state.rs, widgets.rs) has no #[cfg(test)] modules. These files contain critical business logic: recording state machines, mode dispatch, segment pipeline orchestration, auto-copy/paste workflows, and history persistence after transcription. The UI code is tightly coupled to GTK4 widgets, making it impossible to test without a display server.",
+    "file_path": "src/ui/mod.rs",
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract business logic from UI handlers into testable functions. The UIStateUpdater trait exists but has no mock implementation in test_support/mocks.rs. Add MockUIStateUpdater, then refactor handle_start/handle_stop in mic.rs and conference.rs to accept trait objects instead of concrete GTK widgets. Test the state machine logic (Idle -> Recording -> Processing -> Idle) independently of GTK."
+  },
+  {
+    "id": "F-8FF6D3DF",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "No mock for UIStateUpdater trait",
+    "description": "The UIStateUpdater trait (domain/traits.rs:162) defines the contract for UI state updates (set_status, set_recording, set_processing, set_idle, update_timer, get/set_result_text). While mocks exist for AudioRecording, Transcription, VoiceDetection, ConfigProvider, AudioDenoising, and HistoryRepository, there is no MockUIStateUpdater in test_support/mocks.rs. This gap prevents testing UI handler logic (mic.rs, conference.rs) without GTK widgets.",
+    "file_path": "src/test_support/mocks.rs",
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add a MockUIStateUpdater to test_support/mocks.rs that records all method calls and their arguments. This enables testing handle_start/handle_stop logic in isolation: verifying correct state transitions, status messages, timer updates, and result text setting."
+  },
+  {
+    "id": "F-DDF32CB4",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "Dialog modules have zero tests (8 files untested)",
+    "description": "The dialogs/ directory (settings.rs, model/mod.rs, model/list.rs, model/download.rs, history/mod.rs, history/list.rs, history/export.rs) has no tests. These modules handle model management, settings persistence, and history export -- all critical user-facing functionality. The dialog code directly creates GTK widgets, making unit testing impossible without refactoring.",
+    "file_path": "src/dialogs/mod.rs",
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract dialog business logic (model filtering, download progress tracking, settings validation, export formatting) into pure functions that can be tested without GTK. Test the data transformation and validation logic separately from widget creation."
+  },
+  {
+    "id": "F-04B5B7B1",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "Infrastructure modules mostly untested (hotkeys, tray, paste, recordings)",
+    "description": "Infrastructure modules have limited or no tests: hotkeys.rs (0 tests, pure parsing logic for parse_hotkey/parse_key_code is easily testable), tray.rs (0 tests), paste.rs (0 tests, calls xdotool subprocess), recordings.rs (0 tests, file I/O with hound WAV writer). Only models.rs has tests (12 tests). The hotkey parsing functions (parse_hotkey, parse_key_code) are pure functions that should be trivially testable but have no tests.",
+    "file_path": "src/infrastructure/hotkeys.rs",
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add unit tests for parse_hotkey() and parse_key_code() in hotkeys.rs -- these are pure functions with no side effects. For recordings.rs, test save_recording() using tempdir. For paste.rs, extract the command-building logic into a testable function. Tray can remain untested as it requires ksni runtime."
+  },
+  {
+    "id": "F-55386DF4",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "LoopbackRecorder directly spawns subprocess (parec), untestable",
+    "description": "LoopbackRecorder::start_loopback() (loopback.rs:27) directly calls std::process::Command::new('pactl') and std::process::Command::new('parec'). There is no abstraction layer for subprocess execution, making it impossible to test without actual PulseAudio/PipeWire running. The loopback recorder has zero tests.",
+    "file_path": "src/recording/loopback.rs",
+    "line_number": 40,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract subprocess execution behind a trait (e.g., AudioCaptureBackend) that can be mocked in tests. Alternatively, use the existing AudioRecording trait mock (MockAudioRecorder) for all code that consumes LoopbackRecorder. The ConferenceRecorder should accept trait objects rather than concrete LoopbackRecorder."
+  },
+  {
+    "id": "F-0B7151CE",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "ConferenceRecorder hardcodes concrete AudioRecorder and LoopbackRecorder",
+    "description": "ConferenceRecorder::new() (conference.rs:15) directly constructs Arc<AudioRecorder> and Arc<LoopbackRecorder>. Unlike AudioService which accepts Arc<dyn AudioRecording> via with_recorder(), ConferenceRecorder has no dependency injection. This makes it impossible to test conference recording logic without real audio hardware.",
+    "file_path": "src/recording/conference.rs",
+    "line_number": 15,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Refactor ConferenceRecorder to accept two Arc<dyn AudioRecording> parameters. Add a constructor like with_recorders(mic: Arc<dyn AudioRecording>, loopback: Arc<dyn AudioRecording>) to enable testing with MockAudioRecorder instances."
+  },
+  {
+    "id": "F-0EF51150",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "AudioService test constructor is cfg(test)-gated, limiting test usage",
+    "description": "AudioService::with_recorder() (service.rs:53) is marked #[cfg(test)], meaning it's only available in test builds. This is appropriate for unit tests but prevents using it in integration tests in tests/ directory (which compile as separate crates and would need the constructor to be pub without cfg(test)). Additionally, even in test mode, the ConferenceRecorder inside AudioService is always a real one, so conference-related methods cannot be tested.",
+    "file_path": "src/recording/service.rs",
+    "line_number": 53,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Consider making with_recorder() available under a 'test-support' feature flag instead of cfg(test), so integration tests can also use it. Alternatively, add a builder pattern that allows replacing individual components."
+  },
+  {
+    "id": "F-F6B2C631",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "RingBuffer has zero tests despite non-trivial circular buffer logic",
+    "description": "RingBuffer (ring_buffer.rs) implements a circular buffer with write(), read_all(), peek_last(), and clear() operations. The circular logic with wrap-around positions is exactly the kind of code that benefits most from unit tests (off-by-one errors, boundary conditions when buffer is full, partial reads). Yet it has zero tests.",
+    "file_path": "src/recording/ring_buffer.rs",
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add tests for: (1) write and read_all round-trip, (2) buffer overflow/wrap-around behavior, (3) peek_last with various sizes, (4) clear resets state, (5) empty buffer returns empty vec, (6) writing more than capacity overwrites oldest data correctly."
+  },
+  {
+    "id": "F-6A8E8BD6",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "SegmentationMonitor has zero tests despite complex timing logic",
+    "description": "SegmentationMonitor (segmentation.rs) implements background-threaded audio segmentation with VAD integration, configurable intervals, ring buffer reads, and segment channel communication. This is complex concurrent logic with timing dependencies, yet it has zero tests. The module spawns threads and uses Arc/Mutex/AtomicBool extensively.",
+    "file_path": "src/recording/segmentation.rs",
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Test the segmentation logic by extracting the segment-decision function into a pure function (should_create_segment(vad_result, elapsed_time, buffer_size, config) -> bool). Test the SegmentationMonitor integration using MockVoiceDetector and a fake samples buffer, with short intervals to avoid slow tests."
+  },
+  {
+    "id": "F-1EC4A944",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "DiarizationEngine has zero tests",
+    "description": "DiarizationEngine (diarization.rs) wraps the Sortformer model for speaker diarization. While the actual ONNX model can't be tested without model files, the module's state management (new, is_available, error paths when model is None) is trivially testable. The default() constructor and is_available() when no model is loaded should be verified.",
+    "file_path": "src/transcription/diarization.rs",
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add tests for: DiarizationEngine::new(None) returns unavailable engine, DiarizationEngine::default() matches new(None), diarize() fails with appropriate error when no model loaded, load_model() fails with appropriate error when path doesn't exist."
+  },
+  {
+    "id": "F-300742DF",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "TranscriptionService cannot be fully tested (model-dependent code paths untested)",
+    "description": "TranscriptionService tests (service.rs:240-286) only test the 'None' backend state (7 tests). The Whisper and TDT code paths are completely untested because they require loading actual ML models. The transcribe_conference(), transcribe_channel_diarization(), and transcribe_with_sortformer() methods have zero test coverage. These methods contain business logic (channel mixing, segment mapping, fallback strategies) that could be tested with mocks.",
+    "file_path": "src/transcription/service.rs",
+    "line_number": 87,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Refactor TranscriptionService to accept a Box<dyn Transcription> backend, allowing tests to inject MockTranscription. Then test: transcribe_conference with both channel-based and sortformer paths, empty input handling, fallback from sortformer to channel-based when segments are empty."
+  },
+  {
+    "id": "F-E56C1DB6",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "thread_local! state in UI handlers creates untestable global mutable state",
+    "description": "src/ui/mic.rs:29-33 uses thread_local! for SEGMENTS_SENT, SEGMENTS_COMPLETED, and PROCESSING_CANCELLED. This global mutable state is shared across function calls within the same thread, making it impossible to isolate tests and creating potential state leakage between test runs. Thread-local state also can't be inspected from test assertions easily.",
+    "file_path": "src/ui/mic.rs",
+    "line_number": 29,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Move segment tracking state into the RecordingContext struct or a dedicated SegmentationState struct. This makes the state explicit, testable, and eliminates global mutable state. The struct can be passed through function parameters instead of relying on thread-local storage."
+  },
+  {
+    "id": "F-83A7B144",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "CI tests run without headless display server configuration",
+    "description": "The CI workflow (.github/workflows/ci.yml) runs 'cargo test' without setting up a virtual display (e.g., xvfb). GTK4 initialization (gtk4::init()) requires a display server. Currently tests pass because no tests exercise GTK code, but adding any UI-related tests would fail in CI. The CI also lacks coverage reporting.",
+    "file_path": ".github/workflows/ci.yml",
+    "line_number": 53,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add 'xvfb-run cargo test' or set GDK_BACKEND=broadway/DISPLAY=:99 with xvfb for CI. Add cargo-tarpaulin or llvm-cov for coverage reporting. Consider adding 'cargo test --no-default-features' to test non-GUI components separately."
+  },
+  {
+    "id": "F-2F3EE753",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "AppContext has no test constructor, hard to create in tests",
+    "description": "AppContext::new() (context.rs:55) requires Arc<Mutex<Config>>, Arc<Mutex<History>>, TranscriptionService, and DiarizationEngine. The constructor internally creates AudioService::new() which accesses real audio hardware (CPAL), making it impossible to create AppContext in tests without a mock-friendly constructor. There is no AppContext::for_testing() or builder pattern.",
+    "file_path": "src/app/context.rs",
+    "line_number": 55,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add a test constructor like AppContext::for_testing(config, history, transcription, audio_service) that accepts a pre-built AudioService (using with_recorder mock). This enables testing the full application orchestration layer without hardware dependencies."
+  },
+  {
+    "id": "F-A575FAA4",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "Comprehensive trait-based mock infrastructure exists (strength)",
+    "description": "The test_support/mocks.rs module provides well-designed mocks for 6 out of 7 domain traits: MockAudioRecorder (AudioRecording), MockTranscription (Transcription), MockVoiceDetector (VoiceDetection), MockConfigProvider (ConfigProvider), MockDenoiser (AudioDenoising), MockHistoryRepository (HistoryRepository). Each mock has multiple constructors for different test scenarios and 21 self-tests verifying mock correctness. Trait objects (Box<dyn T>) are tested for all mocks.",
+    "file_path": "src/test_support/mocks.rs",
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "This is a strength. Complete the mock suite by adding MockUIStateUpdater for the remaining trait. Consider publishing mocks via a 'test-support' feature flag for integration test crates."
+  },
+  {
+    "id": "F-FD32D8E7",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "Good test coverage in domain/data modules (strength)",
+    "description": "Several modules have thorough test suites: history/mod.rs (17 tests), history/entry.rs (6 tests), app/config.rs (11 tests), vad/webrtc.rs (11 tests), vad/silero.rs (8 tests), vad/mod.rs (6 tests), recording/core.rs (10 tests), recording/microphone.rs (8 tests), recording/denoise.rs (8 tests), recording/service.rs (5 tests), infrastructure/models.rs (12 tests), cli/wav_reader.rs (5 tests), cli/denoise_eval.rs (7 tests). Total: 152 passing tests across 22 test modules.",
+    "file_path": "src/history/mod.rs",
+    "base_severity": "INFO",
+    "adjusted_severity": "INFO",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "This is a strength. Maintain this coverage level and extend to untested modules."
+  },
+  {
+    "id": "F-EFF4E64F",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "paste_from_clipboard() directly calls xdotool with no abstraction",
+    "description": "paste_from_clipboard() in infrastructure/paste.rs directly calls std::process::Command::new('xdotool') with a 100ms thread::sleep. This cannot be tested without xdotool installed and a running X11 session. The function also combines a delay policy with execution, violating single responsibility.",
+    "file_path": "src/infrastructure/paste.rs",
+    "line_number": 6,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Extract command execution behind a trait or accept a command builder as parameter. Separate the delay policy from the paste execution. At minimum, make the delay configurable and the command execution mockable."
+  },
+  {
+    "id": "F-E705E82A",
+    "viewpoint": "VP-Q05",
+    "category": "testability",
+    "title": "WhisperSTT and ParakeetSTT constructors require real model files",
+    "description": "WhisperSTT::new() and ParakeetSTT::new() require actual ML model files on disk. There is no way to create these structs for testing without downloading models. The ParakeetSTT test module (tdt.rs:93-99) contains a single empty test that only verifies compilation, commenting 'Can't test actual functionality without model files'.",
+    "file_path": "src/transcription/whisper.rs",
+    "line_number": 10,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "This is acceptable given that the Transcription trait and MockTranscription exist for testing consumers. Consider adding #[ignore] tests that run when models are available (e.g., behind a 'model-tests' feature flag or env var check) for CI environments where models can be cached."
+  },
+  {
+    "id": "F-C69D1AA0",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "No integrity verification for downloaded model files",
+    "description": "Model files downloaded over HTTPS from HuggingFace with no checksum/signature verification. Compromised CDN or HuggingFace account could deliver malicious model files loaded into native C/C++ code (whisper.cpp, ort).",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 125,
+    "base_severity": "HIGH",
+    "adjusted_severity": "HIGH",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add SHA256 checksum verification after download. Store expected checksums alongside ModelInfo definitions."
+  },
+  {
+    "id": "F-0A105016",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Path traversal possible in model filename parameter",
+    "description": "get_model_path() uses dir.join(filename) with filename from user-editable config.toml. Crafted default_model = '../../.ssh/authorized_keys' would attempt loading that file.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 108,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Validate filename contains no path separators or '..' before calling dir.join()."
+  },
+  {
+    "id": "F-F236A595",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Config/history files created with default permissions (world-readable)",
+    "description": "fs::write() inherits umask (typically 644). history.json may contain sensitive dictated content.",
+    "file_path": "src/app/config.rs",
+    "line_number": 204,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Set 0600 permissions on sensitive files or 0700 on parent directories."
+  },
+  {
+    "id": "F-6FE9505B",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Deserialized config.toml fields used without validation",
+    "description": "Config deserialized from TOML with no semantic validation. segment_interval_secs=0 could cause tight loops, default_model allows path traversal.",
+    "file_path": "src/app/config.rs",
+    "line_number": 183,
+    "base_severity": "MEDIUM",
+    "adjusted_severity": "MEDIUM",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Add post-deserialization validation: no path separators in default_model, segment_interval_secs >= 1, clamp history limits."
+  },
+  {
+    "id": "F-0AFAB43C",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Fallback to current directory when XDG dirs unavailable",
+    "description": "config_dir(), models_dir() etc. fall back to PathBuf::from('.') when HOME is unset.",
+    "file_path": "src/app/config.rs",
+    "line_number": 148,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Return error instead of falling back to '.'."
+  },
+  {
+    "id": "F-A64D6EFD",
+    "viewpoint": "VP-Q01",
+    "category": "security",
+    "title": "Temporary download files not cleaned up on crash",
+    "description": ".downloading suffix files remain on disk if app crashes during download.",
+    "file_path": "src/infrastructure/models.rs",
+    "line_number": 135,
+    "base_severity": "LOW",
+    "adjusted_severity": "LOW",
+    "context": {
+      "is_hotspot": false
+    },
+    "recommendation": "Clean up stale .downloading files on startup."
+  }
+]

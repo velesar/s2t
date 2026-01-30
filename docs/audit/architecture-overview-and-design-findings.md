@@ -2,7 +2,7 @@
 
 **Project:** Voice Dictation (s2t)
 **Initial Audit Date:** 2026-01-28
-**Last Updated:** 2026-01-29 (v0.3.0 — Capability-Based Architecture)
+**Last Updated:** 2026-01-30 (v0.3.0 — Post-Audit Update)
 **Methodology:** Architecture Fitness Functions (see `docs/architecture-fitness-methodology.md`)
 
 ---
@@ -62,7 +62,7 @@ Voice Dictation is a **desktop application** for offline speech-to-text transcri
 | **Concurrency** | Multi-threaded with async channels |
 | **STT Backends** | Whisper (full-featured) + TDT/Parakeet (fast) |
 | **Distribution** | Single binary + model files |
-| **Codebase Size** | ~49 files, ~9,000 LOC |
+| **Codebase Size** | 57 files, ~10,929 LOC |
 
 ---
 
@@ -307,99 +307,110 @@ pub struct UIChannels {
 
 ## Module Structure
 
-### Module Overview (53 files, ~9,000 LOC)
+### Module Overview (57 files, ~10,929 LOC)
 
 ```
 src/
-├── main.rs                   (284 LOC)   Composition root
-├── context.rs                (116 LOC)   AppContext DI container
-├── traits.rs                 (214 LOC)   Core domain traits (6 traits)
-├── types.rs                  ( 74 LOC)   Shared type aliases + AppState
-├── channels.rs               ( 79 LOC)   UIChannels
+├── main.rs                   (327 LOC)   Composition root, GUI init, hotkey polling
 │
-├── cli/                      CLI interface (NEW in v0.3.0)
-│   ├── mod.rs                ( 10 LOC)   Re-exports
-│   ├── args.rs               (120 LOC)   SttBackend, DiarizationMethod enums + CLI args
-│   ├── transcribe.rs         (629 LOC)   Transcription orchestration + JSON output
-│   └── wav_reader.rs         (307 LOC)   WAV file parsing
+├── domain/                   Core contracts
+│   ├── mod.rs                (  2 LOC)   Re-exports
+│   ├── traits.rs             (248 LOC)   7 traits: AudioRecording, Transcription, VoiceDetection,
+│   │                                     HistoryRepository, AudioDenoising, ConfigProvider, UIStateUpdater
+│   └── types.rs              ( 83 LOC)   AppState, AudioSegment, ConferenceRecording, SharedHistory
 │
-├── ui/                       GUI layer
-│   ├── mod.rs                (238 LOC)   Window setup, build_ui
-│   ├── state.rs              (304 LOC)   UIContext, RecordingContext, mode UIs
-│   ├── dispatch.rs           ( 68 LOC)   Mode routing
-│   ├── widgets.rs            (227 LOC)   Widget builders
-│   ├── recording.rs          (158 LOC)   Dictation mode handler
-│   ├── continuous.rs         (319 LOC)   Continuous mode handler
-│   ├── conference.rs         (197 LOC)   Conference mode handler
-│   └── conference_file.rs    (120 LOC)   ConferenceFile mode (record only)
+├── app/                      Application orchestration
+│   ├── mod.rs                (  3 LOC)   Re-exports
+│   ├── context.rs            (125 LOC)   AppContext DI container (audio, transcription, config, history,
+│   │                                     diarization, channels)
+│   ├── channels.rs           ( 79 LOC)   UIChannels (5 async channels)
+│   └── config.rs             (332 LOC)   Config (18 fields) + save/load + directory paths
+│
+├── cli/                      CLI interface
+│   ├── mod.rs                ( 11 LOC)   Re-exports
+│   ├── args.rs               (156 LOC)   Clap arg definitions, SttBackend, DiarizationMethod
+│   ├── transcribe.rs         (625 LOC)   CLI transcription pipeline + JSON output
+│   ├── denoise_eval.rs       (412 LOC)   Denoiser evaluation tool
+│   └── wav_reader.rs         (267 LOC)   WAV file parsing
+│
+├── ui/                       GTK user interface
+│   ├── mod.rs                (238 LOC)   Window setup, build_ui, tray event loop
+│   ├── state.rs              (285 LOC)   UIContext, RecordingContext, ModeUIs
+│   ├── dispatch.rs           ( 65 LOC)   Mode routing (dictation/conference/continuous)
+│   ├── widgets.rs            (232 LOC)   Widget builders
+│   ├── mic.rs                (448 LOC)   Dictation mode handler
+│   ├── conference.rs         (219 LOC)   Conference mode handler
+│   └── conference_file.rs    (120 LOC)   Conference file mode (record-only)
 │
 ├── dialogs/                  Dialog windows
 │   ├── mod.rs                ( 14 LOC)   Re-exports
+│   ├── settings.rs           (429 LOC)   Settings dialog (single monolithic function)
 │   ├── model/                Model management
-│   │   ├── mod.rs            (147 LOC)   Dialog entry point
-│   │   ├── download.rs       (  - LOC)   Download logic
-│   │   └── list.rs           (  - LOC)   Model list rows
-│   ├── history/              History browser
-│   │   ├── mod.rs            (239 LOC)   Dialog entry point
-│   │   ├── list.rs           (  - LOC)   History list rows
-│   │   └── export.rs         (  - LOC)   Export logic
-│   └── settings.rs           (374 LOC)   Settings configuration
+│   │   ├── mod.rs            (168 LOC)   Dialog entry point
+│   │   ├── download.rs       (299 LOC)   Download progress UI
+│   │   └── list.rs           (270 LOC)   Model list rows
+│   └── history/              History browser
+│       ├── mod.rs            (237 LOC)   Dialog entry point
+│       ├── list.rs           (165 LOC)   History list rows
+│       └── export.rs         ( 71 LOC)   Export to text
 │
-├── services/                 Service layer
-│   ├── mod.rs                (  9 LOC)   Re-exports
-│   ├── audio.rs              (251 LOC)   AudioService facade
-│   └── transcription.rs      (112 LOC)   TranscriptionService (impl Transcription)
+├── recording/                Audio capture
+│   ├── mod.rs                (  8 LOC)   Re-exports
+│   ├── microphone.rs         (243 LOC)   AudioRecorder (CPAL + Rubato resampling)
+│   ├── loopback.rs           (143 LOC)   LoopbackRecorder (parec system audio)
+│   ├── conference.rs         ( 69 LOC)   ConferenceRecorder (mic + loopback)
+│   ├── core.rs               (188 LOC)   RecordingCore (shared boilerplate)
+│   ├── segmentation.rs       (243 LOC)   SegmentationMonitor (VAD-based chunking)
+│   ├── ring_buffer.rs        (114 LOC)   Circular buffer (30 sec at 16kHz)
+│   ├── denoise.rs            (304 LOC)   NnnoiselessDenoiser (RNNoise 48kHz)
+│   └── service.rs            (237 LOC)   AudioService (facade)
 │
-├── vad/                      Voice Activity Detection (restructured in v0.3.0)
-│   ├── mod.rs                (152 LOC)   VoiceActivityDetector (impl VoiceDetection)
-│   ├── webrtc.rs             (208 LOC)   WebRTC VAD backend
-│   └── silero.rs             (201 LOC)   Silero ONNX VAD backend
+├── transcription/            Speech-to-text
+│   ├── mod.rs                (  8 LOC)   Re-exports
+│   ├── whisper.rs            ( 72 LOC)   WhisperSTT (whisper.cpp bindings)
+│   ├── tdt.rs                (100 LOC)   ParakeetSTT (NVIDIA TDT ONNX)
+│   ├── service.rs            (286 LOC)   TranscriptionService (backend abstraction)
+│   └── diarization.rs        ( 83 LOC)   DiarizationEngine (Sortformer)
 │
-├── test_support/             Test infrastructure
-│   ├── mod.rs                (  6 LOC)   Re-exports
-│   └── mocks.rs              (410 LOC)   Mock implementations for all traits
+├── infrastructure/           System adapters
+│   ├── mod.rs                (  5 LOC)   Re-exports
+│   ├── hotkeys.rs            (153 LOC)   Global hotkey registration
+│   ├── tray.rs               (175 LOC)   System tray (ksni)
+│   ├── paste.rs              ( 23 LOC)   Auto-paste (xdotool)
+│   ├── recordings.rs         ( 71 LOC)   WAV file storage
+│   └── models.rs             (535 LOC)   Model catalog, download, management
 │
-├── history/                  History storage (decomposed from history.rs)
-│   ├── mod.rs                (427 LOC)   History struct, HistoryRepository impl, re-exports
-│   ├── entry.rs              (145 LOC)   HistoryEntry struct & methods
-│   ├── persistence.rs        (120 LOC)   load/save/path functions
-│   └── export.rs             ( 88 LOC)   export_to_text function
+├── vad/                      Voice Activity Detection
+│   ├── mod.rs                (152 LOC)   VAD factory and configuration
+│   ├── webrtc.rs             (208 LOC)   WebRTC VAD (energy-based)
+│   └── silero.rs             (201 LOC)   Silero VAD (neural network)
 │
-├── stt/                      STT backends (grouped from flat whisper.rs + tdt.rs)
-│   ├── mod.rs                ( 13 LOC)   Re-exports WhisperSTT, ParakeetSTT
-│   ├── whisper.rs            (210 LOC)   Whisper STT (impl Transcription)
-│   └── tdt.rs                (124 LOC)   Parakeet TDT STT (impl Transcription)
+├── history/                  Transcription history
+│   ├── mod.rs                (427 LOC)   History struct, HistoryRepository impl
+│   ├── entry.rs              (145 LOC)   HistoryEntry struct
+│   ├── persistence.rs        (120 LOC)   JSON load/save
+│   └── export.rs             ( 88 LOC)   Export to text
 │
-├── config.rs                 (282 LOC)   TOML config (impl ConfigProvider)
-├── audio.rs                  (279 LOC)   Microphone recording (CPAL)
-├── denoise.rs                (211 LOC)   nnnoiseless audio denoising
-├── continuous.rs             (247 LOC)   Continuous recording mode
-├── conference_recorder.rs    ( 69 LOC)   Conference mode coordinator
-├── diarization.rs            (111 LOC)   Speaker diarization (Sortformer)
-├── loopback.rs               (143 LOC)   System audio capture (parec)
-├── ring_buffer.rs            (114 LOC)   Circular audio buffer
-├── recordings.rs             ( 71 LOC)   Recording file management
-├── models.rs                 (366 LOC)   Model metadata and paths
-├── tray.rs                   (175 LOC)   System tray service (ksni 0.3)
-├── hotkeys.rs                (153 LOC)   Global hotkey handling
-└── paste.rs                  ( 23 LOC)   Auto-paste (xdotool)
+└── test_support/             Test infrastructure
+    ├── mod.rs                (  6 LOC)   Re-exports
+    └── mocks.rs              (592 LOC)   6 mock implementations, 21 self-tests
 ```
 
 ### Module Categories
 
 | Category | Modules | LOC | Purpose |
 |----------|---------|-----|---------|
-| **Core / DI** | main.rs, context.rs, traits.rs, types.rs, channels.rs | ~770 | Application lifecycle, DI, contracts |
-| **CLI** | cli/* (4 files) | ~1,066 | Command-line transcription interface ← NEW |
-| **GUI** | ui/* (8 files) | ~1,630 | User interface, event handling |
-| **Dialogs** | dialogs/* (7 files) | ~760+ | Modal dialog windows |
-| **Services** | services/* (3 files) | ~370 | Service facades (audio, transcription) |
-| **Audio** | audio.rs, continuous.rs, conference_recorder.rs, ring_buffer.rs, loopback.rs, recordings.rs, denoise.rs | ~1,140 | Audio capture and processing |
-| **VAD** | vad/* (3 files) | ~560 | Voice activity detection (WebRTC + Silero) ← RESTRUCTURED |
-| **Speech** | stt/* (3 files), diarization.rs | ~445 | STT backends (Whisper, TDT) + diarization |
-| **System** | tray.rs, hotkeys.rs, paste.rs | ~350 | OS integration |
-| **Data** | history/*, config.rs, models.rs | ~1,430 | Persistence, model management |
-| **Test** | test_support/* (2 files) | ~415 | Mock implementations for all 6 traits |
+| **Domain** | domain/ (3 files) | ~333 | Core traits (7) and shared types |
+| **App / DI** | app/ (4 files), main.rs | ~866 | Application lifecycle, DI container, config |
+| **CLI** | cli/ (5 files) | ~1,471 | Command-line transcription interface |
+| **GUI** | ui/ (7 files) | ~1,607 | User interface, event handling |
+| **Dialogs** | dialogs/ (8 files) | ~1,653 | Modal dialog windows |
+| **Recording** | recording/ (9 files) | ~1,549 | Audio capture, denoise, segmentation |
+| **Transcription** | transcription/ (5 files) | ~549 | STT backends (Whisper, TDT) + diarization |
+| **Infrastructure** | infrastructure/ (6 files) | ~962 | System tray, hotkeys, models, paste |
+| **VAD** | vad/ (3 files) | ~561 | Voice activity detection (WebRTC + Silero) |
+| **History** | history/ (4 files) | ~780 | Transcription history persistence |
+| **Test** | test_support/ (2 files) | ~598 | 6 mock implementations for domain traits |
 
 ---
 
