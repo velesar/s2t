@@ -4,12 +4,11 @@
 //! with dual-channel audio (microphone + system loopback) and diarization.
 
 use crate::app::context::AppContext;
-use crate::history::{save_history, HistoryEntry};
-use crate::domain::traits::{HistoryRepository, UIStateUpdater};
+use crate::domain::traits::UIStateUpdater;
 use crate::infrastructure::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };
-use crate::recording::denoise::NnnoiselessDenoiser;
+use crate::ui::shared::{self, maybe_denoise};
 use gtk4::glib;
 use std::sync::Arc;
 
@@ -31,32 +30,8 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferen
             ui.base.set_recording("Запис конференції...");
             ui.show_level_bars();
 
-            // Start timer update loop
-            let rec_clone = rec.clone();
-            let ui_clone = ui.clone();
-            glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-                if !rec_clone.is_recording() {
-                    return glib::ControlFlow::Break;
-                }
-                if let Some(secs) = rec_clone.elapsed_secs() {
-                    ui_clone.base.update_timer(secs);
-                }
-                glib::ControlFlow::Continue
-            });
-
-            // Start level bar update loops for both channels
-            let ctx_clone = ctx.clone();
-            let rec_clone = rec.clone();
-            let ui_clone = ui.clone();
-            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
-                if !rec_clone.is_recording() {
-                    return glib::ControlFlow::Break;
-                }
-                let mic_amplitude = ctx_clone.audio.get_mic_amplitude();
-                let loopback_amplitude = ctx_clone.audio.get_loopback_amplitude();
-                ui_clone.update_levels(mic_amplitude as f64, loopback_amplitude as f64);
-                glib::ControlFlow::Continue
-            });
+            shared::start_timer_loop(rec, &ui.base);
+            shared::start_conference_level_loop(ctx, rec, ui);
         }
         Err(e) => {
             ui.base.set_status(&format!("Помилка: {}", e));
@@ -126,30 +101,8 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
         let diarization_method_for_thread = diarization_method.clone();
 
         std::thread::spawn(move || {
-            let mic_samples = if denoise_enabled {
-                let denoiser = NnnoiselessDenoiser::new();
-                match denoiser.denoise_buffer(&mic_samples) {
-                    Ok(denoised) => denoised,
-                    Err(e) => {
-                        eprintln!("Mic denoising failed, using original: {}", e);
-                        mic_samples
-                    }
-                }
-            } else {
-                mic_samples
-            };
-            let loopback_samples = if denoise_enabled {
-                let denoiser = NnnoiselessDenoiser::new();
-                match denoiser.denoise_buffer(&loopback_samples) {
-                    Ok(denoised) => denoised,
-                    Err(e) => {
-                        eprintln!("Loopback denoising failed, using original: {}", e);
-                        loopback_samples
-                    }
-                }
-            } else {
-                loopback_samples
-            };
+            let mic_samples = maybe_denoise(&mic_samples, denoise_enabled);
+            let loopback_samples = maybe_denoise(&loopback_samples, denoise_enabled);
             // Lock ordering: diarization before transcription.
             // This ensures consistent ordering across the codebase.
             let mut engine_guard = ctx_for_thread.diarization.lock();
@@ -170,49 +123,17 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
                     if text.is_empty() {
                         ui.base.set_status("Не вдалося розпізнати мову");
                     } else {
-                        ui.base.set_status("Готово!");
-                        ui.base.set_result_text(&text);
-
-                        // Get config values for auto-copy/auto-paste
-                        let auto_copy_enabled = ctx.auto_copy();
-                        let auto_paste_enabled = ctx.auto_paste();
-
-                        // Copy to clipboard if enabled
-                        if auto_copy_enabled || auto_paste_enabled {
-                            super::copy_to_clipboard(&text);
-                        }
-
-                        // Auto-paste if enabled
-                        if auto_paste_enabled {
-                            glib::timeout_future(std::time::Duration::from_millis(100)).await;
-                            let (paste_tx, paste_rx) = async_channel::bounded::<Option<String>>(1);
-                            std::thread::spawn(move || {
-                                let err = crate::infrastructure::paste::paste_from_clipboard()
-                                    .err()
-                                    .map(|e| e.to_string());
-                                let _ = paste_tx.send_blocking(err);
-                            });
-                            if let Ok(Some(err)) = paste_rx.recv().await {
-                                eprintln!("Помилка автоматичної вставки: {}", err);
-                                ui.base
-                                    .set_status(&format!("Готово! (помилка вставки: {})", err));
-                            }
-                        }
-
-                        // Save to history with recording metadata
                         let speakers = vec!["Ви".to_string(), "Учасник".to_string()];
-                        let entry = HistoryEntry::new_with_recording(
-                            text,
+                        shared::handle_post_transcription(
+                            &ctx,
+                            &ui.base,
+                            &text,
+                            &language,
                             duration_secs,
-                            language.clone(),
                             Some(file_path.to_string_lossy().to_string()),
                             speakers,
-                        );
-                        let mut h = ctx.history.lock();
-                        h.add(entry);
-                        if let Err(e) = save_history(&h) {
-                            eprintln!("Помилка збереження історії: {}", e);
-                        }
+                        )
+                        .await;
                     }
                 }
                 Err(e) => {

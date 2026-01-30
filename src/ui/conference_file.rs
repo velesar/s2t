@@ -9,6 +9,7 @@ use crate::infrastructure::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };
 use crate::domain::traits::UIStateUpdater;
+use crate::ui::shared;
 use gtk4::glib;
 use std::sync::Arc;
 
@@ -23,32 +24,8 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferen
             ui.base.set_recording("Запис у файл...");
             ui.show_level_bars();
 
-            // Start timer update loop
-            let rec_clone = rec.clone();
-            let ui_clone = ui.clone();
-            glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-                if !rec_clone.is_recording() {
-                    return glib::ControlFlow::Break;
-                }
-                if let Some(secs) = rec_clone.elapsed_secs() {
-                    ui_clone.base.update_timer(secs);
-                }
-                glib::ControlFlow::Continue
-            });
-
-            // Start level bar update loops for both channels
-            let ctx_clone = ctx.clone();
-            let rec_clone = rec.clone();
-            let ui_clone = ui.clone();
-            glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
-                if !rec_clone.is_recording() {
-                    return glib::ControlFlow::Break;
-                }
-                let mic_amplitude = ctx_clone.audio.get_mic_amplitude();
-                let loopback_amplitude = ctx_clone.audio.get_loopback_amplitude();
-                ui_clone.update_levels(mic_amplitude as f64, loopback_amplitude as f64);
-                glib::ControlFlow::Continue
-            });
+            shared::start_timer_loop(rec, &ui.base);
+            shared::start_conference_level_loop(ctx, rec, ui);
         }
         Err(e) => {
             ui.base.set_status(&format!("Помилка: {}", e));

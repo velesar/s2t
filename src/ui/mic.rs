@@ -8,7 +8,7 @@ use crate::app::context::AppContext;
 use crate::domain::traits::{HistoryRepository, Transcription, UIStateUpdater};
 use crate::domain::types::AudioSegment;
 use crate::history::{save_history, HistoryEntry};
-use crate::recording::denoise::NnnoiselessDenoiser;
+use crate::ui::shared::{self, maybe_denoise};
 use gtk4::prelude::*;
 use gtk4::{glib, Label};
 use std::cell::{Cell, RefCell};
@@ -30,20 +30,6 @@ thread_local! {
     static SEGMENTS_SENT: Cell<usize> = const { Cell::new(0) };
     static SEGMENTS_COMPLETED: Cell<usize> = const { Cell::new(0) };
     static PROCESSING_CANCELLED: Cell<bool> = const { Cell::new(false) };
-}
-
-fn maybe_denoise(samples: &[f32], enabled: bool) -> Vec<f32> {
-    if !enabled {
-        return samples.to_vec();
-    }
-    let denoiser = NnnoiselessDenoiser::new();
-    match denoiser.denoise_buffer(samples) {
-        Ok(denoised) => denoised,
-        Err(e) => {
-            eprintln!("Denoising failed, using original: {}", e);
-            samples.to_vec()
-        }
-    }
 }
 
 /// Start microphone recording (dictation or segmented depending on config).
@@ -83,7 +69,7 @@ pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI) {
                 ui.show_level_bar();
             }
 
-            start_timer_loop(rec, ui);
+            shared::start_timer_loop(rec, &ui.base);
             start_level_loop(ctx, rec, ui);
 
             if use_segmentation {
@@ -110,20 +96,6 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI) {
 }
 
 // === Private helpers ===
-
-fn start_timer_loop(rec: &RecordingContext, ui: &MicUI) {
-    let rec_clone = rec.clone();
-    let ui_clone = ui.clone();
-    glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-        if !rec_clone.is_recording() {
-            return glib::ControlFlow::Break;
-        }
-        if let Some(secs) = rec_clone.elapsed_secs() {
-            ui_clone.base.update_timer(secs);
-        }
-        glib::ControlFlow::Continue
-    });
-}
 
 fn start_level_loop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI) {
     let ctx_clone = ctx.clone();
@@ -336,38 +308,16 @@ fn handle_simple_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI)
                     if text.is_empty() {
                         ui.base.set_status("Не вдалося розпізнати мову");
                     } else {
-                        ui.base.set_status("Готово!");
-                        ui.base.set_result_text(&text);
-
-                        let auto_copy_enabled = ctx.auto_copy();
-                        let auto_paste_enabled = ctx.auto_paste();
-
-                        if auto_copy_enabled || auto_paste_enabled {
-                            super::copy_to_clipboard(&text);
-                        }
-
-                        if auto_paste_enabled {
-                            glib::timeout_future(std::time::Duration::from_millis(100)).await;
-                            let (paste_tx, paste_rx) = async_channel::bounded::<Option<String>>(1);
-                            std::thread::spawn(move || {
-                                let err = crate::infrastructure::paste::paste_from_clipboard()
-                                    .err()
-                                    .map(|e| e.to_string());
-                                let _ = paste_tx.send_blocking(err);
-                            });
-                            if let Ok(Some(err)) = paste_rx.recv().await {
-                                eprintln!("Помилка автоматичної вставки: {}", err);
-                                ui.base
-                                    .set_status(&format!("Готово! (помилка вставки: {})", err));
-                            }
-                        }
-
-                        let entry = HistoryEntry::new(text, duration_secs, language.clone());
-                        let mut h = ctx.history.lock();
-                        h.add(entry);
-                        if let Err(e) = save_history(&h) {
-                            eprintln!("Помилка збереження історії: {}", e);
-                        }
+                        shared::handle_post_transcription(
+                            &ctx,
+                            &ui.base,
+                            &text,
+                            &language,
+                            duration_secs,
+                            None,
+                            vec![],
+                        )
+                        .await;
                     }
                 }
                 Err(e) => {

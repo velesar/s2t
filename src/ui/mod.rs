@@ -1,6 +1,7 @@
 pub mod conference;
 pub mod conference_file;
 pub mod mic;
+pub(crate) mod shared;
 mod dispatch;
 pub mod state;
 mod widgets;
