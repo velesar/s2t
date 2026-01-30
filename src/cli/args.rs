@@ -41,6 +41,8 @@ pub enum Commands {
     Transcribe(TranscribeArgs),
     /// List available and downloaded models
     Models,
+    /// Evaluate denoiser effectiveness on a WAV file
+    DenoiseEval(DenoiseEvalArgs),
 }
 
 #[derive(Parser)]
@@ -117,4 +119,38 @@ pub enum OutputFormat {
     Text,
     /// JSON output with metadata
     Json,
+}
+
+#[derive(Parser)]
+pub struct DenoiseEvalArgs {
+    /// Path to WAV file to evaluate
+    pub input: PathBuf,
+
+    /// Channel to evaluate (for stereo files)
+    #[arg(long, value_enum, default_value_t = ChannelMode::Mix)]
+    pub channel: ChannelMode,
+
+    /// Output directory for denoised WAV file (default: same directory as input)
+    #[arg(short, long)]
+    pub output_dir: Option<PathBuf>,
+
+    /// Run VAD comparison (WebRTC + Silero speech % on original vs denoised)
+    #[arg(long)]
+    pub vad: bool,
+
+    /// Run transcription A/B comparison (requires a loaded model)
+    #[arg(long)]
+    pub transcribe: bool,
+
+    /// Override model path or filename (for --transcribe)
+    #[arg(short, long)]
+    pub model: Option<String>,
+
+    /// Override language (for --transcribe)
+    #[arg(short, long)]
+    pub language: Option<String>,
+
+    /// Config file path
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
 }

@@ -22,6 +22,7 @@ fn main() -> Result<()> {
     match cli.command {
         Some(cli::Commands::Transcribe(args)) => cli::transcribe::run(args),
         Some(cli::Commands::Models) => cli::transcribe::list_models(),
+        Some(cli::Commands::DenoiseEval(args)) => cli::denoise_eval::run(args),
         None => run_gui(),
     }
 }
