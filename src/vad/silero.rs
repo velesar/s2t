@@ -59,6 +59,7 @@ impl SileroVoiceDetector {
     }
 
     /// Get the configured speech probability threshold.
+    #[cfg(test)]
     pub fn threshold(&self) -> f32 {
         self.threshold
     }

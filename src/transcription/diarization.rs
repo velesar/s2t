@@ -14,7 +14,7 @@ pub struct DiarizationSegment {
 }
 
 /// Diarization engine using NVIDIA Sortformer
-pub(crate) struct DiarizationEngine {
+pub struct DiarizationEngine {
     sortformer: Option<Sortformer>,
     model_path: Option<PathBuf>,
 }

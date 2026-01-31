@@ -40,6 +40,7 @@ pub trait AudioRecording: Send + Sync {
 /// Speech-to-text transcription abstraction.
 ///
 /// Implementors convert audio samples to text using various STT backends.
+#[allow(dead_code)] // Methods used through concrete types and trait objects
 pub trait Transcription: Send + Sync {
     /// Transcribe audio samples to text.
     ///
@@ -66,6 +67,7 @@ pub trait Transcription: Send + Sync {
 ///
 /// Note: Uses `&self` with interior mutability pattern to allow
 /// implementations to use `RefCell` or similar for thread-local state.
+#[allow(dead_code)] // Methods used through concrete types
 pub trait VoiceDetection {
     /// Check if audio frame contains speech.
     ///
@@ -86,6 +88,7 @@ pub trait VoiceDetection {
 /// History storage abstraction.
 ///
 /// Implementors persist transcription history entries.
+#[allow(dead_code)] // Methods used through concrete types
 pub trait HistoryRepository: Send + Sync {
     /// History entry type
     type Entry;
@@ -123,6 +126,9 @@ pub trait HistoryRepository: Send + Sync {
 ///
 /// Implementors apply noise suppression to audio samples.
 /// Typical use case: RNNoise-based denoising for cleaner STT input.
+///
+/// Only used in tests — production code calls `NnnoiselessDenoiser` directly.
+#[cfg(test)]
 pub trait AudioDenoising: Send + Sync {
     /// Apply noise suppression to audio samples.
     ///
@@ -147,11 +153,9 @@ pub trait AudioDenoising: Send + Sync {
 /// Implementors provide application configuration values.
 pub trait ConfigProvider: Send + Sync {
     fn language(&self) -> String;
-    fn default_model(&self) -> String;
     fn auto_copy(&self) -> bool;
     fn auto_paste(&self) -> bool;
     fn continuous_mode(&self) -> bool;
-    fn recording_mode(&self) -> String;
 }
 
 /// UI state update abstraction.

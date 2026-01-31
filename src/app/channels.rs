@@ -7,6 +7,7 @@ pub struct UIChannels {
     pub open_settings: (Sender<()>, Receiver<()>),
     pub toggle_recording: (Sender<()>, Receiver<()>),
     pub reload_hotkeys: (Sender<()>, Receiver<()>),
+    pub model_ready: (Sender<bool>, Receiver<bool>),
 }
 
 impl UIChannels {
@@ -18,6 +19,7 @@ impl UIChannels {
             open_settings: async_channel::bounded(1),
             toggle_recording: async_channel::bounded(1),
             reload_hotkeys: async_channel::bounded(1),
+            model_ready: async_channel::bounded(1),
         }
     }
 
@@ -69,6 +71,16 @@ impl UIChannels {
     /// Get receiver for reload_hotkeys channel
     pub fn reload_hotkeys_rx(&self) -> &Receiver<()> {
         &self.reload_hotkeys.1
+    }
+
+    /// Get sender for model_ready channel
+    pub fn model_ready_tx(&self) -> &Sender<bool> {
+        &self.model_ready.0
+    }
+
+    /// Get receiver for model_ready channel
+    pub fn model_ready_rx(&self) -> &Receiver<bool> {
+        &self.model_ready.1
     }
 }
 

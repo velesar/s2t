@@ -116,15 +116,47 @@ fn find_model_path(config: &app::config::Config) -> Option<String> {
     None
 }
 
+/// Load diarization model into the engine.
+fn load_diarization_model(
+    config: &std::sync::Arc<parking_lot::Mutex<app::config::Config>>,
+    diarization: &std::sync::Arc<parking_lot::Mutex<transcription::diarization::DiarizationEngine>>,
+) {
+    use app::config::sortformer_models_dir;
+    use std::path::PathBuf;
+
+    let cfg = config.lock();
+    let model_path = if let Some(ref path) = cfg.sortformer_model_path {
+        Some(PathBuf::from(path))
+    } else {
+        let default_path =
+            sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
+        if default_path.exists() {
+            Some(default_path)
+        } else {
+            None
+        }
+    };
+    drop(cfg);
+
+    if let Some(path) = model_path {
+        let mut engine = diarization.lock();
+        *engine = transcription::diarization::DiarizationEngine::new(Some(path));
+        if let Err(e) = engine.load_model() {
+            eprintln!("Не вдалося завантажити модель Sortformer: {}", e);
+            eprintln!("Diarization буде використовувати channel-based метод.");
+        }
+    }
+}
+
 fn run_gui() -> Result<()> {
-    use app::config::{load_config, sortformer_models_dir, Config};
+    use app::config::{load_config, Config};
     use app::context::AppContext;
     use transcription::diarization::DiarizationEngine;
+    use transcription::TranscriptionService;
     use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
     use gtk4::{glib, prelude::*, Application};
     use history::{load_history, save_history, History};
     use infrastructure::hotkeys::HotkeyManager;
-    use std::path::PathBuf;
     use std::sync::Arc;
     use parking_lot::Mutex;
     use infrastructure::tray::{DictationTray, TrayAction};
@@ -161,32 +193,9 @@ fn run_gui() -> Result<()> {
         Arc::new(Mutex::new(h))
     };
 
-    // Initialize transcription service based on configured backend
-    let transcription = init_transcription_service(&config);
-
-    // Initialize diarization engine
-    let diarization_engine = {
-        let cfg = config.lock();
-        let model_path = if let Some(ref path) = cfg.sortformer_model_path {
-            Some(PathBuf::from(path))
-        } else {
-            // Try default location
-            let default_path =
-                sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
-            if default_path.exists() {
-                Some(default_path)
-            } else {
-                None
-            }
-        };
-
-        let mut engine = DiarizationEngine::new(model_path);
-        if let Err(e) = engine.load_model() {
-            eprintln!("Не вдалося завантажити модель Sortformer: {}", e);
-            eprintln!("Diarization буде використовувати channel-based метод.");
-        }
-        engine
-    };
+    // Start with empty services — models load asynchronously in background
+    let transcription = TranscriptionService::new();
+    let diarization_engine = DiarizationEngine::default();
 
     // Create AppContext bundling all services
     let ctx = Arc::new(
@@ -198,6 +207,24 @@ fn run_gui() -> Result<()> {
         )
         .expect("Failed to create AppContext"),
     );
+
+    // Load models in background thread
+    {
+        let config_for_loading = config.clone();
+        let transcription_for_loading = ctx.transcription.clone();
+        let diarization_for_loading = ctx.diarization.clone();
+        let model_ready_tx = ctx.channels.model_ready_tx().clone();
+        std::thread::spawn(move || {
+            // Load STT model
+            let stt_service = init_transcription_service(&config_for_loading);
+            *transcription_for_loading.lock() = stt_service;
+
+            // Load diarization model
+            load_diarization_model(&config_for_loading, &diarization_for_loading);
+
+            let _ = model_ready_tx.send_blocking(true);
+        });
+    }
 
     let (tray_tx, tray_rx) = async_channel::unbounded();
 

@@ -66,7 +66,7 @@ impl AppContext {
                 segment_interval_secs: cfg.segment_interval_secs,
                 vad_silence_threshold_ms: cfg.vad_silence_threshold_ms,
                 vad_min_speech_ms: cfg.vad_min_speech_ms,
-                vad_engine: VadEngine::from_str(&cfg.vad_engine),
+                vad_engine: VadEngine::parse(&cfg.vad_engine),
                 silero_threshold: cfg.silero_threshold,
             }
         };

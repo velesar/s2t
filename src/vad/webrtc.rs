@@ -48,10 +48,6 @@ impl WebRtcVoiceDetector {
         })
     }
 
-    /// Get the frame size in samples.
-    pub fn frame_size() -> usize {
-        FRAME_SIZE_SAMPLES
-    }
 }
 
 impl Default for WebRtcVoiceDetector {

@@ -3,6 +3,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 pub(crate) struct WhisperSTT {
     ctx: WhisperContext,
+    #[allow(dead_code)] // Used via Transcription::model_name() trait impl
     model_path: String,
 }
 

@@ -16,17 +16,6 @@ pub(crate) fn calculate_rms(samples: &[f32]) -> f32 {
     (rms * 6.0).min(1.0)
 }
 
-/// Convert multi-channel audio to mono by averaging channels.
-pub(crate) fn to_mono(data: &[f32], channels: usize) -> Vec<f32> {
-    if channels > 1 {
-        data.chunks(channels)
-            .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
-            .collect()
-    } else {
-        data.to_vec()
-    }
-}
-
 /// Shared recording infrastructure (samples buffer, flags, completion channel).
 ///
 /// Both `AudioRecorder` (microphone) and `LoopbackRecorder` compose this
@@ -136,21 +125,6 @@ mod tests {
         // Full-scale signal should clamp to 1.0
         let loud = vec![1.0; 100];
         assert_eq!(calculate_rms(&loud), 1.0);
-    }
-
-    #[test]
-    fn test_to_mono_single_channel() {
-        let data = vec![0.1, 0.2, 0.3];
-        assert_eq!(to_mono(&data, 1), data);
-    }
-
-    #[test]
-    fn test_to_mono_stereo() {
-        let data = vec![0.2, 0.4, 0.6, 0.8];
-        let mono = to_mono(&data, 2);
-        assert_eq!(mono.len(), 2);
-        assert!((mono[0] - 0.3).abs() < 1e-6);
-        assert!((mono[1] - 0.7).abs() < 1e-6);
     }
 
     #[test]

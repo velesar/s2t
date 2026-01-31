@@ -203,6 +203,37 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
         }
     });
 
+    // Set initial loading state — model loads in background thread
+    if !ctx.is_model_loaded() {
+        mic_ui.base.status_label.set_text("Завантаження моделі...");
+        mic_ui.base.button.set_sensitive(false);
+        mic_ui.base.spinner.set_visible(true);
+        mic_ui.base.spinner.start();
+    }
+
+    // Listen for model loading completion
+    let model_ready_rx = ctx.channels.model_ready_rx().clone();
+    let mic_ui_for_model = mic_ui.clone();
+    let ctx_for_model = ctx.clone();
+    glib::spawn_future_local(async move {
+        if let Ok(_success) = model_ready_rx.recv().await {
+            mic_ui_for_model.base.spinner.stop();
+            mic_ui_for_model.base.spinner.set_visible(false);
+            if ctx_for_model.is_model_loaded() {
+                mic_ui_for_model
+                    .base
+                    .status_label
+                    .set_text("Готово до запису");
+                mic_ui_for_model.base.button.set_sensitive(true);
+            } else {
+                mic_ui_for_model
+                    .base
+                    .status_label
+                    .set_text("Модель не завантажено. Натисніть 'Моделі'.");
+            }
+        }
+    });
+
     window.present();
 }
 

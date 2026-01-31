@@ -30,7 +30,7 @@ pub enum VadEngine {
 
 impl VadEngine {
     /// Parse VAD engine from string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "silero" => VadEngine::Silero,
             _ => VadEngine::WebRTC,
@@ -38,6 +38,7 @@ impl VadEngine {
     }
 
     /// Convert to string representation.
+    #[cfg(test)]
     pub fn as_str(&self) -> &'static str {
         match self {
             VadEngine::WebRTC => "webrtc",
@@ -97,12 +98,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vad_engine_from_str() {
-        assert_eq!(VadEngine::from_str("webrtc"), VadEngine::WebRTC);
-        assert_eq!(VadEngine::from_str("WebRTC"), VadEngine::WebRTC);
-        assert_eq!(VadEngine::from_str("silero"), VadEngine::Silero);
-        assert_eq!(VadEngine::from_str("Silero"), VadEngine::Silero);
-        assert_eq!(VadEngine::from_str("unknown"), VadEngine::WebRTC);
+    fn test_vad_engine_parse() {
+        assert_eq!(VadEngine::parse("webrtc"), VadEngine::WebRTC);
+        assert_eq!(VadEngine::parse("WebRTC"), VadEngine::WebRTC);
+        assert_eq!(VadEngine::parse("silero"), VadEngine::Silero);
+        assert_eq!(VadEngine::parse("Silero"), VadEngine::Silero);
+        assert_eq!(VadEngine::parse("unknown"), VadEngine::WebRTC);
     }
 
     #[test]

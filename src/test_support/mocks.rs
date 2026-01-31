@@ -216,10 +216,12 @@ impl VoiceDetection for MockVoiceDetector {
 /// Returns configurable values for all config fields.
 pub struct MockConfigProvider {
     pub language: String,
+    #[allow(dead_code)]
     pub default_model: String,
     pub auto_copy: bool,
     pub auto_paste: bool,
     pub continuous_mode: bool,
+    #[allow(dead_code)]
     pub recording_mode: String,
 }
 
@@ -242,10 +244,6 @@ impl ConfigProvider for MockConfigProvider {
         self.language.clone()
     }
 
-    fn default_model(&self) -> String {
-        self.default_model.clone()
-    }
-
     fn auto_copy(&self) -> bool {
         self.auto_copy
     }
@@ -256,10 +254,6 @@ impl ConfigProvider for MockConfigProvider {
 
     fn continuous_mode(&self) -> bool {
         self.continuous_mode
-    }
-
-    fn recording_mode(&self) -> String {
-        self.recording_mode.clone()
     }
 }
 
@@ -572,11 +566,9 @@ mod tests {
     fn test_mock_config_provider_defaults() {
         let config = MockConfigProvider::default_uk();
         assert_eq!(ConfigProvider::language(&config), "uk");
-        assert_eq!(ConfigProvider::default_model(&config), "ggml-base.bin");
         assert!(ConfigProvider::auto_copy(&config));
         assert!(!ConfigProvider::auto_paste(&config));
         assert!(!ConfigProvider::continuous_mode(&config));
-        assert_eq!(ConfigProvider::recording_mode(&config), "dictation");
     }
 
     #[test]
@@ -626,7 +618,6 @@ mod tests {
     fn test_config_provider_as_trait_object() {
         let config: Box<dyn ConfigProvider> = Box::new(MockConfigProvider::default_uk());
         assert_eq!(config.language(), "uk");
-        assert_eq!(config.default_model(), "ggml-base.bin");
         assert!(config.auto_copy());
     }
 

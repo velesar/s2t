@@ -274,10 +274,6 @@ impl ConfigProvider for Config {
         self.language.clone()
     }
 
-    fn default_model(&self) -> String {
-        self.default_model.clone()
-    }
-
     fn auto_copy(&self) -> bool {
         self.auto_copy
     }
@@ -288,10 +284,6 @@ impl ConfigProvider for Config {
 
     fn continuous_mode(&self) -> bool {
         self.continuous_mode
-    }
-
-    fn recording_mode(&self) -> String {
-        self.recording_mode.clone()
     }
 }
 
@@ -356,24 +348,10 @@ mod tests {
     }
 
     #[test]
-    fn test_trait_default_model_matches_field() {
-        use crate::domain::traits::ConfigProvider;
-        let config = Config::default();
-        assert_eq!(ConfigProvider::default_model(&config), config.default_model);
-    }
-
-    #[test]
     fn test_trait_auto_copy_matches_field() {
         use crate::domain::traits::ConfigProvider;
         let config = Config::default();
         assert_eq!(ConfigProvider::auto_copy(&config), config.auto_copy);
-    }
-
-    #[test]
-    fn test_trait_recording_mode_matches_field() {
-        use crate::domain::traits::ConfigProvider;
-        let config = Config::default();
-        assert_eq!(ConfigProvider::recording_mode(&config), config.recording_mode);
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! nnnoiseless/RNNoise operates at 48kHz with 10ms frames (480 samples).
 //! The denoiser accepts 16kHz input and handles resampling internally.
 
+#[cfg(test)]
 use crate::domain::traits::AudioDenoising;
 use anyhow::{Context, Result};
 use nnnoiseless::DenoiseState;
@@ -237,6 +238,7 @@ impl Default for NnnoiselessDenoiser {
     }
 }
 
+#[cfg(test)]
 impl AudioDenoising for NnnoiselessDenoiser {
     fn denoise(&self, samples: &[f32]) -> Result<Vec<f32>> {
         self.denoise_buffer(samples)
@@ -247,6 +249,14 @@ impl AudioDenoising for NnnoiselessDenoiser {
     }
 
     fn reset(&self) {
+        self.reset_state();
+    }
+}
+
+impl NnnoiselessDenoiser {
+    /// Reset internal state for new recording session.
+    #[cfg(test)]
+    pub fn reset_state(&self) {
         let mut inner = self.inner.lock();
         inner.buffer.clear();
         inner.frame_in.fill(0.0);
@@ -263,20 +273,24 @@ impl AudioDenoising for NnnoiselessDenoiser {
 /// No-op denoiser that passes audio through unchanged.
 ///
 /// Used when denoising is disabled in configuration.
+#[cfg(test)]
 pub struct NoOpDenoiser;
 
+#[cfg(test)]
 impl NoOpDenoiser {
     pub fn new() -> Self {
         Self
     }
 }
 
+#[cfg(test)]
 impl Default for NoOpDenoiser {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(test)]
 impl AudioDenoising for NoOpDenoiser {
     fn denoise(&self, samples: &[f32]) -> Result<Vec<f32>> {
         Ok(samples.to_vec())
@@ -297,6 +311,7 @@ impl AudioDenoising for NoOpDenoiser {
 ///
 /// # Arguments
 /// * `enabled` - If true, creates NnnoiselessDenoiser; otherwise NoOpDenoiser
+#[cfg(test)]
 pub fn create_denoiser(enabled: bool) -> Box<dyn AudioDenoising> {
     if enabled {
         Box::new(NnnoiselessDenoiser::new())
