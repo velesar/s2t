@@ -3,10 +3,13 @@
 use crate::cli::args::{DiarizationMethod, OutputFormat, SttBackend, TranscribeArgs};
 use crate::cli::wav_reader::{prepare_for_whisper, read_wav, PreparedAudio};
 use crate::app::config::{load_config, models_dir, sortformer_models_dir, tdt_models_dir, Config};
+use crate::recording::split::SplitConfig;
+use crate::transcription::chunker::{AudioChunker, ChunkerConfig};
 use crate::transcription::diarization::DiarizationEngine;
 use crate::infrastructure::models::{get_model_path, list_downloaded_models};
 use crate::transcription::TranscriptionService;
 use crate::domain::traits::Transcription;
+use crate::vad::{VadConfig, VadEngine};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use std::fs;
@@ -113,7 +116,12 @@ pub fn run(args: TranscribeArgs) -> Result<()> {
             let service = TranscriptionService::with_tdt(&model_dir.to_string_lossy())?;
 
             eprintln!("Transcribing (backend: tdt, language: {})...", language);
-            let text = service.transcribe(&prepared.samples, language)?;
+            let text = if args.no_chunking {
+                service.transcribe(&prepared.samples, language)?
+            } else {
+                let chunker = build_chunker(&args, &config);
+                chunker.transcribe_chunked(&prepared.samples, language, &service)?
+            };
             TranscriptionResult {
                 text: text.trim().to_string(),
                 segments: Vec::new(),
@@ -315,8 +323,13 @@ fn transcribe_with_whisper(
 
     match diarization {
         DiarizationMethod::None => {
-            // No diarization - simple transcription
-            let text = Transcription::transcribe(service, &prepared.samples, language)?;
+            // No diarization — use chunker if enabled
+            let text = if args.no_chunking {
+                Transcription::transcribe(service, &prepared.samples, language)?
+            } else {
+                let chunker = build_chunker(args, config);
+                chunker.transcribe_chunked(&prepared.samples, language, service)?
+            };
             Ok(TranscriptionResult {
                 text: text.trim().to_string(),
                 segments: Vec::new(),
@@ -445,7 +458,15 @@ fn transcribe_sortformer_diarization(
             continue;
         }
 
-        let text = Transcription::transcribe(service, segment_audio, language)?;
+        // Use chunker for long speaker segments to avoid OOM
+        let text = if !args.no_chunking
+            && segment_audio.len() > args.max_segment_secs as usize * sample_rate as usize
+        {
+            let chunker = build_chunker(args, config);
+            chunker.transcribe_chunked(segment_audio, language, service)?
+        } else {
+            Transcription::transcribe(service, segment_audio, language)?
+        };
         let text = text.trim();
 
         if !text.is_empty() {
@@ -583,6 +604,23 @@ pub fn list_models() -> Result<()> {
     Ok(())
 }
 
+/// Build an AudioChunker from CLI args and config.
+fn build_chunker(args: &TranscribeArgs, config: &Config) -> AudioChunker {
+    AudioChunker::new(ChunkerConfig {
+        split: SplitConfig {
+            max_segment_secs: args.max_segment_secs,
+            vad_silence_ms: config.vad_silence_threshold_ms,
+            ..SplitConfig::default()
+        },
+        vad: VadConfig {
+            engine: VadEngine::parse(&config.vad_engine),
+            silence_threshold_ms: config.vad_silence_threshold_ms,
+            min_speech_ms: config.vad_min_speech_ms,
+            silero_threshold: config.silero_threshold,
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -604,6 +642,8 @@ mod tests {
             tdt_model: None,
             format: OutputFormat::Text,
             denoise: false,
+            max_segment_secs: 300,
+            no_chunking: false,
         };
 
         let config = load_config_cascade(&args).unwrap();

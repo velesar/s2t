@@ -45,6 +45,8 @@ pub struct Config {
     pub stt_backend: String,
     #[serde(default)]
     pub tdt_model_path: Option<String>,
+    #[serde(default = "default_max_segment_secs")]
+    pub max_segment_secs: u32,
 }
 
 fn default_diarization_method() -> String {
@@ -85,6 +87,10 @@ fn default_silero_threshold() -> f32 {
 
 fn default_stt_backend() -> String {
     "whisper".to_string() // "whisper" (default) or "tdt"
+}
+
+fn default_max_segment_secs() -> u32 {
+    300 // 5 minutes default max segment for chunked processing
 }
 
 fn default_history_max_entries() -> usize {
@@ -139,6 +145,7 @@ impl Default for Config {
             silero_threshold: default_silero_threshold(),
             stt_backend: default_stt_backend(),
             tdt_model_path: None,
+            max_segment_secs: default_max_segment_secs(),
         }
     }
 }
@@ -163,6 +170,7 @@ impl Config {
         self.history_max_entries = self.history_max_entries.clamp(1, 10_000);
         self.history_max_age_days = self.history_max_age_days.clamp(1, 3650);
         self.silero_threshold = self.silero_threshold.clamp(0.0, 1.0);
+        self.max_segment_secs = self.max_segment_secs.clamp(30, 1800);
 
         // Validate recording_mode
         if !["dictation", "conference", "conference_file"].contains(&self.recording_mode.as_str()) {

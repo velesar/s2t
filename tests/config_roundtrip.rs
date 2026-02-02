@@ -46,6 +46,7 @@ fn config_save_load_roundtrip() {
     assert_eq!(loaded.silero_threshold, original.silero_threshold);
     assert_eq!(loaded.stt_backend, original.stt_backend);
     assert_eq!(loaded.tdt_model_path, original.tdt_model_path);
+    assert_eq!(loaded.max_segment_secs, original.max_segment_secs);
 
     let _ = fs::remove_file(&path);
     let _ = fs::remove_dir(&dir);
@@ -76,6 +77,7 @@ fn config_custom_values_roundtrip() {
         silero_threshold: 0.8,
         stt_backend: "tdt".to_string(),
         tdt_model_path: Some("/models/tdt".to_string()),
+        max_segment_secs: 600,
     };
 
     let toml_str = toml::to_string_pretty(&original).expect("serialize");

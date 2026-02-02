@@ -97,6 +97,14 @@ pub struct TranscribeArgs {
     /// Enable noise suppression
     #[arg(long)]
     pub denoise: bool,
+
+    /// Maximum segment length in seconds for chunked processing (default: 300)
+    #[arg(long, default_value_t = 300)]
+    pub max_segment_secs: u32,
+
+    /// Disable audio chunking (process entire file at once)
+    #[arg(long)]
+    pub no_chunking: bool,
 }
 
 #[derive(Clone, Copy, ValueEnum, Default)]

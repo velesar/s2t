@@ -8,6 +8,8 @@ use crate::domain::traits::VoiceDetection;
 use crate::domain::types::AudioSegment;
 use crate::recording::core::WHISPER_SAMPLE_RATE;
 use crate::recording::ring_buffer::RingBuffer;
+use crate::recording::split::SplitConfig;
+use crate::recording::split::SplitFinder;
 use crate::vad::{create_vad, VadConfig, VadEngine};
 use async_channel::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,6 +25,8 @@ pub struct SegmentationConfig {
     pub vad_min_speech_ms: u32,
     pub vad_engine: VadEngine,
     pub silero_threshold: f32,
+    /// Maximum segment duration in seconds (safety limit).
+    pub max_segment_secs: u32,
 }
 
 impl Default for SegmentationConfig {
@@ -34,6 +38,7 @@ impl Default for SegmentationConfig {
             vad_min_speech_ms: 500,
             vad_engine: VadEngine::WebRTC,
             silero_threshold: 0.5,
+            max_segment_secs: 300,
         }
     }
 }
@@ -90,6 +95,7 @@ impl SegmentationMonitor {
         let vad_min_speech_ms = self.config.vad_min_speech_ms;
         let silero_threshold = self.config.silero_threshold;
         let segment_interval = Duration::from_secs(self.config.segment_interval_secs as u64);
+        let max_segment_secs = self.config.max_segment_secs;
         let is_speech_detected = self.is_speech_detected.clone();
 
         let handle = std::thread::spawn(move || {
@@ -118,6 +124,14 @@ impl SegmentationMonitor {
                 None
             };
 
+            // Create SplitFinder for streaming split decisions
+            let split_finder = SplitFinder::new(SplitConfig {
+                vad_silence_ms: vad_silence_threshold_ms,
+                max_segment_secs,
+                sample_rate: WHISPER_SAMPLE_RATE,
+                ..SplitConfig::default()
+            });
+
             while is_running.load(Ordering::SeqCst) {
                 std::thread::sleep(check_interval);
 
@@ -136,7 +150,7 @@ impl SegmentationMonitor {
 
                 // Check if we should create a segment
                 let should_segment = if let Some(ref vad) = vad {
-                    // VAD mode: check for speech end (silence after speech)
+                    // VAD mode: use SplitFinder for unified split decisions
                     let samples = ring_buffer.peek_last(WHISPER_SAMPLE_RATE as usize * 5);
 
                     // Update speech detection state for UI (check last 1 second)
@@ -144,9 +158,12 @@ impl SegmentationMonitor {
                     let speech_now = vad.is_speech(&recent_samples).unwrap_or(false);
                     is_speech_detected.store(speech_now, Ordering::SeqCst);
 
-                    // Only segment if we have at least 1 second of audio
-                    samples.len() >= WHISPER_SAMPLE_RATE as usize
-                        && vad.detect_speech_end(&samples).unwrap_or(false)
+                    let elapsed = last_segment_time
+                        .lock()
+                        .map(|t| t.elapsed())
+                        .unwrap_or(Duration::ZERO);
+
+                    split_finder.should_split_streaming(&samples, vad.as_ref(), elapsed)
                 } else {
                     // No VAD — always show as "listening"
                     is_speech_detected.store(false, Ordering::SeqCst);

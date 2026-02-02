@@ -2,6 +2,7 @@ pub mod core;
 pub mod microphone;
 pub mod loopback;
 pub mod segmentation;
+pub mod split;
 pub mod conference;
 pub mod ring_buffer;
 pub mod denoise;

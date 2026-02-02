@@ -68,6 +68,7 @@ impl AppContext {
                 vad_min_speech_ms: cfg.vad_min_speech_ms,
                 vad_engine: VadEngine::parse(&cfg.vad_engine),
                 silero_threshold: cfg.silero_threshold,
+                max_segment_secs: cfg.max_segment_secs,
             }
         };
 
