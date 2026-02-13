@@ -145,7 +145,7 @@ fn run_pipewire_capture(
         *pw::keys::STREAM_CAPTURE_SINK => "true",
     };
     if !target_node.is_empty() {
-        props.insert(*pw::keys::TARGET_OBJECT, target_node);
+        props.insert("target.object", target_node);
     }
 
     let stream = pw::stream::StreamBox::new(&core, "s2t-loopback", props)
