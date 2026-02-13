@@ -1,99 +1,113 @@
 # ADR-006: Native PipeWire API for System Audio Capture
 
 ## Status
-Proposed (Deferred Implementation)
+**Accepted** (Implemented 2026-02-13)
 
 ## Context
 The application captures system audio (loopback) for conference recording mode.
-Currently uses PulseAudio CLI tools (`pactl`, `parec`) which work via PipeWire's
+Previously used PulseAudio CLI tools (`pactl`, `parec`) which worked via PipeWire's
 compatibility layer on modern Linux systems.
 
-The `pipewire 0.9` Rust crate is already in dependencies but unused.
-Investigation was done to evaluate native PipeWire API vs current approach.
+The `pipewire 0.9` Rust crate was already in dependencies but unused.
+Investigation was done to evaluate native PipeWire API vs the CLI approach.
 
-### Current Implementation (loopback.rs)
-- Uses `pactl list sources short` to find `.monitor` sources
-- Uses `parec --format=s16le --rate=16000 --channels=1` to capture
-- ~140 lines, works on both PipeWire and PulseAudio systems
+### Previous Implementation (loopback.rs)
+- Used `pactl list sources short` to find `.monitor` sources
+- Used `parec --format=s16le --rate=16000 --channels=1` to capture
+- ~140 lines, worked on both PipeWire and PulseAudio systems
 - Runtime dependency: `pulseaudio-utils` package
 
 ### Native PipeWire Findings
 
-**Challenges discovered:**
+**Challenges addressed:**
 
-1. **No direct monitor sources** - PipeWire architecture differs from PulseAudio:
-   - Requires loopback module setup (`libpipewire-module-loopback`)
-   - Or user configuration via `pw-loopback` / routing tools
-   - Source discovery still may need pactl fallback
+1. **Monitor source targeting** — solved via `stream.capture.sink = "true"` +
+   `target.object` properties. PipeWire routes capture to sink monitor ports.
+   Source discovery still uses `pactl` to find the node name.
 
-2. **Callback-driven architecture** - Different from polling model:
-   - Requires dedicated MainLoop thread
-   - PipeWire calls your callbacks (inverted control)
-   - Realtime constraints on process callbacks
+2. **Callback-driven architecture** — dedicated thread runs PipeWire `MainLoopRc`.
+   Process callback runs on MainLoop thread (no `RT_PROCESS` flag), so `Mutex::lock()`
+   is safe for writing samples.
 
-3. **Thread safety** - PipeWire objects are NOT `Send`/`Sync`:
-   - All operations must happen on MainLoop thread
-   - Need lock-free channels for cross-thread communication
+3. **Thread safety** — `pw::channel::channel()` provides a `Send` sender and a
+   non-`Send` receiver attached to the MainLoop. The sender signals quit from
+   the stop method on any thread.
 
-4. **Industry reality** - Many applications still use pactl/parec via
-   compatibility layer even on PipeWire systems
+4. **Format negotiation** — PipeWire handles resampling to our requested F32LE
+   mono 16 kHz via its built-in audio adapter. No manual conversion needed.
 
 ## Decision
-Defer native PipeWire implementation. Keep current pactl/parec approach.
+Implement native PipeWire capture, removing the `parec` subprocess dependency.
 
 ### Rationale
-- Current implementation works reliably on both PipeWire and PulseAudio
-- Native implementation would add ~400 lines with significant complexity
-- Loopback/monitor capture in native PipeWire is non-trivial
-- Benefit (removing pulseaudio-utils dependency) doesn't justify effort
+- Eliminates `pulseaudio-utils` runtime dependency
+- Direct F32LE format — no i16→f32 conversion needed
+- PipeWire handles resampling natively (higher quality)
+- Clean start/stop lifecycle via `pw::channel` (no process polling/killing)
+- ~300 lines — simpler than the estimated 400-500
 
-## Future Implementation Plan
-
-When/if implementing native PipeWire:
-
-### Prerequisites
-- PipeWire loopback APIs stabilize
-- Clear pattern emerges for monitor source discovery
+## Implementation
 
 ### Architecture
 
 ```
 Main Thread (GTK)
-    ↓
-    ← async_channel →
+    ↓ stop_loopback()
+    → pw::channel::Sender<()>
     ↓
 PipeWire Thread:
-├── MainLoop + Context + Core
-├── Registry (source enumeration)
-├── Stream (audio capture)
-│   └── process callback → channel.send(samples)
-└── MainLoop::run()
+├── MainLoopRc + ContextRc + CoreRc
+├── pw::channel::Receiver → mainloop.quit()
+├── StreamBox (audio capture)
+│   └── process callback → samples.lock().extend()
+│                         → amplitude.store()
+└── MainLoop::run() (blocks until quit)
+    └── completion_tx.send() on exit
 ```
 
-### Implementation Steps
+### Key Design Decisions
 
-1. **Thread setup**: Dedicated thread with PipeWire MainLoop
-2. **Registry enumeration**: Find audio sinks/sources
-3. **Loopback discovery**: Either:
-   - Use pw-loopback module programmatically
-   - Require user to configure loopback externally
-   - Fall back to pactl for source name
-4. **Stream creation**: Configure format (F32 preferred)
-5. **Buffer processing**: Dequeue in callback, send via channel
-6. **Graceful shutdown**: Stop stream, exit MainLoop
+1. **No `RT_PROCESS`** — process callback runs on MainLoop thread, not a
+   realtime thread. Allows safe `Mutex::lock()` without lock-free buffers.
+   Acceptable for recording (not playback).
 
-### Estimated Effort
-- ~400-500 lines of code
-- Medium complexity threading
-- Testing on multiple systems required
+2. **`pactl` for source discovery** — still used to find the monitor source
+   name. This is a one-time call at start, not a runtime dependency for
+   audio capture itself.
+
+3. **`stream.capture.sink`** — the PipeWire-native way to capture monitor
+   ports. Combined with `target.object` (sink name without `.monitor` suffix),
+   PipeWire automatically routes audio from the correct output device.
+
+4. **`pw::channel` for lifecycle** — clean cross-thread signaling. The
+   `Sender` is stored in the recorder struct; `stop_loopback()` sends `()`
+   to quit the MainLoop. No process killing or flag polling needed.
+
+### Files Changed
+- `src/recording/loopback.rs` — replaced `parec` subprocess with native
+  PipeWire `StreamBox` capture
+
+### Dependencies
+- `pipewire = "0.9"` (already in Cargo.toml, now actively used)
+- System: `libpipewire-0.3-dev` (build-time), PipeWire daemon (runtime)
+- `pactl` still used for source discovery (optional — falls back to default)
 
 ## Consequences
 
 ### Positive
-- Simple, working implementation retained
-- No additional complexity in codebase
-- Clear documentation for future work
+- ✅ No more `parec` subprocess spawning/killing
+- ✅ No `pulseaudio-utils` runtime dependency for audio capture
+- ✅ Native F32LE format — no i16→f32 sample conversion
+- ✅ PipeWire resampling to 16 kHz (higher quality than parec)
+- ✅ Clean lifecycle via channel-based signaling
+- ✅ Simpler code (~300 vs ~140 lines, but no subprocess management)
 
 ### Negative
-- Runtime dependency on `pulseaudio-utils` continues
-- Indirect PipeWire access via compatibility layer
+- ⚠️ Requires PipeWire daemon (won't work on pure PulseAudio systems)
+- ⚠️ Build-time dependency on `libpipewire-0.3-dev`
+- ⚠️ Still uses `pactl` for initial source discovery
+
+### Future Work
+- Replace `pactl` discovery with PipeWire Registry API enumeration
+- Add fallback for pure PulseAudio systems (detect PipeWire availability)
+- Test on multiple distributions (Ubuntu 22.04+, Fedora 34+, Arch)
