@@ -166,16 +166,8 @@ mod tests {
     #[test]
     fn test_trim_to_limit_no_op_when_under() {
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "One".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
-        history.add(HistoryEntry::new(
-            "Two".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("One".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("Two".to_string(), 5.0, "uk".to_string()));
 
         history.trim_to_limit(10);
         assert_eq!(history.entries.len(), 2);
@@ -184,11 +176,7 @@ mod tests {
     #[test]
     fn test_remove_nonexistent_id_is_noop() {
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "Test".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("Test".to_string(), 5.0, "uk".to_string()));
 
         history.remove("nonexistent-id");
         assert_eq!(history.entries.len(), 1);
@@ -371,11 +359,7 @@ mod tests {
         use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "one".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("one".to_string(), 5.0, "uk".to_string()));
 
         let removed = HistoryRepository::trim_to_limit(&mut history, 10);
         assert_eq!(removed, 0);
@@ -386,11 +370,7 @@ mod tests {
         use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "test".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("test".to_string(), 5.0, "uk".to_string()));
 
         let trait_entries = HistoryRepository::entries(&history);
         assert_eq!(trait_entries.len(), history.entries.len());

@@ -3,8 +3,8 @@ use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, Label, LevelBar, Orientation, ScrolledWindow, Spinner, TextView,
 };
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// All widgets needed by the main UI orchestrator for signal wiring and context creation.
 pub struct MainWidgets {

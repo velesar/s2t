@@ -5,10 +5,10 @@
 //! Use this mode when you want to record a meeting for later processing.
 
 use crate::app::context::AppContext;
+use crate::domain::traits::UIStateUpdater;
 use crate::infrastructure::recordings::{
     ensure_recordings_dir, generate_recording_filename, recording_path, save_recording,
 };
-use crate::domain::traits::UIStateUpdater;
 use crate::ui::shared;
 use gtk4::glib;
 use std::sync::Arc;
@@ -73,7 +73,11 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
         let filename = generate_recording_filename();
         let file_path = recording_path(&filename);
 
-        match save_recording(&recording.mic_samples, &recording.loopback_samples, &file_path) {
+        match save_recording(
+            &recording.mic_samples,
+            &recording.loopback_samples,
+            &file_path,
+        ) {
             Ok(()) => {
                 let status = format!(
                     "Збережено {:02}:{:02} -> {}",

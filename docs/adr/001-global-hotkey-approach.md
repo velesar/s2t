@@ -90,7 +90,6 @@ Use `global-hotkey` crate with X11 backend, and D-Bus for Wayland.
 **Alternative**: If the application is Linux-only and Wayland support is critical, implement D-Bus integration directly.
 
 ## Related Files
-- [docs/backlog/global-hotkeys.md](../backlog/global-hotkeys.md) - Feature description
 - [src/config.rs](../../src/config.rs) - Config struct where hotkey setting is stored
 - [src/main.rs](../../src/main.rs) - Main application loop where hotkey handler is registered
 - [src/hotkeys.rs](../../src/hotkeys.rs) - Hotkey implementation

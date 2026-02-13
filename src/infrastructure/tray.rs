@@ -1,14 +1,14 @@
 use crate::app::config::{save_config, Config};
+use crate::domain::traits::Transcription;
 use crate::infrastructure::models::{get_model_path, list_downloaded_models};
 use crate::transcription::TranscriptionService;
-use crate::domain::traits::Transcription;
 use async_channel::Sender;
 use ksni::{
     menu::{StandardItem, SubMenu},
     MenuItem, Tray, TrayMethods,
 };
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum TrayAction {

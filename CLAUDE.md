@@ -172,11 +172,9 @@ Use for accessing audit findings and architecture info:
 5. Run `cargo clippy` and `cargo test`
 
 ### Known Technical Debt
-See `docs/audit/REMEDIATION-PLAN.md` for the comprehensive fix plan (113 findings):
-- **P0:** ABBA deadlock in denoise.rs, panic on odd bytes, no model checksum, buffer clone
-- **P1:** parking_lot::Mutex migration (70+ sites), lock-free audio buffer, Drop impls, signal handlers
-- **P2:** Triplicated download code, 429-line settings function, integration tests, path validation
+Remaining items (P0–P2 remediation is complete):
 - **P3:** Dead code cleanup, async model loading, doc comments, resampler quality
+- CI/CD pipeline and packaging (Flatpak, AppImage, RPM)
 
 ## File Locations
 

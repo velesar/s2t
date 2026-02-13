@@ -122,8 +122,10 @@ fn resample_to_16khz(samples: &[f32], input_rate: u32) -> Result<Vec<f32>> {
     // Process full chunks
     let frames_needed = resampler.input_frames_next();
     while input_pos + frames_needed <= samples.len() {
-        let input_chunk: Vec<Vec<f32>> = vec![samples[input_pos..input_pos + frames_needed].to_vec()];
-        let resampled = resampler.process(&input_chunk, None)
+        let input_chunk: Vec<Vec<f32>> =
+            vec![samples[input_pos..input_pos + frames_needed].to_vec()];
+        let resampled = resampler
+            .process(&input_chunk, None)
             .context("Resampling failed")?;
         output.extend_from_slice(&resampled[0]);
         input_pos += frames_needed;
@@ -135,7 +137,8 @@ fn resample_to_16khz(samples: &[f32], input_rate: u32) -> Result<Vec<f32>> {
         let mut padded = remaining.to_vec();
         padded.resize(frames_needed, 0.0);
         let input_chunk: Vec<Vec<f32>> = vec![padded];
-        let resampled = resampler.process(&input_chunk, None)
+        let resampled = resampler
+            .process(&input_chunk, None)
             .context("Resampling final chunk failed")?;
 
         // Calculate how many output samples we actually need

@@ -469,7 +469,6 @@ diarization-advanced = ["pyannote-rs"]
 - ⚠️ parakeet-rs ще молодий проект (v0.3)
 
 ## Related Files
-- [docs/backlog/conference-recording.md](../backlog/conference-recording.md) - Feature description
 - [docs/research/speaker-diarization-test.md](../research/speaker-diarization-test.md) - Testing plan
 - [docs/adr/003-loopback-recording-approach.md](003-loopback-recording-approach.md) - Loopback recording ADR
 - [src/whisper.rs](../../src/whisper.rs) - Current Whisper integration

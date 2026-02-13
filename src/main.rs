@@ -128,8 +128,7 @@ fn load_diarization_model(
     let model_path = if let Some(ref path) = cfg.sortformer_model_path {
         Some(PathBuf::from(path))
     } else {
-        let default_path =
-            sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
+        let default_path = sortformer_models_dir().join("diar_streaming_sortformer_4spk-v2.1.onnx");
         if default_path.exists() {
             Some(default_path)
         } else {
@@ -151,15 +150,15 @@ fn load_diarization_model(
 fn run_gui() -> Result<()> {
     use app::config::{load_config, Config};
     use app::context::AppContext;
-    use transcription::diarization::DiarizationEngine;
-    use transcription::TranscriptionService;
     use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
     use gtk4::{glib, prelude::*, Application};
     use history::{load_history, save_history, History};
     use infrastructure::hotkeys::HotkeyManager;
-    use std::sync::Arc;
-    use parking_lot::Mutex;
     use infrastructure::tray::{DictationTray, TrayAction};
+    use parking_lot::Mutex;
+    use std::sync::Arc;
+    use transcription::diarization::DiarizationEngine;
+    use transcription::TranscriptionService;
 
     gtk4::init()?;
 

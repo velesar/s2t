@@ -1,7 +1,7 @@
 use async_channel::Receiver;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 pub(crate) const WHISPER_SAMPLE_RATE: u32 = 16000;
 
@@ -212,6 +212,9 @@ mod tests {
 
         // The thread should exit within a reasonable time
         let result = thread_handle.join().unwrap();
-        assert!(result, "Thread should have exited after Drop set is_recording to false");
+        assert!(
+            result,
+            "Thread should have exited after Drop set is_recording to false"
+        );
     }
 }

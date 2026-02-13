@@ -3,7 +3,7 @@
 **Project:** Voice Dictation (s2t)
 **Initial Audit Date:** 2026-01-28
 **Last Updated:** 2026-01-30 (v0.3.0 — Post-Audit Update)
-**Methodology:** Architecture Fitness Functions (see `docs/architecture-fitness-methodology.md`)
+**Methodology:** Architecture Fitness Functions (see `fitness-methodology.md`)
 
 ---
 

@@ -135,12 +135,10 @@ fn spawn_segment_pipeline(
     let denoise_enabled = ctx.denoise_enabled();
 
     // Channel for transcription results: (segment_id, Result<text>)
-    let (result_tx, result_rx) =
-        async_channel::unbounded::<(usize, Result<String, String>)>();
+    let (result_tx, result_rx) = async_channel::unbounded::<(usize, Result<String, String>)>();
 
     // Shared storage for segment indicator labels
-    let segment_labels: Rc<RefCell<HashMap<usize, Label>>> =
-        Rc::new(RefCell::new(HashMap::new()));
+    let segment_labels: Rc<RefCell<HashMap<usize, Label>>> = Rc::new(RefCell::new(HashMap::new()));
 
     // Spawn segment receiver that launches parallel transcriptions
     let ctx_for_segments = ctx.clone();
@@ -165,8 +163,7 @@ fn spawn_segment_pipeline(
                 .as_secs_f32();
             let duration_text = format!("{:.1}s", duration_secs);
 
-            let indicator =
-                Label::new(Some(&format!("{} {}", SEGMENT_PROCESSING, duration_text)));
+            let indicator = Label::new(Some(&format!("{} {}", SEGMENT_PROCESSING, duration_text)));
             indicator.add_css_class("segment-processing");
             ui_for_segments.segment_indicators_box.append(&indicator);
             segment_labels_for_receiver
@@ -238,10 +235,7 @@ fn spawn_segment_pipeline(
                     }
                     Err(ref err) => {
                         failed_count += 1;
-                        eprintln!(
-                            "Помилка транскрипції сегменту {}: {}",
-                            next_segment_id, err
-                        );
+                        eprintln!("Помилка транскрипції сегменту {}: {}", next_segment_id, err);
                     }
                     _ => {} // Ok but empty — already logged by the worker thread
                 }
@@ -441,8 +435,7 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
         } else if was_cancelled {
             ui.base.set_status("Скасовано (нічого не оброблено)");
         } else if was_timed_out {
-            ui.base
-                .set_status("Тайм-аут обробки (нічого не оброблено)");
+            ui.base.set_status("Тайм-аут обробки (нічого не оброблено)");
         } else {
             ui.base.set_status("Не вдалося розпізнати мову");
         }

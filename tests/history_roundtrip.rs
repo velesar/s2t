@@ -44,7 +44,11 @@ fn history_persistence_roundtrip() {
         120.0,
         "en".to_string(),
         Some("/tmp/conference_2026-01-30.wav".to_string()),
-        vec!["Alice".to_string(), "Bob".to_string(), "Charlie".to_string()],
+        vec![
+            "Alice".to_string(),
+            "Bob".to_string(),
+            "Charlie".to_string(),
+        ],
     ));
     history.add(HistoryEntry::new(
         "Текст українською мовою з UTF-8 символами: їжак, ґанок".to_string(),
@@ -62,9 +66,7 @@ fn history_persistence_roundtrip() {
 
     // Verify entry count and ordering (newest first)
     assert_eq!(loaded.entries.len(), 3);
-    assert!(loaded.entries[0]
-        .text
-        .contains("UTF-8")); // last added = first in list
+    assert!(loaded.entries[0].text.contains("UTF-8")); // last added = first in list
     assert!(loaded.entries[1].text.contains("Conference"));
     assert_eq!(loaded.entries[2].text, "Simple dictation");
 

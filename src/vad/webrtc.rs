@@ -47,7 +47,6 @@ impl WebRtcVoiceDetector {
             silence_threshold_ms,
         })
     }
-
 }
 
 impl Default for WebRtcVoiceDetector {

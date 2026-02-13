@@ -1,8 +1,7 @@
 use crate::app::config::{save_config, Config};
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton,
-    Window,
+    Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton, Window,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -202,9 +201,7 @@ fn build_recording_section(parent: &GtkBox, cfg: &Config) -> RecordingWidgets {
 
     if !crate::infrastructure::models::is_sortformer_model_downloaded() {
         diarization_combo.set_sensitive(false);
-        let info = Label::new(Some(
-            "(Завантажте модель Sortformer через меню 'Моделі')",
-        ));
+        let info = Label::new(Some("(Завантажте модель Sortformer через меню 'Моделі')"));
         info.add_css_class("dim-label");
         info.set_halign(Align::Start);
         parent.append(&info);
@@ -300,9 +297,7 @@ fn build_history_section(parent: &GtkBox, cfg: &Config) -> (SpinButton, SpinButt
     parent.append(&max_entries_label);
 
     let max_entries_spin = SpinButton::new(
-        Some(&gtk4::Adjustment::new(
-            500.0, 10.0, 10000.0, 1.0, 10.0, 0.0,
-        )),
+        Some(&gtk4::Adjustment::new(500.0, 10.0, 10000.0, 1.0, 10.0, 0.0)),
         1.0,
         0,
     );
@@ -316,9 +311,7 @@ fn build_history_section(parent: &GtkBox, cfg: &Config) -> (SpinButton, SpinButt
     parent.append(&max_age_label);
 
     let max_age_spin = SpinButton::new(
-        Some(&gtk4::Adjustment::new(
-            90.0, 1.0, 3650.0, 1.0, 10.0, 0.0,
-        )),
+        Some(&gtk4::Adjustment::new(90.0, 1.0, 3650.0, 1.0, 10.0, 0.0)),
         1.0,
         0,
     );

@@ -159,10 +159,7 @@ impl Config {
             || self.default_model.contains('\\')
             || self.default_model.contains("..")
         {
-            bail!(
-                "Неприпустиме ім'я моделі: {}",
-                self.default_model
-            );
+            bail!("Неприпустиме ім'я моделі: {}", self.default_model);
         }
 
         // Clamp numeric fields to sane ranges

@@ -53,8 +53,7 @@ impl AudioChunker {
         }
 
         // Create VAD and scan for silence regions
-        let vad = create_vad(&self.config.vad)
-            .context("Failed to create VAD for chunking")?;
+        let vad = create_vad(&self.config.vad).context("Failed to create VAD for chunking")?;
         let finder = SplitFinder::new(self.config.split.clone());
         let silences = finder.scan_silences(samples, vad.as_ref());
 
@@ -102,7 +101,9 @@ impl AudioChunker {
                     // Next chunk starts with overlap
                     pos = sample.saturating_sub(overlap_samples);
                     // Record overlap for the next chunk
-                    if let Some(next_overlap) = chunks.last().map(|c| c.end_sample.saturating_sub(pos)) {
+                    if let Some(next_overlap) =
+                        chunks.last().map(|c| c.end_sample.saturating_sub(pos))
+                    {
                         // Will be set on the next chunk when it's created
                         // Store temporarily — applied below
                         if pos < samples.len() {
@@ -127,7 +128,9 @@ impl AudioChunker {
         // Fix up leading overlap for chunks after force-splits
         for i in 1..chunks.len() {
             if chunks[i - 1].has_overlap {
-                let overlap = chunks[i - 1].end_sample.saturating_sub(chunks[i].start_sample);
+                let overlap = chunks[i - 1]
+                    .end_sample
+                    .saturating_sub(chunks[i].start_sample);
                 chunks[i].leading_overlap_samples = overlap;
             }
         }
@@ -164,10 +167,8 @@ impl AudioChunker {
                 (chunk.end_sample - chunk.start_sample) as f64
                     / self.config.split.sample_rate as f64
             );
-            let text = backend.transcribe(
-                &samples[chunk.start_sample..chunk.end_sample],
-                language,
-            )?;
+            let text =
+                backend.transcribe(&samples[chunk.start_sample..chunk.end_sample], language)?;
             texts.push(text.trim().to_string());
         }
 
@@ -314,7 +315,11 @@ mod tests {
         let audio = vec![0.5_f32; 16000 * 15];
         let chunks = chunker.segment(&audio).unwrap();
 
-        assert!(chunks.len() > 1, "Expected multiple chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() > 1,
+            "Expected multiple chunks, got {}",
+            chunks.len()
+        );
         // All audio should be covered
         assert_eq!(chunks[0].start_sample, 0);
         assert_eq!(chunks.last().unwrap().end_sample, audio.len());
@@ -376,9 +381,7 @@ mod tests {
         let backend = MockTranscription::new();
         let audio = vec![0.5_f32; 16000 * 5]; // 5s — single chunk
 
-        let result = chunker
-            .transcribe_chunked(&audio, "en", &backend)
-            .unwrap();
+        let result = chunker.transcribe_chunked(&audio, "en", &backend).unwrap();
         assert!(result.contains("chunk:"));
         assert_eq!(backend.call_count(), 1);
     }
@@ -396,9 +399,7 @@ mod tests {
         let backend = MockTranscription::new();
         let audio = vec![0.5_f32; 16000 * 15]; // 15s — should be split
 
-        let result = chunker
-            .transcribe_chunked(&audio, "en", &backend)
-            .unwrap();
+        let result = chunker.transcribe_chunked(&audio, "en", &backend).unwrap();
         assert!(backend.call_count() > 1);
         assert!(result.contains("chunk:"));
     }

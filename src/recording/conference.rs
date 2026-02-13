@@ -1,9 +1,9 @@
-use crate::recording::microphone::AudioRecorder;
-use crate::recording::loopback::LoopbackRecorder;
 use crate::domain::types::ConferenceRecording;
+use crate::recording::loopback::LoopbackRecorder;
+use crate::recording::microphone::AudioRecorder;
 use anyhow::{Context, Result};
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub(crate) struct ConferenceRecorder {

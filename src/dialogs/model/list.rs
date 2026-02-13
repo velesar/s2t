@@ -2,7 +2,9 @@
 
 use super::{DownloadProgress, DownloadState, ModelRowContext, RowWidgets};
 use crate::app::config::save_config;
-use crate::infrastructure::models::{delete_model, download_model, format_size, get_model_path, is_model_downloaded};
+use crate::infrastructure::models::{
+    delete_model, download_model, format_size, get_model_path, is_model_downloaded,
+};
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Box as GtkBox, Button, Label, ListBoxRow, Orientation, ProgressBar};
 

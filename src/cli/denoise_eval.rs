@@ -96,18 +96,19 @@ pub fn run(args: DenoiseEvalArgs) -> Result<()> {
         "  Peak: {:.4} -> {:.4}",
         signal.original_peak, signal.denoised_peak
     );
-    eprintln!(
-        "  Length diff: {} samples",
-        signal.length_diff_samples
-    );
+    eprintln!("  Length diff: {} samples", signal.length_diff_samples);
 
     // 4. Write denoised WAV
     let output_dir = args
         .output_dir
         .as_deref()
         .unwrap_or_else(|| args.input.parent().unwrap_or(Path::new(".")));
-    std::fs::create_dir_all(output_dir)
-        .with_context(|| format!("Failed to create output directory: {}", output_dir.display()))?;
+    std::fs::create_dir_all(output_dir).with_context(|| {
+        format!(
+            "Failed to create output directory: {}",
+            output_dir.display()
+        )
+    })?;
 
     let stem = args
         .input
@@ -181,10 +182,7 @@ fn rms(samples: &[f32]) -> f32 {
 }
 
 fn peak(samples: &[f32]) -> f32 {
-    samples
-        .iter()
-        .map(|s| s.abs())
-        .fold(0.0f32, f32::max)
+    samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max)
 }
 
 /// Compute VAD speech percentage for both WebRTC and Silero on original and denoised audio.
@@ -199,14 +197,8 @@ fn compute_vad_metrics(original: &[f32], denoised: &[f32]) -> Result<VadMetrics>
     let silero_orig = speech_percentage::<SileroVoiceDetector>(original, 512)?;
     let silero_den = speech_percentage::<SileroVoiceDetector>(denoised, 512)?;
 
-    eprintln!(
-        "  WebRTC: {:.1}% -> {:.1}%",
-        webrtc_orig, webrtc_den
-    );
-    eprintln!(
-        "  Silero: {:.1}% -> {:.1}%",
-        silero_orig, silero_den
-    );
+    eprintln!("  WebRTC: {:.1}% -> {:.1}%", webrtc_orig, webrtc_den);
+    eprintln!("  Silero: {:.1}% -> {:.1}%", silero_orig, silero_den);
 
     Ok(VadMetrics {
         webrtc: VadResult {
@@ -309,10 +301,7 @@ fn compute_transcription_metrics(
     eprintln!("  Loading model: {}", model_path.display());
     let service = TranscriptionService::with_model(&model_path.to_string_lossy())?;
 
-    let language = args
-        .language
-        .as_deref()
-        .unwrap_or(&config.language);
+    let language = args.language.as_deref().unwrap_or(&config.language);
 
     eprintln!("  Transcribing original...");
     let original_text = service.transcribe(original, language)?;

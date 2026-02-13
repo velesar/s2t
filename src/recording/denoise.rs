@@ -8,8 +8,8 @@
 use crate::domain::traits::AudioDenoising;
 use anyhow::{Context, Result};
 use nnnoiseless::DenoiseState;
-use rubato::{FftFixedIn, Resampler};
 use parking_lot::Mutex;
+use rubato::{FftFixedIn, Resampler};
 
 /// Input sample rate (Whisper pipeline rate)
 const INPUT_SAMPLE_RATE: usize = 16000;
@@ -84,9 +84,7 @@ impl DenoiseInner {
 
         while pos + frames_needed <= samples.len() {
             let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
-            let resampled = resampler
-                .process(&chunk, None)
-                .context("Upsample failed")?;
+            let resampled = resampler.process(&chunk, None).context("Upsample failed")?;
             output.extend_from_slice(&resampled[0]);
             pos += frames_needed;
         }
@@ -101,8 +99,7 @@ impl DenoiseInner {
                 .process(&chunk, None)
                 .context("Upsample final chunk failed")?;
             let remaining_duration = remaining.len() as f64 / INPUT_SAMPLE_RATE as f64;
-            let expected =
-                (remaining_duration * NNNOISELESS_SAMPLE_RATE as f64).ceil() as usize;
+            let expected = (remaining_duration * NNNOISELESS_SAMPLE_RATE as f64).ceil() as usize;
             let actual = expected.min(resampled[0].len());
             output.extend_from_slice(&resampled[0][..actual]);
         }
@@ -148,7 +145,10 @@ impl DenoiseInner {
             return Ok(Vec::new());
         }
 
-        let resampler = self.downsampler.as_mut().expect("downsampler not initialized");
+        let resampler = self
+            .downsampler
+            .as_mut()
+            .expect("downsampler not initialized");
         let mut output = Vec::with_capacity(samples.len() / 3);
         let mut pos = 0;
         let frames_needed = resampler.input_frames_next();
@@ -171,8 +171,7 @@ impl DenoiseInner {
             let resampled = resampler
                 .process(&chunk, None)
                 .context("Downsample final chunk failed")?;
-            let remaining_duration =
-                remaining.len() as f64 / NNNOISELESS_SAMPLE_RATE as f64;
+            let remaining_duration = remaining.len() as f64 / NNNOISELESS_SAMPLE_RATE as f64;
             let expected = (remaining_duration * INPUT_SAMPLE_RATE as f64).ceil() as usize;
             let actual = expected.min(resampled[0].len());
             output.extend_from_slice(&resampled[0][..actual]);
@@ -346,8 +345,12 @@ mod tests {
         // Output should be approximately the same length
         // (resampling may introduce slight length differences)
         let ratio = output.len() as f64 / input.len() as f64;
-        assert!(ratio > 0.95 && ratio < 1.05,
-            "Output length {} too different from input length {}", output.len(), input.len());
+        assert!(
+            ratio > 0.95 && ratio < 1.05,
+            "Output length {} too different from input length {}",
+            output.len(),
+            input.len()
+        );
     }
 
     #[test]

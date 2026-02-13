@@ -161,9 +161,7 @@ impl TranscriptionService {
             mixed.push((mic_val + loopback_val) / 2.0);
         }
 
-        let segments = engine
-            .diarize(&mixed)
-            .context("Помилка diarization")?;
+        let segments = engine.diarize(&mixed).context("Помилка diarization")?;
 
         if segments.is_empty() {
             return self.transcribe_channel_diarization(mic_samples, loopback_samples, language);

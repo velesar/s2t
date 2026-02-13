@@ -1,14 +1,14 @@
 //! CLI transcription command implementation.
 
+use crate::app::config::{load_config, models_dir, sortformer_models_dir, tdt_models_dir, Config};
 use crate::cli::args::{DiarizationMethod, OutputFormat, SttBackend, TranscribeArgs};
 use crate::cli::wav_reader::{prepare_for_whisper, read_wav, PreparedAudio};
-use crate::app::config::{load_config, models_dir, sortformer_models_dir, tdt_models_dir, Config};
+use crate::domain::traits::Transcription;
+use crate::infrastructure::models::{get_model_path, list_downloaded_models};
 use crate::recording::split::SplitConfig;
 use crate::transcription::chunker::{AudioChunker, ChunkerConfig};
 use crate::transcription::diarization::DiarizationEngine;
-use crate::infrastructure::models::{get_model_path, list_downloaded_models};
 use crate::transcription::TranscriptionService;
-use crate::domain::traits::Transcription;
 use crate::vad::{VadConfig, VadEngine};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
@@ -64,15 +64,18 @@ struct TranscriptionMetrics {
 /// Run the transcribe command.
 pub fn run(args: TranscribeArgs) -> Result<()> {
     // Handle deprecated --diarize flag
-    let effective_diarization = if args.diarize && matches!(args.diarization, DiarizationMethod::None) {
-        eprintln!("Warning: --diarize is deprecated, use --diarization=channel instead");
-        DiarizationMethod::Channel
-    } else {
-        args.diarization
-    };
+    let effective_diarization =
+        if args.diarize && matches!(args.diarization, DiarizationMethod::None) {
+            eprintln!("Warning: --diarize is deprecated, use --diarization=channel instead");
+            DiarizationMethod::Channel
+        } else {
+            args.diarization
+        };
 
     // Validate backend + diarization combinations
-    if matches!(args.backend, SttBackend::Tdt) && !matches!(effective_diarization, DiarizationMethod::None) {
+    if matches!(args.backend, SttBackend::Tdt)
+        && !matches!(effective_diarization, DiarizationMethod::None)
+    {
         bail!("TDT backend does not support diarization. TDT is a pure STT backend without speaker identification. Use --diarization=none with --backend=tdt");
     }
 
@@ -91,10 +94,7 @@ pub fn run(args: TranscribeArgs) -> Result<()> {
     let denoise = args.denoise || config.denoise_enabled;
     let prepared = prepare_for_whisper(&audio, args.channel, denoise)?;
 
-    let language = args
-        .language
-        .as_deref()
-        .unwrap_or(&config.language);
+    let language = args.language.as_deref().unwrap_or(&config.language);
 
     // 4. Run transcription based on backend
     let start_time = Instant::now();
@@ -108,7 +108,14 @@ pub fn run(args: TranscribeArgs) -> Result<()> {
                 "Transcribing (backend: whisper, diarization: {:?}, language: {})...",
                 effective_diarization, language
             );
-            transcribe_with_whisper(&service, &prepared, language, &args, effective_diarization, &config)?
+            transcribe_with_whisper(
+                &service,
+                &prepared,
+                language,
+                &args,
+                effective_diarization,
+                &config,
+            )?
         }
         SttBackend::Tdt => {
             let model_dir = resolve_tdt_model(&args, &config)?;
@@ -125,7 +132,8 @@ pub fn run(args: TranscribeArgs) -> Result<()> {
             TranscriptionResult {
                 text: text.trim().to_string(),
                 segments: Vec::new(),
-                model_name: model_dir.file_name()
+                model_name: model_dir
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| "tdt".to_string()),
             }
@@ -287,7 +295,10 @@ fn resolve_sortformer_model(args: &TranscribeArgs, config: &Config) -> Result<Pa
         if path.exists() {
             return Ok(path);
         }
-        eprintln!("Warning: configured Sortformer model '{}' not found", sf_path);
+        eprintln!(
+            "Warning: configured Sortformer model '{}' not found",
+            sf_path
+        );
     }
 
     // 3. Default location
@@ -319,7 +330,10 @@ fn transcribe_with_whisper(
     diarization: DiarizationMethod,
     config: &Config,
 ) -> Result<TranscriptionResult> {
-    let model_name = args.model.clone().unwrap_or_else(|| config.default_model.clone());
+    let model_name = args
+        .model
+        .clone()
+        .unwrap_or_else(|| config.default_model.clone());
 
     match diarization {
         DiarizationMethod::None => {
@@ -419,7 +433,9 @@ fn transcribe_sortformer_diarization(
 
     // Initialize and load diarization engine
     let mut engine = DiarizationEngine::new(Some(sortformer_path));
-    engine.load_model().context("Failed to load Sortformer model")?;
+    engine
+        .load_model()
+        .context("Failed to load Sortformer model")?;
 
     if !engine.is_available() {
         bail!("Sortformer diarization not available. Load the Sortformer model first.");

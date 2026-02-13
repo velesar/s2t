@@ -12,9 +12,9 @@ use crate::recording::split::SplitConfig;
 use crate::recording::split::SplitFinder;
 use crate::vad::{create_vad, VadConfig, VadEngine};
 use async_channel::Sender;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 
 /// Configuration for audio segmentation.
@@ -185,9 +185,7 @@ impl SegmentationMonitor {
                             *counter
                         };
 
-                        let start_time = last_segment_time
-                            .lock()
-                            .unwrap_or_else(Instant::now);
+                        let start_time = last_segment_time.lock().unwrap_or_else(Instant::now);
                         let end_time = Instant::now();
 
                         let segment = AudioSegment {
@@ -253,10 +251,7 @@ impl SegmentationMonitor {
             if let Some(ref tx) = *self.segment_tx.lock() {
                 let segment = AudioSegment {
                     samples: remaining,
-                    start_time: self
-                        .last_segment_time
-                        .lock()
-                        .unwrap_or_else(Instant::now),
+                    start_time: self.last_segment_time.lock().unwrap_or_else(Instant::now),
                     end_time: Instant::now(),
                     segment_id,
                 };

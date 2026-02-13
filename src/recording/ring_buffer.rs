@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Internal state for ring buffer, consolidated into single mutex
 struct RingBufferState {

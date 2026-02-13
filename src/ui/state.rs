@@ -120,7 +120,6 @@ impl UIContext {
             spinner,
         }
     }
-
 }
 
 impl UIStateUpdater for UIContext {

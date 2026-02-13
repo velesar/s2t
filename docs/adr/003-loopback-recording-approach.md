@@ -394,7 +394,6 @@ src/
 - ⚠️ Різні версії PipeWire на різних дистрибутивах
 
 ## Related Files
-- [docs/backlog/conference-recording.md](../backlog/conference-recording.md) - Feature description
 - [docs/research/loopback-recording-test.md](../research/loopback-recording-test.md) - Test results
 - [docs/adr/004-speaker-diarization-approach.md](004-speaker-diarization-approach.md) - Speaker diarization ADR
 - [src/audio.rs](../../src/audio.rs) - Current audio recording implementation

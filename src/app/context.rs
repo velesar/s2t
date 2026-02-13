@@ -6,16 +6,16 @@
 
 use crate::app::channels::UIChannels;
 use crate::app::config::Config;
-use crate::transcription::diarization::DiarizationEngine;
-use crate::history::History;
-use crate::recording::service::AudioService;
-use crate::recording::segmentation::SegmentationConfig;
-use crate::transcription::TranscriptionService;
 use crate::domain::traits::{ConfigProvider, Transcription};
+use crate::history::History;
+use crate::recording::segmentation::SegmentationConfig;
+use crate::recording::service::AudioService;
+use crate::transcription::diarization::DiarizationEngine;
+use crate::transcription::TranscriptionService;
 use crate::vad::VadEngine;
 use anyhow::Result;
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Central application context bundling all services and shared state.
 ///
@@ -72,8 +72,7 @@ impl AppContext {
             }
         };
 
-        let audio =
-            AudioService::new(seg_config).unwrap_or_else(|_| AudioService::new_default());
+        let audio = AudioService::new(seg_config).unwrap_or_else(|_| AudioService::new_default());
 
         Ok(Self {
             audio: Arc::new(audio),

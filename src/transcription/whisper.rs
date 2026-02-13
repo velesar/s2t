@@ -46,7 +46,6 @@ impl WhisperSTT {
 
         Ok(text.trim().to_string())
     }
-
 }
 
 // === Trait Implementation ===

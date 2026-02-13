@@ -7,18 +7,18 @@ mod download;
 mod list;
 
 use crate::app::config::Config;
-use crate::infrastructure::models::get_available_models;
 use crate::domain::traits::Transcription;
+use crate::infrastructure::models::get_available_models;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, SelectionMode,
     Separator, Window,
 };
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 struct RowWidgets {
     indicator: Label,

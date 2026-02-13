@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use async_channel::Receiver;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use parking_lot::Mutex;
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -153,8 +153,7 @@ impl AudioRecorder {
                     chunk_buf[chunk_pos..input_len].fill(0.0);
                     let input = vec![chunk_buf];
                     if let Ok(output) = resampler.process(&input, None) {
-                        let output_len = (chunk_pos as f64
-                            * resampler.output_frames_next() as f64
+                        let output_len = (chunk_pos as f64 * resampler.output_frames_next() as f64
                             / input_len as f64) as usize;
                         samples
                             .lock()

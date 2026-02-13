@@ -77,8 +77,10 @@ impl Default for VadConfig {
 pub fn create_vad(config: &VadConfig) -> Result<Box<dyn VoiceDetection>> {
     match config.engine {
         VadEngine::WebRTC => {
-            let vad =
-                WebRtcVoiceDetector::with_thresholds(config.silence_threshold_ms, config.min_speech_ms)?;
+            let vad = WebRtcVoiceDetector::with_thresholds(
+                config.silence_threshold_ms,
+                config.min_speech_ms,
+            )?;
             Ok(Box::new(vad))
         }
         VadEngine::Silero => {
@@ -91,7 +93,6 @@ pub fn create_vad(config: &VadConfig) -> Result<Box<dyn VoiceDetection>> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

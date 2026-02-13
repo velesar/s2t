@@ -6,9 +6,9 @@
 use crate::domain::traits::HistoryRepository;
 use async_channel::Receiver;
 use chrono::{DateTime, Utc};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::time::Instant;
 use uuid::Uuid;
 

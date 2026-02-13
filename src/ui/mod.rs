@@ -1,8 +1,8 @@
 pub mod conference;
 pub mod conference_file;
+mod dispatch;
 pub mod mic;
 pub(crate) mod shared;
-mod dispatch;
 pub mod state;
 mod widgets;
 
@@ -16,8 +16,8 @@ use crate::domain::traits::Transcription;
 use crate::domain::types::SharedHistory;
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow, Button, TextView};
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 
 pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let config = ctx.config.clone();

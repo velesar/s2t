@@ -78,10 +78,7 @@ impl SplitConfig {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SplitPoint {
     /// Split at a silence boundary (midpoint of the silence region).
-    Silence {
-        sample: usize,
-        tier: SplitTier,
-    },
+    Silence { sample: usize, tier: SplitTier },
     /// Force-split at max length with overlap.
     ForceSplit {
         sample: usize,
@@ -118,11 +115,7 @@ impl SplitFinder {
     ///
     /// Processes audio in VAD-frame-sized steps, tracking speech→silence
     /// transitions and recording each silence region.
-    pub fn scan_silences(
-        &self,
-        samples: &[f32],
-        vad: &dyn VoiceDetection,
-    ) -> Vec<SilenceRegion> {
+    pub fn scan_silences(&self, samples: &[f32], vad: &dyn VoiceDetection) -> Vec<SilenceRegion> {
         let frame_size = (self.config.sample_rate * VAD_FRAME_MS / 1000) as usize;
         let min_silence_samples =
             (self.config.sample_rate as usize * MIN_SILENCE_MS as usize) / 1000;
@@ -254,7 +247,6 @@ impl SplitFinder {
         // Delegate to VAD's speech-end detection
         vad.detect_speech_end(recent_samples).unwrap_or(false)
     }
-
 }
 
 #[cfg(test)]
@@ -500,7 +492,7 @@ mod tests {
         let sr = 16000;
         let mut audio = make_speech(sr * 2);
         audio.extend(make_silence(sr)); // 1s of silence at the end
-        // detect_speech_end checks last ~300ms for silence
+                                        // detect_speech_end checks last ~300ms for silence
         assert!(finder.should_split_streaming(&audio, &vad, Duration::from_secs(3)));
     }
 

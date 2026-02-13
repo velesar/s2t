@@ -105,7 +105,10 @@ fn cli_transcribe_missing_input() {
 #[test]
 fn cli_transcribe_nonexistent_file() {
     let output = voice_dictation_cmd()
-        .args(["transcribe", "/tmp/definitely_nonexistent_file_s2t_test.wav"])
+        .args([
+            "transcribe",
+            "/tmp/definitely_nonexistent_file_s2t_test.wav",
+        ])
         .output()
         .expect("failed to execute");
 
