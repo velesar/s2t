@@ -2,11 +2,14 @@
 /target/
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/settings.json
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 *.iml
 
 # OS
@@ -31,3 +34,11 @@ index.scip
 
 # AI Code Audit Agent artifacts
 .audit/
+
+# Codex CLI
+.codex/
+
+# Environment
+.env
+.env.local
+.env.*.local
