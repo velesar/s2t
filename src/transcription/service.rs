@@ -96,12 +96,7 @@ impl TranscriptionService {
         if diarization_method == "sortformer" {
             if let Some(engine) = diarization_engine {
                 if engine.is_available() {
-                    return self.transcribe_with_sortformer(
-                        mic_samples,
-                        loopback_samples,
-                        language,
-                        engine,
-                    );
+                    return self.transcribe_with_sortformer(mic_samples, loopback_samples, language, engine);
                 }
             }
         }
@@ -228,8 +223,8 @@ impl Transcription for TranscriptionService {
 
     fn load_model(&mut self, path: &Path) -> Result<()> {
         let path_str = path.to_string_lossy();
-        let whisper = WhisperSTT::new(&path_str)
-            .with_context(|| format!("Failed to load Whisper model from {}", path_str))?;
+        let whisper =
+            WhisperSTT::new(&path_str).with_context(|| format!("Failed to load Whisper model from {}", path_str))?;
         self.backend = TranscriptionBackend::Whisper(whisper);
         Ok(())
     }

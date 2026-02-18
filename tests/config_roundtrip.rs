@@ -36,10 +36,7 @@ fn config_save_load_roundtrip() {
     assert_eq!(loaded.continuous_mode, original.continuous_mode);
     assert_eq!(loaded.segment_interval_secs, original.segment_interval_secs);
     assert_eq!(loaded.use_vad, original.use_vad);
-    assert_eq!(
-        loaded.vad_silence_threshold_ms,
-        original.vad_silence_threshold_ms
-    );
+    assert_eq!(loaded.vad_silence_threshold_ms, original.vad_silence_threshold_ms);
     assert_eq!(loaded.vad_min_speech_ms, original.vad_min_speech_ms);
     assert_eq!(loaded.denoise_enabled, original.denoise_enabled);
     assert_eq!(loaded.vad_engine, original.vad_engine);
@@ -152,10 +149,7 @@ future_option = true
 #[test]
 fn config_empty_toml_fails() {
     let result: Result<Config, _> = toml::from_str("");
-    assert!(
-        result.is_err(),
-        "Empty TOML should fail due to missing required fields"
-    );
+    assert!(result.is_err(), "Empty TOML should fail due to missing required fields");
 }
 
 /// Config can be cloned without data loss.

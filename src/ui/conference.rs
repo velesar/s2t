@@ -18,8 +18,7 @@ use super::state::{ConferenceUI, RecordingContext};
 pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &ConferenceUI) {
     // Check if model is loaded
     if !ctx.is_model_loaded() {
-        ui.base
-            .set_status("Модель не завантажено. Натисніть 'Моделі'.");
+        ui.base.set_status("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -83,11 +82,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
         // Save audio file
         let filename = generate_recording_filename();
         let file_path = recording_path(&filename);
-        if let Err(e) = save_recording(
-            &recording.mic_samples,
-            &recording.loopback_samples,
-            &file_path,
-        ) {
+        if let Err(e) = save_recording(&recording.mic_samples, &recording.loopback_samples, &file_path) {
             eprintln!("Помилка збереження аудіо файлу: {}", e);
         }
 

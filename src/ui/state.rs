@@ -160,8 +160,7 @@ impl UIStateUpdater for UIContext {
     fn update_timer(&self, secs: u64) {
         let minutes = secs / 60;
         let seconds = secs % 60;
-        self.timer_label
-            .set_text(&format!("{:02}:{:02}", minutes, seconds));
+        self.timer_label.set_text(&format!("{:02}:{:02}", minutes, seconds));
     }
 
     fn get_result_text(&self) -> String {

@@ -155,10 +155,7 @@ impl Config {
     /// and rejects clearly invalid inputs.
     pub fn validate(&mut self) -> Result<()> {
         // default_model must not contain path separators
-        if self.default_model.contains('/')
-            || self.default_model.contains('\\')
-            || self.default_model.contains("..")
-        {
+        if self.default_model.contains('/') || self.default_model.contains('\\') || self.default_model.contains("..") {
             bail!("Неприпустиме ім'я моделі: {}", self.default_model);
         }
 
@@ -232,11 +229,10 @@ pub fn load_config() -> Result<Config> {
         return Ok(Config::default());
     }
 
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Не вдалося прочитати конфіг: {}", path.display()))?;
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("Не вдалося прочитати конфіг: {}", path.display()))?;
 
-    let mut config: Config =
-        toml::from_str(&content).with_context(|| "Не вдалося розпарсити конфіг")?;
+    let mut config: Config = toml::from_str(&content).with_context(|| "Не вдалося розпарсити конфіг")?;
     config.validate()?;
     Ok(config)
 }
@@ -256,14 +252,12 @@ pub fn set_owner_only_permissions(_path: &std::path::Path) -> Result<()> {
 
 pub fn save_config(config: &Config) -> Result<()> {
     let dir = config_dir();
-    fs::create_dir_all(&dir)
-        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
+    fs::create_dir_all(&dir).with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
 
     let path = config_path();
     let content = toml::to_string_pretty(config).context("Не вдалося серіалізувати конфіг")?;
 
-    fs::write(&path, &content)
-        .with_context(|| format!("Не вдалося записати конфіг: {}", path.display()))?;
+    fs::write(&path, &content).with_context(|| format!("Не вдалося записати конфіг: {}", path.display()))?;
 
     set_owner_only_permissions(&path)?;
 
@@ -381,22 +375,28 @@ mod tests {
 
     #[test]
     fn test_validate_rejects_path_traversal_in_model() {
-        let mut config = Config::default();
-        config.default_model = "../../../etc/passwd".to_string();
+        let mut config = Config {
+            default_model: "../../../etc/passwd".to_string(),
+            ..Config::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validate_rejects_slash_in_model() {
-        let mut config = Config::default();
-        config.default_model = "subdir/model.bin".to_string();
+        let mut config = Config {
+            default_model: "subdir/model.bin".to_string(),
+            ..Config::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validate_clamps_segment_interval() {
-        let mut config = Config::default();
-        config.segment_interval_secs = 0;
+        let mut config = Config {
+            segment_interval_secs: 0,
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.segment_interval_secs, 1);
 
@@ -407,8 +407,10 @@ mod tests {
 
     #[test]
     fn test_validate_clamps_history_max_entries() {
-        let mut config = Config::default();
-        config.history_max_entries = 0;
+        let mut config = Config {
+            history_max_entries: 0,
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.history_max_entries, 1);
 
@@ -419,8 +421,10 @@ mod tests {
 
     #[test]
     fn test_validate_clamps_history_max_age_days() {
-        let mut config = Config::default();
-        config.history_max_age_days = 0;
+        let mut config = Config {
+            history_max_age_days: 0,
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.history_max_age_days, 1);
 
@@ -431,8 +435,10 @@ mod tests {
 
     #[test]
     fn test_validate_clamps_silero_threshold() {
-        let mut config = Config::default();
-        config.silero_threshold = -0.5;
+        let mut config = Config {
+            silero_threshold: -0.5,
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.silero_threshold, 0.0);
 
@@ -443,24 +449,30 @@ mod tests {
 
     #[test]
     fn test_validate_resets_invalid_recording_mode() {
-        let mut config = Config::default();
-        config.recording_mode = "invalid_mode".to_string();
+        let mut config = Config {
+            recording_mode: "invalid_mode".to_string(),
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.recording_mode, "dictation");
     }
 
     #[test]
     fn test_validate_resets_invalid_stt_backend() {
-        let mut config = Config::default();
-        config.stt_backend = "openai".to_string();
+        let mut config = Config {
+            stt_backend: "openai".to_string(),
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.stt_backend, "whisper");
     }
 
     #[test]
     fn test_validate_resets_invalid_vad_engine() {
-        let mut config = Config::default();
-        config.vad_engine = "deep_speech".to_string();
+        let mut config = Config {
+            vad_engine: "deep_speech".to_string(),
+            ..Config::default()
+        };
         config.validate().unwrap();
         assert_eq!(config.vad_engine, "webrtc");
     }
@@ -468,22 +480,28 @@ mod tests {
     #[test]
     fn test_validate_accepts_valid_enum_values() {
         for mode in ["dictation", "conference", "conference_file"] {
-            let mut config = Config::default();
-            config.recording_mode = mode.to_string();
+            let mut config = Config {
+                recording_mode: mode.to_string(),
+                ..Config::default()
+            };
             config.validate().unwrap();
             assert_eq!(config.recording_mode, mode);
         }
 
         for backend in ["whisper", "tdt"] {
-            let mut config = Config::default();
-            config.stt_backend = backend.to_string();
+            let mut config = Config {
+                stt_backend: backend.to_string(),
+                ..Config::default()
+            };
             config.validate().unwrap();
             assert_eq!(config.stt_backend, backend);
         }
 
         for engine in ["webrtc", "silero"] {
-            let mut config = Config::default();
-            config.vad_engine = engine.to_string();
+            let mut config = Config {
+                vad_engine: engine.to_string(),
+                ..Config::default()
+            };
             config.validate().unwrap();
             assert_eq!(config.vad_engine, engine);
         }

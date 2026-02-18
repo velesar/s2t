@@ -73,9 +73,7 @@ impl AudioService {
         Self {
             mic,
             mic_samples,
-            segmentation: Some(Arc::new(SegmentationMonitor::new(
-                SegmentationConfig::default(),
-            ))),
+            segmentation: Some(Arc::new(SegmentationMonitor::new(SegmentationConfig::default()))),
             conference: Arc::new(ConferenceRecorder::new()),
         }
     }
@@ -127,9 +125,7 @@ impl AudioService {
 
     /// Check if speech is currently detected (for segmented mode UI).
     pub fn is_speech_detected(&self) -> bool {
-        self.segmentation
-            .as_ref()
-            .is_some_and(|seg| seg.is_speech_detected())
+        self.segmentation.as_ref().is_some_and(|seg| seg.is_speech_detected())
     }
 
     // === Conference Mode (unchanged) ===
@@ -206,9 +202,7 @@ mod tests {
         assert_eq!(recorded_samples.len(), num_samples);
 
         // Transcribe the recorded samples
-        let text = mock_transcriber
-            .transcribe(&recorded_samples, "uk")
-            .unwrap();
+        let text = mock_transcriber.transcribe(&recorded_samples, "uk").unwrap();
         assert_eq!(text, "Привіт, світе");
     }
 

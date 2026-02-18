@@ -502,4 +502,3 @@ Total tests: 11
 Failed tests: 2
 Results in: ./stt_comparison_results
 Total JSON files: 9
-

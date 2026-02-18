@@ -44,12 +44,7 @@ impl ConferenceRecorder {
 
         *self.start_time.lock() = None;
 
-        ConferenceRecording::new(
-            mic_samples,
-            loopback_samples,
-            mic_completion,
-            loopback_completion,
-        )
+        ConferenceRecording::new(mic_samples, loopback_samples, mic_completion, loopback_completion)
     }
 
     /// Get amplitude from microphone

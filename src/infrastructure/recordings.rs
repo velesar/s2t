@@ -7,15 +7,10 @@ use std::path::{Path, PathBuf};
 const SAMPLE_RATE: u32 = 16000;
 
 /// Save stereo WAV file with mic (left) and loopback (right) channels
-pub fn save_recording(
-    mic_samples: &[f32],
-    loopback_samples: &[f32],
-    output_path: &Path,
-) -> Result<()> {
+pub fn save_recording(mic_samples: &[f32], loopback_samples: &[f32], output_path: &Path) -> Result<()> {
     // Ensure directory exists
     if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Не вдалося створити директорію: {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| format!("Не вдалося створити директорію: {}", parent.display()))?;
     }
 
     // Create WAV writer
@@ -44,9 +39,7 @@ pub fn save_recording(
             .context("Не вдалося записати зразок системного аудіо")?;
     }
 
-    writer
-        .finalize()
-        .context("Не вдалося завершити запис WAV файлу")?;
+    writer.finalize().context("Не вдалося завершити запис WAV файлу")?;
 
     Ok(())
 }
@@ -65,7 +58,6 @@ pub fn recording_path(filename: &str) -> PathBuf {
 /// Ensure recordings directory exists
 pub fn ensure_recordings_dir() -> Result<()> {
     let dir = crate::app::config::recordings_dir();
-    fs::create_dir_all(&dir)
-        .with_context(|| format!("Не вдалося створити директорію записів: {}", dir.display()))?;
+    fs::create_dir_all(&dir).with_context(|| format!("Не вдалося створити директорію записів: {}", dir.display()))?;
     Ok(())
 }

@@ -36,8 +36,7 @@ thread_local! {
 pub fn handle_start(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI) {
     // Check if model is loaded
     if !ctx.is_model_loaded() {
-        ui.base
-            .set_status("Модель не завантажено. Натисніть 'Моделі'.");
+        ui.base.set_status("Модель не завантажено. Натисніть 'Моделі'.");
         return;
     }
 
@@ -126,11 +125,7 @@ fn start_vad_loop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &MicUI) {
 }
 
 /// Spawn the parallel segment transcription pipeline.
-fn spawn_segment_pipeline(
-    ctx: &Arc<AppContext>,
-    ui: &MicUI,
-    segment_rx: async_channel::Receiver<AudioSegment>,
-) {
+fn spawn_segment_pipeline(ctx: &Arc<AppContext>, ui: &MicUI, segment_rx: async_channel::Receiver<AudioSegment>) {
     let language = ctx.language();
     let denoise_enabled = ctx.denoise_enabled();
 
@@ -157,29 +152,20 @@ fn spawn_segment_pipeline(
 
             SEGMENTS_SENT.with(|c| c.set(c.get() + 1));
 
-            let duration_secs = segment
-                .end_time
-                .duration_since(segment.start_time)
-                .as_secs_f32();
+            let duration_secs = segment.end_time.duration_since(segment.start_time).as_secs_f32();
             let duration_text = format!("{:.1}s", duration_secs);
 
             let indicator = Label::new(Some(&format!("{} {}", SEGMENT_PROCESSING, duration_text)));
             indicator.add_css_class("segment-processing");
             ui_for_segments.segment_indicators_box.append(&indicator);
-            segment_labels_for_receiver
-                .borrow_mut()
-                .insert(segment_id, indicator);
+            segment_labels_for_receiver.borrow_mut().insert(segment_id, indicator);
 
-            ui_for_segments
-                .base
-                .set_status(&format!("Сегмент {}...", segment_id));
+            ui_for_segments.base.set_status(&format!("Сегмент {}...", segment_id));
 
             std::thread::spawn(move || {
                 let segment_samples = maybe_denoise(&segment_samples, denoise_enabled);
                 let ts = ctx.transcription.lock();
-                let result = ts
-                    .transcribe(&segment_samples, &lang)
-                    .map_err(|e| e.to_string());
+                let result = ts.transcribe(&segment_samples, &lang).map_err(|e| e.to_string());
                 if let Ok(ref text) = result {
                     if text.is_empty() {
                         eprintln!(
@@ -418,10 +404,8 @@ fn handle_segmented_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Mic
             } else if was_timed_out {
                 let sent = SEGMENTS_SENT.with(|c| c.get());
                 let completed = SEGMENTS_COMPLETED.with(|c| c.get());
-                ui.base.set_status(&format!(
-                    "Тайм-аут обробки (оброблено {}/{})",
-                    completed, sent
-                ));
+                ui.base
+                    .set_status(&format!("Тайм-аут обробки (оброблено {}/{})", completed, sent));
             } else {
                 ui.base.set_status("Готово!");
             }

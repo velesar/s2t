@@ -11,8 +11,7 @@ use crate::domain::traits::Transcription;
 use crate::infrastructure::models::get_available_models;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, SelectionMode,
-    Separator, Window,
+    Align, Box as GtkBox, Button, Label, ListBox, Orientation, ScrolledWindow, SelectionMode, Separator, Window,
 };
 use parking_lot::Mutex;
 use std::cell::RefCell;
@@ -76,8 +75,7 @@ pub fn show_model_dialog(
     list_box.set_margin_start(12);
     list_box.set_margin_end(12);
 
-    let download_states: Rc<RefCell<HashMap<String, DownloadState>>> =
-        Rc::new(RefCell::new(HashMap::new()));
+    let download_states: Rc<RefCell<HashMap<String, DownloadState>>> = Rc::new(RefCell::new(HashMap::new()));
 
     let row_widgets: RowWidgetsMap = Rc::new(RefCell::new(HashMap::new()));
 

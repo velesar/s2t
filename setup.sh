@@ -45,7 +45,7 @@ if [ ! -f "$MODEL_FILE" ]; then
     echo ""
     echo "🧠 Завантаження моделі Whisper..."
     mkdir -p "$WHISPER_DIR"
-    
+
     echo "Яку модель завантажити?"
     echo "  1) tiny   (~75MB)  - швидка, базова якість"
     echo "  2) base   (~150MB) - швидка, прийнятна якість [рекомендовано]"
@@ -53,7 +53,7 @@ if [ ! -f "$MODEL_FILE" ]; then
     echo "  4) medium (~1.5GB) - повільна, відмінна якість"
     read -p "Виберіть (1-4) [2]: " choice
     choice=${choice:-2}
-    
+
     case $choice in
         1) MODEL="tiny" ;;
         2) MODEL="base" ;;
@@ -61,10 +61,10 @@ if [ ! -f "$MODEL_FILE" ]; then
         4) MODEL="medium" ;;
         *) MODEL="base" ;;
     esac
-    
+
     MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${MODEL}.bin"
     MODEL_FILE="$WHISPER_DIR/ggml-${MODEL}.bin"
-    
+
     echo "Завантаження $MODEL_URL ..."
     curl -L -o "$MODEL_FILE" "$MODEL_URL"
     echo -e "${GREEN}✓ Модель завантажено: $MODEL_FILE${NC}"
@@ -110,7 +110,7 @@ if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ]; then
     echo ""
     echo -e "${YELLOW}⚠️  Ви використовуєте GNOME.${NC}"
     echo "Для відображення іконки в треї потрібне розширення AppIndicator."
-    
+
     if ! gnome-extensions list 2>/dev/null | grep -q "appindicator"; then
         read -p "Встановити gnome-shell-extension-appindicator? (y/n) [y]: " install_ext
         install_ext=${install_ext:-y}

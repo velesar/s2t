@@ -77,23 +77,14 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
         w.segment_indicators_box.clone(),
         w.segment_row.clone(),
     );
-    let conference_ui = ConferenceUI::new(
-        ui_ctx,
-        w.mic_level_bar.clone(),
-        w.loopback_level_bar.clone(),
-    );
+    let conference_ui = ConferenceUI::new(ui_ctx, w.mic_level_bar.clone(), w.loopback_level_bar.clone());
 
     let mode_uis = ModeUIs {
         mic: mic_ui.clone(),
         conference: conference_ui.clone(),
     };
 
-    setup_record_button(
-        ctx.clone(),
-        rec_ctx.clone(),
-        mode_uis.clone(),
-        w.mode_combo.clone(),
-    );
+    setup_record_button(ctx.clone(), rec_ctx.clone(), mode_uis.clone(), w.mode_combo.clone());
 
     setup_copy_button(&w.copy_button, &w.result_text_view);
 
@@ -103,11 +94,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     let transcription_for_models = transcription.clone();
     w.models_button.connect_clicked(move |_| {
         if let Some(window) = window_weak.upgrade() {
-            show_model_dialog(
-                &window,
-                config_for_models.clone(),
-                transcription_for_models.clone(),
-            );
+            show_model_dialog(&window, config_for_models.clone(), transcription_for_models.clone());
         }
     });
 
@@ -148,11 +135,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     glib::spawn_future_local(async move {
         while open_models_rx.recv().await.is_ok() {
             if let Some(window) = window_for_models.upgrade() {
-                show_model_dialog(
-                    &window,
-                    config_for_tray.clone(),
-                    transcription_for_tray.clone(),
-                );
+                show_model_dialog(&window, config_for_tray.clone(), transcription_for_tray.clone());
             }
         }
     });
@@ -175,11 +158,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
     glib::spawn_future_local(async move {
         while open_settings_rx.recv().await.is_ok() {
             if let Some(window) = window_for_settings.upgrade() {
-                show_settings_dialog(
-                    &window,
-                    config_for_tray.clone(),
-                    reload_hotkeys_tx_for_tray.clone(),
-                );
+                show_settings_dialog(&window, config_for_tray.clone(), reload_hotkeys_tx_for_tray.clone());
             }
         }
     });
@@ -220,10 +199,7 @@ pub fn build_ui(app: &Application, ctx: Arc<AppContext>) {
             mic_ui_for_model.base.spinner.stop();
             mic_ui_for_model.base.spinner.set_visible(false);
             if ctx_for_model.is_model_loaded() {
-                mic_ui_for_model
-                    .base
-                    .status_label
-                    .set_text("Готово до запису");
+                mic_ui_for_model.base.status_label.set_text("Готово до запису");
                 mic_ui_for_model.base.button.set_sensitive(true);
             } else {
                 mic_ui_for_model

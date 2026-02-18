@@ -158,10 +158,7 @@ impl SegmentationMonitor {
                     let speech_now = vad.is_speech(&recent_samples).unwrap_or(false);
                     is_speech_detected.store(speech_now, Ordering::SeqCst);
 
-                    let elapsed = last_segment_time
-                        .lock()
-                        .map(|t| t.elapsed())
-                        .unwrap_or(Duration::ZERO);
+                    let elapsed = last_segment_time.lock().map(|t| t.elapsed()).unwrap_or(Duration::ZERO);
 
                     split_finder.should_split_streaming(&samples, vad.as_ref(), elapsed)
                 } else {

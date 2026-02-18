@@ -13,18 +13,18 @@ use cpal::traits::{DeviceTrait, HostTrait};
 
 fn list_audio_devices() {
     let host = cpal::default_host();
-    
+
     println!("=== Input Devices ===");
     for device in host.input_devices().unwrap() {
         let name = device.name().unwrap();
         println!("Input: {}", name);
-        
+
         if let Ok(config) = device.default_input_config() {
             println!("  Sample rate: {:?}", config.sample_rate());
             println!("  Channels: {}", config.channels());
         }
     }
-    
+
     println!("\n=== Output Devices ===");
     for device in host.output_devices().unwrap() {
         let name = device.name().unwrap();

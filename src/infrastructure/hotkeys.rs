@@ -12,8 +12,7 @@ pub struct HotkeyManager {
 
 impl HotkeyManager {
     pub fn new() -> Result<Self> {
-        let manager =
-            GlobalHotKeyManager::new().context("Не вдалося створити менеджер гарячих клавіш")?;
+        let manager = GlobalHotKeyManager::new().context("Не вдалося створити менеджер гарячих клавіш")?;
 
         Ok(Self {
             manager,
@@ -32,8 +31,7 @@ impl HotkeyManager {
         }
 
         // Parse hotkey string (e.g., "Control+Shift+Space")
-        let (modifiers, code) =
-            parse_hotkey(&config.hotkey).context("Не вдалося розпарсити гарячу клавішу")?;
+        let (modifiers, code) = parse_hotkey(&config.hotkey).context("Не вдалося розпарсити гарячу клавішу")?;
 
         let hotkey = HotKey::new(Some(modifiers), code);
         self.manager

@@ -81,9 +81,7 @@ impl Transcription for ParakeetSTT {
     }
 
     fn load_model(&mut self, _path: &Path) -> Result<()> {
-        anyhow::bail!(
-            "ParakeetSTT does not support runtime model loading; use TranscriptionService"
-        )
+        anyhow::bail!("ParakeetSTT does not support runtime model loading; use TranscriptionService")
     }
 }
 

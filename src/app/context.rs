@@ -169,12 +169,14 @@ mod tests {
 
     #[test]
     fn test_for_testing_config_accessors() {
-        let mut cfg = Config::default();
-        cfg.auto_copy = true;
-        cfg.auto_paste = false;
-        cfg.continuous_mode = true;
-        cfg.denoise_enabled = true;
-        cfg.diarization_method = "sortformer".to_string();
+        let cfg = Config {
+            auto_copy: true,
+            auto_paste: false,
+            continuous_mode: true,
+            denoise_enabled: true,
+            diarization_method: "sortformer".to_string(),
+            ..Config::default()
+        };
 
         let config = Arc::new(Mutex::new(cfg));
         let history = Arc::new(Mutex::new(History::default()));

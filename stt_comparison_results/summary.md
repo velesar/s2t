@@ -11,4 +11,3 @@
 | conference_2026-01-29_15-59-29 | whisper | ggml-small-q8_0.bin | channel | false | 2.800 | 95 | 2 |
 | conference_2026-01-29_15-59-29 | whisper | ggml-small-q8_0.bin | none | true | 0.669 | 76 | 0 |
 | conference_2026-01-29_15-59-29 | whisper | ggml-small-q8_0.bin | sortformer | false | 1.765 | 83 | 7 |
-

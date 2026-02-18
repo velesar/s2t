@@ -1,8 +1,6 @@
 use crate::app::config::{save_config, Config};
 use gtk4::prelude::*;
-use gtk4::{
-    Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton, Window,
-};
+use gtk4::{Align, Box as GtkBox, Button, CheckButton, ComboBoxText, Label, Orientation, SpinButton, Window};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -44,12 +42,8 @@ impl SettingsWidgets {
     fn apply_to_config(&self, cfg: &mut Config) {
         cfg.language = self.read_language();
         cfg.stt_backend = combo_to_value(&self.backend_combo, &[("whisper", 0), ("tdt", 1)]);
-        cfg.recording_mode =
-            combo_to_value(&self.mode_combo, &[("dictation", 0), ("conference", 1)]);
-        cfg.diarization_method = combo_to_value(
-            &self.diarization_combo,
-            &[("channel", 0), ("sortformer", 1)],
-        );
+        cfg.recording_mode = combo_to_value(&self.mode_combo, &[("dictation", 0), ("conference", 1)]);
+        cfg.diarization_method = combo_to_value(&self.diarization_combo, &[("channel", 0), ("sortformer", 1)]);
         cfg.auto_copy = self.auto_copy_check.is_active();
         cfg.auto_paste = self.auto_paste_check.is_active();
         cfg.continuous_mode = self.continuous_check.is_active();
@@ -153,9 +147,7 @@ fn build_backend_section(parent: &GtkBox, cfg: &Config) -> ComboBoxText {
     combo.set_halign(Align::Start);
 
     if !crate::infrastructure::models::is_tdt_model_downloaded() {
-        let info = Label::new(Some(
-            "(Завантажте модель TDT через меню 'Моделі' для активації)",
-        ));
+        let info = Label::new(Some("(Завантажте модель TDT через меню 'Моделі' для активації)"));
         info.add_css_class("dim-label");
         info.set_halign(Align::Start);
         parent.append(&info);
@@ -310,11 +302,7 @@ fn build_history_section(parent: &GtkBox, cfg: &Config) -> (SpinButton, SpinButt
     max_age_label.set_margin_top(6);
     parent.append(&max_age_label);
 
-    let max_age_spin = SpinButton::new(
-        Some(&gtk4::Adjustment::new(90.0, 1.0, 3650.0, 1.0, 10.0, 0.0)),
-        1.0,
-        0,
-    );
+    let max_age_spin = SpinButton::new(Some(&gtk4::Adjustment::new(90.0, 1.0, 3650.0, 1.0, 10.0, 0.0)), 1.0, 0);
     max_age_spin.set_value(cfg.history_max_age_days as f64);
     max_age_spin.set_halign(Align::Start);
     parent.append(&max_age_spin);

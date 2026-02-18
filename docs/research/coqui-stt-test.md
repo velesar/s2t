@@ -57,11 +57,11 @@ use coqui_stt::Model;
 
 fn benchmark_coqui(model_path: &str, audio: &[f32]) -> f64 {
     let model = Model::new(model_path).unwrap();
-    
+
     let start = Instant::now();
     let result = model.speech_to_text(audio).unwrap();
     let duration = start.elapsed();
-    
+
     // Calculate RTF
     // ...
 }
@@ -107,7 +107,7 @@ impl CoquiSTT {
         let model = Model::new(model_path)?;
         Ok(Self { model })
     }
-    
+
     pub fn transcribe(&self, samples: &[f32]) -> Result<String> {
         // Coqui STT потребує 16kHz mono audio
         let text = self.model.speech_to_text(samples)?;

@@ -2,9 +2,9 @@
 
 use super::DownloadProgress;
 use crate::infrastructure::models::{
-    delete_sortformer_model, delete_tdt_model, download_sortformer_model, download_tdt_model,
-    format_size, get_sortformer_model_info, get_tdt_model_info, get_tdt_total_size,
-    is_sortformer_model_downloaded, is_tdt_model_downloaded,
+    delete_sortformer_model, delete_tdt_model, download_sortformer_model, download_tdt_model, format_size,
+    get_sortformer_model_info, get_tdt_model_info, get_tdt_total_size, is_sortformer_model_downloaded,
+    is_tdt_model_downloaded,
 };
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Box as GtkBox, Button, Label, Orientation, ProgressBar};
@@ -30,11 +30,7 @@ pub fn create_sortformer_row() -> GtkBox {
     name_label.add_css_class("heading");
     top_row.append(&name_label);
 
-    let status_label = Label::new(Some(if is_downloaded {
-        "Завантажено"
-    } else {
-        ""
-    }));
+    let status_label = Label::new(Some(if is_downloaded { "Завантажено" } else { "" }));
     status_label.add_css_class("dim-label");
     top_row.append(&status_label);
 
@@ -165,28 +161,19 @@ pub fn create_tdt_row() -> GtkBox {
 
     let top_row = GtkBox::new(Orientation::Horizontal, 12);
 
-    let name_label = Label::new(Some(&format!(
-        "Parakeet TDT v3 (25 мов) ({})",
-        format_size(total_size)
-    )));
+    let name_label = Label::new(Some(&format!("Parakeet TDT v3 (25 мов) ({})", format_size(total_size))));
     name_label.set_hexpand(true);
     name_label.set_halign(Align::Start);
     name_label.add_css_class("heading");
     top_row.append(&name_label);
 
-    let status_label = Label::new(Some(if is_downloaded {
-        "Завантажено"
-    } else {
-        ""
-    }));
+    let status_label = Label::new(Some(if is_downloaded { "Завантажено" } else { "" }));
     status_label.add_css_class("dim-label");
     top_row.append(&status_label);
 
     content_box.append(&top_row);
 
-    let desc_label = Label::new(Some(
-        "NVIDIA TDT для 25 мов (WER 6.79% uk). Включає пунктуацію.",
-    ));
+    let desc_label = Label::new(Some("NVIDIA TDT для 25 мов (WER 6.79% uk). Включає пунктуацію."));
     desc_label.set_halign(Align::Start);
     desc_label.add_css_class("dim-label");
     content_box.append(&desc_label);

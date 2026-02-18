@@ -2,9 +2,7 @@
 
 use super::{DownloadProgress, DownloadState, ModelRowContext, RowWidgets};
 use crate::app::config::save_config;
-use crate::infrastructure::models::{
-    delete_model, download_model, format_size, get_model_path, is_model_downloaded,
-};
+use crate::infrastructure::models::{delete_model, download_model, format_size, get_model_path, is_model_downloaded};
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Box as GtkBox, Button, Label, ListBoxRow, Orientation, ProgressBar};
 
@@ -42,11 +40,7 @@ pub fn create_model_row(
     default_indicator.add_css_class("monospace");
     name_box.append(&default_indicator);
 
-    let name_label = Label::new(Some(&format!(
-        "{} ({})",
-        display_name,
-        format_size(size_bytes)
-    )));
+    let name_label = Label::new(Some(&format!("{} ({})", display_name, format_size(size_bytes))));
     name_label.set_hexpand(true);
     name_label.set_halign(Align::Start);
     name_label.add_css_class("heading");
@@ -54,11 +48,7 @@ pub fn create_model_row(
 
     top_row.append(&name_box);
 
-    let status_label = Label::new(Some(if is_downloaded {
-        "Завантажено"
-    } else {
-        ""
-    }));
+    let status_label = Label::new(Some(if is_downloaded { "Завантажено" } else { "" }));
     status_label.add_css_class("dim-label");
     top_row.append(&status_label);
 
@@ -180,12 +170,9 @@ pub fn create_model_row(
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             let tx_clone = tx.clone();
-            let result = rt.block_on(download_model(
-                &filename_for_thread,
-                move |downloaded, total| {
-                    let _ = tx_clone.send_blocking(DownloadProgress::Progress(downloaded, total));
-                },
-            ));
+            let result = rt.block_on(download_model(&filename_for_thread, move |downloaded, total| {
+                let _ = tx_clone.send_blocking(DownloadProgress::Progress(downloaded, total));
+            }));
 
             match result {
                 Ok(()) => {

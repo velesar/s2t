@@ -12,11 +12,7 @@ fn sanitize_model_filename(filename: &str) -> Result<()> {
     if filename.is_empty() {
         bail!("Ім'я файлу моделі не може бути порожнім");
     }
-    if filename.contains('/')
-        || filename.contains('\\')
-        || filename.contains("..")
-        || filename.contains('\0')
-    {
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") || filename.contains('\0') {
         bail!("Неприпустиме ім'я файлу моделі: {}", filename);
     }
     Ok(())
@@ -32,8 +28,8 @@ pub struct ModelInfo {
 }
 
 fn verify_checksum(path: &Path, expected: &str) -> Result<()> {
-    let mut file = fs::File::open(path)
-        .with_context(|| format!("Не вдалося відкрити файл для перевірки: {}", path.display()))?;
+    let mut file =
+        fs::File::open(path).with_context(|| format!("Не вдалося відкрити файл для перевірки: {}", path.display()))?;
     let mut hasher = Sha256::new();
     std::io::copy(&mut file, &mut hasher).context("Помилка при обчисленні контрольної суми")?;
     let hash = format!("{:x}", hasher.finalize());
@@ -58,54 +54,42 @@ pub fn get_available_models() -> Vec<ModelInfo> {
             display_name: "Tiny Q5".to_string(),
             size_bytes: 32_152_673,
             description: "Найшвидша квантована, ~2x швидше".to_string(),
-            sha256: Some(
-                "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7".to_string(),
-            ),
+            sha256: Some("818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7".to_string()),
         },
         ModelInfo {
             filename: "ggml-base-q5_1.bin".to_string(),
             display_name: "Base Q5 (Рекомендовано)".to_string(),
             size_bytes: 59_707_625,
             description: "Швидка + якісна, оптимальний баланс".to_string(),
-            sha256: Some(
-                "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898".to_string(),
-            ),
+            sha256: Some("422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898".to_string()),
         },
         ModelInfo {
             filename: "ggml-base-q8_0.bin".to_string(),
             display_name: "Base Q8".to_string(),
             size_bytes: 81_768_585,
             description: "Квантована, найкраща якість серед Q".to_string(),
-            sha256: Some(
-                "c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9".to_string(),
-            ),
+            sha256: Some("c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9".to_string()),
         },
         ModelInfo {
             filename: "ggml-small-q5_1.bin".to_string(),
             display_name: "Small Q5".to_string(),
             size_bytes: 190_085_487,
             description: "Хороша якість, швидша за звичайну".to_string(),
-            sha256: Some(
-                "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb".to_string(),
-            ),
+            sha256: Some("ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb".to_string()),
         },
         ModelInfo {
             filename: "ggml-small-q8_0.bin".to_string(),
             display_name: "Small Q8".to_string(),
             size_bytes: 264_464_607,
             description: "Висока якість серед квантованих".to_string(),
-            sha256: Some(
-                "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f".to_string(),
-            ),
+            sha256: Some("49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f".to_string()),
         },
         ModelInfo {
             filename: "ggml-medium-q5_0.bin".to_string(),
             display_name: "Medium Q5".to_string(),
             size_bytes: 539_212_467,
             description: "Велика квантована, хороша якість".to_string(),
-            sha256: Some(
-                "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f".to_string(),
-            ),
+            sha256: Some("19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f".to_string()),
         },
         // Full precision models
         ModelInfo {
@@ -113,45 +97,35 @@ pub fn get_available_models() -> Vec<ModelInfo> {
             display_name: "Tiny".to_string(),
             size_bytes: 77_691_713,
             description: "Найшвидша, найменша точність".to_string(),
-            sha256: Some(
-                "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21".to_string(),
-            ),
+            sha256: Some("be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21".to_string()),
         },
         ModelInfo {
             filename: "ggml-base.bin".to_string(),
             display_name: "Base".to_string(),
             size_bytes: 147_951_465,
             description: "Баланс швидкості та точності".to_string(),
-            sha256: Some(
-                "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe".to_string(),
-            ),
+            sha256: Some("60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe".to_string()),
         },
         ModelInfo {
             filename: "ggml-small.bin".to_string(),
             display_name: "Small".to_string(),
             size_bytes: 487_601_967,
             description: "Хороша точність".to_string(),
-            sha256: Some(
-                "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b".to_string(),
-            ),
+            sha256: Some("1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b".to_string()),
         },
         ModelInfo {
             filename: "ggml-medium.bin".to_string(),
             display_name: "Medium".to_string(),
             size_bytes: 1_533_763_059,
             description: "Висока точність".to_string(),
-            sha256: Some(
-                "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208".to_string(),
-            ),
+            sha256: Some("6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208".to_string()),
         },
         ModelInfo {
             filename: "ggml-large-v3.bin".to_string(),
             display_name: "Large v3".to_string(),
             size_bytes: 3_095_033_483,
             description: "Найвища точність".to_string(),
-            sha256: Some(
-                "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2".to_string(),
-            ),
+            sha256: Some("64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2".to_string()),
         },
     ]
 }
@@ -192,8 +166,7 @@ pub fn delete_model(filename: &str) -> Result<()> {
         return Err(anyhow::anyhow!("Модель не знайдено: {}", filename));
     }
 
-    fs::remove_file(&path)
-        .with_context(|| format!("Не вдалося видалити модель: {}", path.display()))?;
+    fs::remove_file(&path).with_context(|| format!("Не вдалося видалити модель: {}", path.display()))?;
 
     Ok(())
 }
@@ -209,8 +182,7 @@ async fn download_file(
     total_size_override: u64,
     progress_callback: &(dyn Fn(u64, u64) + Send + Sync),
 ) -> Result<PathBuf> {
-    fs::create_dir_all(dir)
-        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
+    fs::create_dir_all(dir).with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
 
     let temp_path = dir.join(format!("{}.downloading", filename));
     let final_path = dir.join(filename);
@@ -238,8 +210,8 @@ async fn download_file(
     };
     let mut downloaded: u64 = downloaded_offset;
 
-    let mut file = fs::File::create(&temp_path)
-        .with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
+    let mut file =
+        fs::File::create(&temp_path).with_context(|| format!("Не вдалося створити файл: {}", temp_path.display()))?;
 
     let mut stream = response.bytes_stream();
 
@@ -327,8 +299,7 @@ pub fn get_sortformer_model_info() -> ModelInfo {
         filename: "diar_streaming_sortformer_4spk-v2.1.onnx".to_string(),
         display_name: "Sortformer v2.1 (4 speakers)".to_string(),
         size_bytes: 492_000_000, // ~492MB
-        description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)"
-            .to_string(),
+        description: "NVIDIA Streaming Sortformer для speaker diarization (до 4 мовців)".to_string(),
         sha256: None, // Third-party model, hash TBD
     }
 }
@@ -344,8 +315,7 @@ pub fn is_sortformer_model_downloaded() -> bool {
 pub fn delete_sortformer_model() -> Result<()> {
     let path = get_sortformer_model_path();
     if path.exists() {
-        fs::remove_file(&path)
-            .with_context(|| format!("Не вдалося видалити модель: {}", path.display()))?;
+        fs::remove_file(&path).with_context(|| format!("Не вдалося видалити модель: {}", path.display()))?;
     }
     Ok(())
 }
@@ -443,15 +413,10 @@ pub fn delete_tdt_model() -> Result<()> {
     let dir = crate::app::config::tdt_models_dir();
     let info = get_tdt_model_info();
 
-    for filename in [
-        &info.encoder.filename,
-        &info.decoder.filename,
-        &info.vocab.filename,
-    ] {
+    for filename in [&info.encoder.filename, &info.decoder.filename, &info.vocab.filename] {
         let path = dir.join(filename);
         if path.exists() {
-            fs::remove_file(&path)
-                .with_context(|| format!("Не вдалося видалити файл: {}", path.display()))?;
+            fs::remove_file(&path).with_context(|| format!("Не вдалося видалити файл: {}", path.display()))?;
         }
     }
 
@@ -556,14 +521,8 @@ mod tests {
             .filter(|m| !m.filename.contains("q5_") && !m.filename.contains("q8_"))
             .count();
 
-        assert!(
-            quantized_count >= 5,
-            "Should have at least 5 quantized models"
-        );
-        assert!(
-            full_count >= 5,
-            "Should have at least 5 full precision models"
-        );
+        assert!(quantized_count >= 5, "Should have at least 5 quantized models");
+        assert!(full_count >= 5, "Should have at least 5 full precision models");
     }
 
     #[test]
@@ -716,9 +675,6 @@ mod tests {
     fn test_delete_model_rejects_traversal() {
         let result = delete_model("../../../etc/passwd");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Неприпустиме ім'я файлу"));
+        assert!(result.unwrap_err().to_string().contains("Неприпустиме ім'я файлу"));
     }
 }

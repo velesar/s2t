@@ -82,9 +82,7 @@ pub fn run(args: DenoiseEvalArgs) -> Result<()> {
     // 2. Denoise
     eprintln!("Denoising...");
     let denoiser = NnnoiselessDenoiser::new();
-    let denoised = denoiser
-        .denoise_buffer(original)
-        .context("Denoising failed")?;
+    let denoised = denoiser.denoise_buffer(original).context("Denoising failed")?;
 
     // 3. Signal metrics
     let signal = compute_signal_metrics(original, &denoised);
@@ -92,10 +90,7 @@ pub fn run(args: DenoiseEvalArgs) -> Result<()> {
         "  RMS: {:.4} -> {:.4} ({:.1}% reduction)",
         signal.original_rms, signal.denoised_rms, signal.rms_reduction_pct
     );
-    eprintln!(
-        "  Peak: {:.4} -> {:.4}",
-        signal.original_peak, signal.denoised_peak
-    );
+    eprintln!("  Peak: {:.4} -> {:.4}", signal.original_peak, signal.denoised_peak);
     eprintln!("  Length diff: {} samples", signal.length_diff_samples);
 
     // 4. Write denoised WAV
@@ -103,12 +98,8 @@ pub fn run(args: DenoiseEvalArgs) -> Result<()> {
         .output_dir
         .as_deref()
         .unwrap_or_else(|| args.input.parent().unwrap_or(Path::new(".")));
-    std::fs::create_dir_all(output_dir).with_context(|| {
-        format!(
-            "Failed to create output directory: {}",
-            output_dir.display()
-        )
-    })?;
+    std::fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create output directory: {}", output_dir.display()))?;
 
     let stem = args
         .input
@@ -340,9 +331,7 @@ fn write_wav_mono_f32(path: &Path, samples: &[f32], sample_rate: u32) -> Result<
         .with_context(|| format!("Failed to create WAV file: {}", path.display()))?;
 
     for &sample in samples {
-        writer
-            .write_sample(sample)
-            .context("Failed to write WAV sample")?;
+        writer.write_sample(sample).context("Failed to write WAV sample")?;
     }
 
     writer.finalize().context("Failed to finalize WAV file")?;

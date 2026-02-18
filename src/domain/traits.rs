@@ -115,11 +115,7 @@ pub trait HistoryRepository: Send + Sync {
     fn remove(&mut self, id: &str);
 
     /// Filter entries by date range (inclusive).
-    fn filter_by_date_range(
-        &self,
-        from: Option<DateTime<Utc>>,
-        to: Option<DateTime<Utc>>,
-    ) -> Vec<&Self::Entry>;
+    fn filter_by_date_range(&self, from: Option<DateTime<Utc>>, to: Option<DateTime<Utc>>) -> Vec<&Self::Entry>;
 }
 
 /// Audio denoising abstraction.
@@ -247,6 +243,6 @@ mod tests {
     fn test_amplitude_range() {
         let recorder = TestRecorder::new(vec![]);
         let amp = recorder.amplitude();
-        assert!(amp >= 0.0 && amp <= 1.0);
+        assert!((0.0..=1.0).contains(&amp));
     }
 }

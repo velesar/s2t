@@ -21,12 +21,7 @@ pub struct ModeUIs {
 /// This is the single entry point for both the record button and the hotkey.
 /// It resolves the current mode from the combo box and config, then dispatches
 /// to the appropriate handler.
-pub fn toggle_recording(
-    ctx: &Arc<AppContext>,
-    rec: &RecordingContext,
-    uis: &ModeUIs,
-    mode_combo: &gtk4::ComboBoxText,
-) {
+pub fn toggle_recording(ctx: &Arc<AppContext>, rec: &RecordingContext, uis: &ModeUIs, mode_combo: &gtk4::ComboBoxText) {
     let mode = RecordingMode::resolve(mode_combo, ctx);
 
     match rec.state.get() {
@@ -38,12 +33,7 @@ pub fn toggle_recording(
     }
 }
 
-fn start_recording(
-    ctx: &Arc<AppContext>,
-    rec: &RecordingContext,
-    uis: &ModeUIs,
-    mode: RecordingMode,
-) {
+fn start_recording(ctx: &Arc<AppContext>, rec: &RecordingContext, uis: &ModeUIs, mode: RecordingMode) {
     match mode {
         RecordingMode::Mic => mic::handle_start(ctx, rec, &uis.mic),
         RecordingMode::Conference => conference::handle_start(ctx, rec, &uis.conference),
@@ -51,12 +41,7 @@ fn start_recording(
     }
 }
 
-fn stop_recording(
-    ctx: &Arc<AppContext>,
-    rec: &RecordingContext,
-    uis: &ModeUIs,
-    mode: RecordingMode,
-) {
+fn stop_recording(ctx: &Arc<AppContext>, rec: &RecordingContext, uis: &ModeUIs, mode: RecordingMode) {
     match mode {
         RecordingMode::Mic => mic::handle_stop(ctx, rec, &uis.mic),
         RecordingMode::Conference => conference::handle_stop(ctx, rec, &uis.conference),

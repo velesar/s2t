@@ -4,8 +4,7 @@
 //! testing without real audio devices or Whisper models.
 
 use crate::domain::traits::{
-    AudioDenoising, AudioRecording, ConfigProvider, HistoryRepository, Transcription,
-    UIStateUpdater, VoiceDetection,
+    AudioDenoising, AudioRecording, ConfigProvider, HistoryRepository, Transcription, UIStateUpdater, VoiceDetection,
 };
 use crate::history::HistoryEntry;
 use anyhow::Result;
@@ -205,8 +204,7 @@ impl VoiceDetection for MockVoiceDetector {
     }
 
     fn reset(&self) {
-        self.reset_count
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.reset_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -311,16 +309,16 @@ impl AudioDenoising for MockDenoiser {
 /// Mock history repository for testing.
 ///
 /// Stores entries in-memory without persistence.
+#[allow(dead_code)]
 pub struct MockHistoryRepository {
     entries: Vec<HistoryEntry>,
 }
 
 impl MockHistoryRepository {
     /// Create an empty mock history.
+    #[allow(dead_code)]
     pub fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
+        Self { entries: Vec::new() }
     }
 }
 
@@ -589,8 +587,7 @@ mod tests {
 
     #[test]
     fn test_audio_recording_as_trait_object() {
-        let recorder: Box<dyn AudioRecording> =
-            Box::new(MockAudioRecorder::with_samples(vec![0.5, 0.6]));
+        let recorder: Box<dyn AudioRecording> = Box::new(MockAudioRecorder::with_samples(vec![0.5, 0.6]));
         assert!(!recorder.is_recording());
         recorder.start().unwrap();
         assert!(recorder.is_recording());
@@ -600,8 +597,7 @@ mod tests {
 
     #[test]
     fn test_transcription_as_trait_object() {
-        let transcriber: Box<dyn Transcription> =
-            Box::new(MockTranscription::returning("test output"));
+        let transcriber: Box<dyn Transcription> = Box::new(MockTranscription::returning("test output"));
         assert!(transcriber.is_loaded());
         assert_eq!(transcriber.model_name(), Some("mock-model".to_string()));
         let text = transcriber.transcribe(&[0.0; 16000], "uk").unwrap();

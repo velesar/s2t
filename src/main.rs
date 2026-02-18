@@ -198,13 +198,8 @@ fn run_gui() -> Result<()> {
 
     // Create AppContext bundling all services
     let ctx = Arc::new(
-        AppContext::new(
-            config.clone(),
-            history.clone(),
-            transcription,
-            diarization_engine,
-        )
-        .expect("Failed to create AppContext"),
+        AppContext::new(config.clone(), history.clone(), transcription, diarization_engine)
+            .expect("Failed to create AppContext"),
     );
 
     // Load models in background thread
@@ -233,9 +228,7 @@ fn run_gui() -> Result<()> {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime for tray");
         rt.block_on(async {
-            match DictationTray::spawn_service(tray_tx, config_for_tray, transcription_for_tray)
-                .await
-            {
+            match DictationTray::spawn_service(tray_tx, config_for_tray, transcription_for_tray).await {
                 Ok(_handle) => {
                     // Keep running until app exits
                     std::future::pending::<()>().await;

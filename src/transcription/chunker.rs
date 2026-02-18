@@ -101,9 +101,7 @@ impl AudioChunker {
                     // Next chunk starts with overlap
                     pos = sample.saturating_sub(overlap_samples);
                     // Record overlap for the next chunk
-                    if let Some(next_overlap) =
-                        chunks.last().map(|c| c.end_sample.saturating_sub(pos))
-                    {
+                    if let Some(next_overlap) = chunks.last().map(|c| c.end_sample.saturating_sub(pos)) {
                         // Will be set on the next chunk when it's created
                         // Store temporarily — applied below
                         if pos < samples.len() {
@@ -128,9 +126,7 @@ impl AudioChunker {
         // Fix up leading overlap for chunks after force-splits
         for i in 1..chunks.len() {
             if chunks[i - 1].has_overlap {
-                let overlap = chunks[i - 1]
-                    .end_sample
-                    .saturating_sub(chunks[i].start_sample);
+                let overlap = chunks[i - 1].end_sample.saturating_sub(chunks[i].start_sample);
                 chunks[i].leading_overlap_samples = overlap;
             }
         }
@@ -139,12 +135,7 @@ impl AudioChunker {
     }
 
     /// Transcribe audio with chunking, merging results.
-    pub fn transcribe_chunked(
-        &self,
-        samples: &[f32],
-        language: &str,
-        backend: &dyn Transcription,
-    ) -> Result<String> {
+    pub fn transcribe_chunked(&self, samples: &[f32], language: &str, backend: &dyn Transcription) -> Result<String> {
         let chunks = self.segment(samples)?;
 
         if chunks.len() == 1 {
@@ -153,10 +144,7 @@ impl AudioChunker {
             return backend.transcribe(&samples[chunk.start_sample..chunk.end_sample], language);
         }
 
-        eprintln!(
-            "Audio segmented into {} chunks for processing",
-            chunks.len()
-        );
+        eprintln!("Audio segmented into {} chunks for processing", chunks.len());
 
         let mut texts = Vec::with_capacity(chunks.len());
         for (i, chunk) in chunks.iter().enumerate() {
@@ -164,11 +152,9 @@ impl AudioChunker {
                 "  Transcribing chunk {}/{} ({:.1}s)...",
                 i + 1,
                 chunks.len(),
-                (chunk.end_sample - chunk.start_sample) as f64
-                    / self.config.split.sample_rate as f64
+                (chunk.end_sample - chunk.start_sample) as f64 / self.config.split.sample_rate as f64
             );
-            let text =
-                backend.transcribe(&samples[chunk.start_sample..chunk.end_sample], language)?;
+            let text = backend.transcribe(&samples[chunk.start_sample..chunk.end_sample], language)?;
             texts.push(text.trim().to_string());
         }
 
@@ -197,6 +183,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     /// Mock VAD for chunker tests.
+    #[allow(dead_code)]
     struct MockChunkerVad;
 
     impl VoiceDetection for MockChunkerVad {
@@ -315,11 +302,7 @@ mod tests {
         let audio = vec![0.5_f32; 16000 * 15];
         let chunks = chunker.segment(&audio).unwrap();
 
-        assert!(
-            chunks.len() > 1,
-            "Expected multiple chunks, got {}",
-            chunks.len()
-        );
+        assert!(chunks.len() > 1, "Expected multiple chunks, got {}", chunks.len());
         // All audio should be covered
         assert_eq!(chunks[0].start_sample, 0);
         assert_eq!(chunks.last().unwrap().end_sample, audio.len());
@@ -355,11 +338,7 @@ mod tests {
 
     #[test]
     fn test_merge_chunk_results() {
-        let texts = vec![
-            "Hello world".to_string(),
-            "".to_string(),
-            "Foo bar".to_string(),
-        ];
+        let texts = vec!["Hello world".to_string(), "".to_string(), "Foo bar".to_string()];
         assert_eq!(merge_chunk_results(&texts), "Hello world Foo bar");
     }
 

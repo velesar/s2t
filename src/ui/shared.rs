@@ -37,11 +37,7 @@ pub fn start_timer_loop(rec: &RecordingContext, base: &UIContext) {
 ///
 /// Reads amplitudes from AudioService and updates both level bars.
 /// Stops when recording ends.
-pub fn start_conference_level_loop(
-    ctx: &Arc<AppContext>,
-    rec: &RecordingContext,
-    ui: &ConferenceUI,
-) {
+pub fn start_conference_level_loop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &ConferenceUI) {
     let ctx = ctx.clone();
     let rec = rec.clone();
     let ui = ui.clone();

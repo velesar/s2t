@@ -40,11 +40,7 @@ impl SileroVoiceDetector {
     /// * `threshold` - Speech probability threshold (0.0-1.0), default 0.5
     /// * `silence_threshold_ms` - Duration of silence to trigger speech end
     /// * `_min_speech_duration_ms` - Minimum speech duration (currently unused)
-    pub fn with_thresholds(
-        threshold: f32,
-        silence_threshold_ms: u32,
-        _min_speech_duration_ms: u32,
-    ) -> Result<Self> {
+    pub fn with_thresholds(threshold: f32, silence_threshold_ms: u32, _min_speech_duration_ms: u32) -> Result<Self> {
         let vad = SileroVad::builder()
             .sample_rate(SAMPLE_RATE_HZ)
             .chunk_size(CHUNK_SIZE)

@@ -35,10 +35,7 @@ impl WebRtcVoiceDetector {
     /// # Arguments
     /// * `silence_threshold_ms` - Duration of silence to trigger speech end
     /// * `_min_speech_duration_ms` - Minimum speech duration (currently unused)
-    pub fn with_thresholds(
-        silence_threshold_ms: u32,
-        _min_speech_duration_ms: u32,
-    ) -> Result<Self> {
+    pub fn with_thresholds(silence_threshold_ms: u32, _min_speech_duration_ms: u32) -> Result<Self> {
         use webrtc_vad::SampleRate;
         let vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
 
@@ -98,8 +95,7 @@ impl VoiceDetection for WebRtcVoiceDetector {
 
     fn reset(&self) {
         use webrtc_vad::SampleRate;
-        *self.vad.borrow_mut() =
-            Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
+        *self.vad.borrow_mut() = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Aggressive);
     }
 }
 

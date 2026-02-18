@@ -34,21 +34,13 @@ fn history_persistence_roundtrip() {
 
     // Build history with diverse entry types
     let mut history = History::default();
-    history.add(HistoryEntry::new(
-        "Simple dictation".to_string(),
-        5.0,
-        "uk".to_string(),
-    ));
+    history.add(HistoryEntry::new("Simple dictation".to_string(), 5.0, "uk".to_string()));
     history.add(HistoryEntry::new_with_recording(
         "Conference notes with diarization".to_string(),
         120.0,
         "en".to_string(),
         Some("/tmp/conference_2026-01-30.wav".to_string()),
-        vec![
-            "Alice".to_string(),
-            "Bob".to_string(),
-            "Charlie".to_string(),
-        ],
+        vec!["Alice".to_string(), "Bob".to_string(), "Charlie".to_string()],
     ));
     history.add(HistoryEntry::new(
         "Текст українською мовою з UTF-8 символами: їжак, ґанок".to_string(),
@@ -74,10 +66,7 @@ fn history_persistence_roundtrip() {
     let conf = &loaded.entries[1];
     assert_eq!(conf.duration_secs, 120.0);
     assert_eq!(conf.language, "en");
-    assert_eq!(
-        conf.recording_path,
-        Some("/tmp/conference_2026-01-30.wav".to_string())
-    );
+    assert_eq!(conf.recording_path, Some("/tmp/conference_2026-01-30.wav".to_string()));
     assert_eq!(conf.speakers, vec!["Alice", "Bob", "Charlie"]);
 
     // Verify UTF-8 preservation

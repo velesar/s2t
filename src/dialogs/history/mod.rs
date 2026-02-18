@@ -9,10 +9,7 @@ mod list;
 use crate::domain::types::SharedHistory;
 use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
 use gtk4::prelude::*;
-use gtk4::{
-    Align, Box as GtkBox, Button, Entry, Label, ListBox, Orientation, ScrolledWindow,
-    SelectionMode, Window,
-};
+use gtk4::{Align, Box as GtkBox, Button, Entry, Label, ListBox, Orientation, ScrolledWindow, SelectionMode, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -88,13 +85,7 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: SharedHistory) {
     let date_to: Rc<RefCell<Option<DateTime<Utc>>>> = Rc::new(RefCell::new(None));
 
     // Populate list
-    list::populate_list(
-        &list_box,
-        history.clone(),
-        &search_query,
-        &date_from,
-        &date_to,
-    );
+    list::populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
 
     scrolled.set_child(Some(&list_box));
     main_box.append(&scrolled);
@@ -114,13 +105,7 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: SharedHistory) {
         move |entry| {
             let query = entry.text().to_string();
             *search_query.borrow_mut() = query;
-            list::populate_list(
-                &list_box,
-                history.clone(),
-                &search_query,
-                &date_from,
-                &date_to,
-            );
+            list::populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
         }
     });
 
@@ -139,13 +124,7 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: SharedHistory) {
         move |entry| {
             let text = entry.text().to_string();
             *date_from.borrow_mut() = parse_date(&text);
-            list::populate_list(
-                &list_box,
-                history.clone(),
-                &search_query,
-                &date_from,
-                &date_to,
-            );
+            list::populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
         }
     });
 
@@ -164,13 +143,7 @@ pub fn show_history_dialog(parent: &impl IsA<Window>, history: SharedHistory) {
         move |entry| {
             let text = entry.text().to_string();
             *date_to.borrow_mut() = parse_date(&text);
-            list::populate_list(
-                &list_box,
-                history.clone(),
-                &search_query,
-                &date_from,
-                &date_to,
-            );
+            list::populate_list(&list_box, history.clone(), &search_query, &date_from, &date_to);
         }
     });
 

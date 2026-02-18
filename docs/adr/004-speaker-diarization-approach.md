@@ -250,7 +250,7 @@ impl ConferenceTranscription {
         // Транскрибувати кожен потік окремо
         let user_text = whisper.transcribe(input_audio, None)?;
         let remote_text = whisper.transcribe(output_audio, None)?;
-        
+
         // Об'єднати з labels
         format!("[Ви] {}\n[Учасник] {}", user_text, remote_text)
     }
@@ -280,7 +280,7 @@ pub fn transcribe_with_diarization(
     // 1. Diarization через pyannote
     let pipeline = DiarizationPipeline::new()?;
     let diarization = pipeline.apply(audio)?;
-    
+
     // 2. Для кожного сегменту - транскрипція через Whisper
     let mut result = Vec::new();
     for segment in diarization.segments {
@@ -293,7 +293,7 @@ pub fn transcribe_with_diarization(
             end: segment.end,
         });
     }
-    
+
     Ok(result)
 }
 ```

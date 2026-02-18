@@ -1,8 +1,6 @@
 use crate::app::config::Config;
 use gtk4::prelude::*;
-use gtk4::{
-    Align, Box as GtkBox, Button, Label, LevelBar, Orientation, ScrolledWindow, Spinner, TextView,
-};
+use gtk4::{Align, Box as GtkBox, Button, Label, LevelBar, Orientation, ScrolledWindow, Spinner, TextView};
 use parking_lot::Mutex;
 use std::sync::Arc;
 

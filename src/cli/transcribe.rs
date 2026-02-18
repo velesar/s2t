@@ -64,18 +64,15 @@ struct TranscriptionMetrics {
 /// Run the transcribe command.
 pub fn run(args: TranscribeArgs) -> Result<()> {
     // Handle deprecated --diarize flag
-    let effective_diarization =
-        if args.diarize && matches!(args.diarization, DiarizationMethod::None) {
-            eprintln!("Warning: --diarize is deprecated, use --diarization=channel instead");
-            DiarizationMethod::Channel
-        } else {
-            args.diarization
-        };
+    let effective_diarization = if args.diarize && matches!(args.diarization, DiarizationMethod::None) {
+        eprintln!("Warning: --diarize is deprecated, use --diarization=channel instead");
+        DiarizationMethod::Channel
+    } else {
+        args.diarization
+    };
 
     // Validate backend + diarization combinations
-    if matches!(args.backend, SttBackend::Tdt)
-        && !matches!(effective_diarization, DiarizationMethod::None)
-    {
+    if matches!(args.backend, SttBackend::Tdt) && !matches!(effective_diarization, DiarizationMethod::None) {
         bail!("TDT backend does not support diarization. TDT is a pure STT backend without speaker identification. Use --diarization=none with --backend=tdt");
     }
 
@@ -108,14 +105,7 @@ pub fn run(args: TranscribeArgs) -> Result<()> {
                 "Transcribing (backend: whisper, diarization: {:?}, language: {})...",
                 effective_diarization, language
             );
-            transcribe_with_whisper(
-                &service,
-                &prepared,
-                language,
-                &args,
-                effective_diarization,
-                &config,
-            )?
+            transcribe_with_whisper(&service, &prepared, language, &args, effective_diarization, &config)?
         }
         SttBackend::Tdt => {
             let model_dir = resolve_tdt_model(&args, &config)?;
@@ -295,10 +285,7 @@ fn resolve_sortformer_model(args: &TranscribeArgs, config: &Config) -> Result<Pa
         if path.exists() {
             return Ok(path);
         }
-        eprintln!(
-            "Warning: configured Sortformer model '{}' not found",
-            sf_path
-        );
+        eprintln!("Warning: configured Sortformer model '{}' not found", sf_path);
     }
 
     // 3. Default location
@@ -330,10 +317,7 @@ fn transcribe_with_whisper(
     diarization: DiarizationMethod,
     config: &Config,
 ) -> Result<TranscriptionResult> {
-    let model_name = args
-        .model
-        .clone()
-        .unwrap_or_else(|| config.default_model.clone());
+    let model_name = args.model.clone().unwrap_or_else(|| config.default_model.clone());
 
     match diarization {
         DiarizationMethod::None => {
@@ -433,9 +417,7 @@ fn transcribe_sortformer_diarization(
 
     // Initialize and load diarization engine
     let mut engine = DiarizationEngine::new(Some(sortformer_path));
-    engine
-        .load_model()
-        .context("Failed to load Sortformer model")?;
+    engine.load_model().context("Failed to load Sortformer model")?;
 
     if !engine.is_available() {
         bail!("Sortformer diarization not available. Load the Sortformer model first.");
@@ -475,9 +457,7 @@ fn transcribe_sortformer_diarization(
         }
 
         // Use chunker for long speaker segments to avoid OOM
-        let text = if !args.no_chunking
-            && segment_audio.len() > args.max_segment_secs as usize * sample_rate as usize
-        {
+        let text = if !args.no_chunking && segment_audio.len() > args.max_segment_secs as usize * sample_rate as usize {
             let chunker = build_chunker(args, config);
             chunker.transcribe_chunked(segment_audio, language, service)?
         } else {
@@ -585,8 +565,7 @@ pub fn list_models() -> Result<()> {
 
     let available = get_available_models();
     let downloaded = list_downloaded_models();
-    let downloaded_names: std::collections::HashSet<_> =
-        downloaded.iter().map(|m| &m.filename).collect();
+    let downloaded_names: std::collections::HashSet<_> = downloaded.iter().map(|m| &m.filename).collect();
 
     println!("Available Whisper models:");
     println!();

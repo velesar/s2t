@@ -73,11 +73,7 @@ impl HistoryRepository for History {
         self.entries.retain(|e| e.id != id);
     }
 
-    fn filter_by_date_range(
-        &self,
-        from: Option<DateTime<Utc>>,
-        to: Option<DateTime<Utc>>,
-    ) -> Vec<&HistoryEntry> {
+    fn filter_by_date_range(&self, from: Option<DateTime<Utc>>, to: Option<DateTime<Utc>>) -> Vec<&HistoryEntry> {
         self.entries
             .iter()
             .filter(|e| {
@@ -131,16 +127,8 @@ mod tests {
     #[test]
     fn test_history_add_inserts_at_front() {
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "First".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
-        history.add(HistoryEntry::new(
-            "Second".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("First".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("Second".to_string(), 5.0, "uk".to_string()));
 
         assert_eq!(history.entries[0].text, "Second");
         assert_eq!(history.entries[1].text, "First");
@@ -150,11 +138,7 @@ mod tests {
     fn test_history_trim_to_limit() {
         let mut history = History::default();
         for i in 0..10 {
-            history.add(HistoryEntry::new(
-                format!("Entry {}", i),
-                5.0,
-                "uk".to_string(),
-            ));
+            history.add(HistoryEntry::new(format!("Entry {}", i), 5.0, "uk".to_string()));
         }
 
         history.trim_to_limit(5);
@@ -189,15 +173,9 @@ mod tests {
         let jan15 = Utc.with_ymd_and_hms(2025, 1, 15, 12, 0, 0).unwrap();
         let feb1 = Utc.with_ymd_and_hms(2025, 2, 1, 12, 0, 0).unwrap();
 
-        history.add(entry_at(
-            "before",
-            Utc.with_ymd_and_hms(2024, 12, 15, 0, 0, 0).unwrap(),
-        ));
+        history.add(entry_at("before", Utc.with_ymd_and_hms(2024, 12, 15, 0, 0, 0).unwrap()));
         history.add(entry_at("inside", jan15));
-        history.add(entry_at(
-            "after",
-            Utc.with_ymd_and_hms(2025, 3, 1, 0, 0, 0).unwrap(),
-        ));
+        history.add(entry_at("after", Utc.with_ymd_and_hms(2025, 3, 1, 0, 0, 0).unwrap()));
 
         let result = history.filter_by_date_range(Some(jan1), Some(feb1));
         assert_eq!(result.len(), 1);
@@ -209,14 +187,8 @@ mod tests {
         let mut history = History::default();
         let jan1 = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
 
-        history.add(entry_at(
-            "old",
-            Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap(),
-        ));
-        history.add(entry_at(
-            "new",
-            Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap(),
-        ));
+        history.add(entry_at("old", Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap()));
+        history.add(entry_at("new", Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap()));
 
         let result = history.filter_by_date_range(Some(jan1), None);
         assert_eq!(result.len(), 1);
@@ -228,14 +200,8 @@ mod tests {
         let mut history = History::default();
         let jan1 = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
 
-        history.add(entry_at(
-            "old",
-            Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap(),
-        ));
-        history.add(entry_at(
-            "new",
-            Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap(),
-        ));
+        history.add(entry_at("old", Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap()));
+        history.add(entry_at("new", Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap()));
 
         let result = history.filter_by_date_range(None, Some(jan1));
         assert_eq!(result.len(), 1);
@@ -245,14 +211,8 @@ mod tests {
     #[test]
     fn test_filter_by_date_range_no_bounds() {
         let mut history = History::default();
-        history.add(entry_at(
-            "a",
-            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
-        ));
-        history.add(entry_at(
-            "b",
-            Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
-        ));
+        history.add(entry_at("a", Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()));
+        history.add(entry_at("b", Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap()));
 
         let result = history.filter_by_date_range(None, None);
         assert_eq!(result.len(), 2);
@@ -288,21 +248,9 @@ mod tests {
         use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "apple pie".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
-        history.add(HistoryEntry::new(
-            "banana split".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
-        history.add(HistoryEntry::new(
-            "Apple sauce".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("apple pie".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("banana split".to_string(), 5.0, "uk".to_string()));
+        history.add(HistoryEntry::new("Apple sauce".to_string(), 5.0, "uk".to_string()));
 
         let results = HistoryRepository::search(&history, "apple");
         assert_eq!(results.len(), 2); // case-insensitive
@@ -313,11 +261,7 @@ mod tests {
         use crate::domain::traits::HistoryRepository;
 
         let mut history = History::default();
-        history.add(HistoryEntry::new(
-            "hello world".to_string(),
-            5.0,
-            "uk".to_string(),
-        ));
+        history.add(HistoryEntry::new("hello world".to_string(), 5.0, "uk".to_string()));
 
         let results = HistoryRepository::search(&history, "xyz");
         assert!(results.is_empty());
@@ -342,11 +286,7 @@ mod tests {
 
         let mut history = History::default();
         for i in 0..10 {
-            history.add(HistoryEntry::new(
-                format!("entry {}", i),
-                5.0,
-                "uk".to_string(),
-            ));
+            history.add(HistoryEntry::new(format!("entry {}", i), 5.0, "uk".to_string()));
         }
 
         let removed = HistoryRepository::trim_to_limit(&mut history, 5);

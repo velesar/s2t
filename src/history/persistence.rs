@@ -18,8 +18,8 @@ pub fn load_history() -> Result<History> {
         return Ok(History::default());
     }
 
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Не вдалося прочитати історію: {}", path.display()))?;
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("Не вдалося прочитати історію: {}", path.display()))?;
 
     serde_json::from_str(&content).with_context(|| "Не вдалося розпарсити історію")
 }
@@ -28,14 +28,11 @@ pub fn save_history(history: &History) -> Result<()> {
     let path = history_path();
     let dir = path.parent().unwrap();
 
-    fs::create_dir_all(dir)
-        .with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
+    fs::create_dir_all(dir).with_context(|| format!("Не вдалося створити директорію: {}", dir.display()))?;
 
-    let content =
-        serde_json::to_string_pretty(history).context("Не вдалося серіалізувати історію")?;
+    let content = serde_json::to_string_pretty(history).context("Не вдалося серіалізувати історію")?;
 
-    fs::write(&path, &content)
-        .with_context(|| format!("Не вдалося записати історію: {}", path.display()))?;
+    fs::write(&path, &content).with_context(|| format!("Не вдалося записати історію: {}", path.display()))?;
 
     crate::app::config::set_owner_only_permissions(&path)?;
 
@@ -57,10 +54,9 @@ mod tests {
     #[test]
     fn test_history_serialization() {
         let mut history = History::default();
-        history.entries.insert(
-            0,
-            HistoryEntry::new("Test".to_string(), 5.0, "uk".to_string()),
-        );
+        history
+            .entries
+            .insert(0, HistoryEntry::new("Test".to_string(), 5.0, "uk".to_string()));
 
         let json = serde_json::to_string(&history).unwrap();
         let parsed: History = serde_json::from_str(&json).unwrap();
@@ -106,10 +102,7 @@ mod tests {
         assert_eq!(loaded.entries[0].text, "Conference notes");
         assert_eq!(loaded.entries[0].language, "en");
         assert_eq!(loaded.entries[0].duration_secs, 120.0);
-        assert_eq!(
-            loaded.entries[0].recording_path,
-            Some("/tmp/rec.wav".to_string())
-        );
+        assert_eq!(loaded.entries[0].recording_path, Some("/tmp/rec.wav".to_string()));
         assert_eq!(loaded.entries[0].speakers, vec!["Alice", "Bob"]);
         assert_eq!(loaded.entries[1].text, "Simple dictation");
         assert_eq!(loaded.entries[1].recording_path, None);

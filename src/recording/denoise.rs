@@ -95,9 +95,7 @@ impl DenoiseInner {
             let mut padded = remaining.to_vec();
             padded.resize(frames_needed, 0.0);
             let chunk = vec![padded];
-            let resampled = resampler
-                .process(&chunk, None)
-                .context("Upsample final chunk failed")?;
+            let resampled = resampler.process(&chunk, None).context("Upsample final chunk failed")?;
             let remaining_duration = remaining.len() as f64 / INPUT_SAMPLE_RATE as f64;
             let expected = (remaining_duration * NNNOISELESS_SAMPLE_RATE as f64).ceil() as usize;
             let actual = expected.min(resampled[0].len());
@@ -145,19 +143,14 @@ impl DenoiseInner {
             return Ok(Vec::new());
         }
 
-        let resampler = self
-            .downsampler
-            .as_mut()
-            .expect("downsampler not initialized");
+        let resampler = self.downsampler.as_mut().expect("downsampler not initialized");
         let mut output = Vec::with_capacity(samples.len() / 3);
         let mut pos = 0;
         let frames_needed = resampler.input_frames_next();
 
         while pos + frames_needed <= samples.len() {
             let chunk = vec![samples[pos..pos + frames_needed].to_vec()];
-            let resampled = resampler
-                .process(&chunk, None)
-                .context("Downsample failed")?;
+            let resampled = resampler.process(&chunk, None).context("Downsample failed")?;
             output.extend_from_slice(&resampled[0]);
             pos += frames_needed;
         }

@@ -58,11 +58,7 @@ impl RingBuffer {
         let mut result = Vec::with_capacity(state.size);
 
         // Read from oldest to newest
-        let start_pos = if state.size < self.capacity {
-            0
-        } else {
-            state.write_pos
-        };
+        let start_pos = if state.size < self.capacity { 0 } else { state.write_pos };
 
         for i in 0..state.size {
             let idx = (start_pos + i) % self.capacity;
@@ -86,11 +82,7 @@ impl RingBuffer {
         }
 
         let mut result = Vec::with_capacity(read_size);
-        let start_pos = if state.size < self.capacity {
-            0
-        } else {
-            state.write_pos
-        };
+        let start_pos = if state.size < self.capacity { 0 } else { state.write_pos };
 
         for i in 0..read_size {
             let idx = (start_pos + i) % self.capacity;

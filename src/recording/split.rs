@@ -80,10 +80,7 @@ pub enum SplitPoint {
     /// Split at a silence boundary (midpoint of the silence region).
     Silence { sample: usize, tier: SplitTier },
     /// Force-split at max length with overlap.
-    ForceSplit {
-        sample: usize,
-        overlap_samples: usize,
-    },
+    ForceSplit { sample: usize, overlap_samples: usize },
     /// No split needed (audio is short enough).
     None,
 }
@@ -117,8 +114,7 @@ impl SplitFinder {
     /// transitions and recording each silence region.
     pub fn scan_silences(&self, samples: &[f32], vad: &dyn VoiceDetection) -> Vec<SilenceRegion> {
         let frame_size = (self.config.sample_rate * VAD_FRAME_MS / 1000) as usize;
-        let min_silence_samples =
-            (self.config.sample_rate as usize * MIN_SILENCE_MS as usize) / 1000;
+        let min_silence_samples = (self.config.sample_rate as usize * MIN_SILENCE_MS as usize) / 1000;
 
         let mut regions = Vec::new();
         let mut silence_start: Option<usize> = None;
@@ -133,9 +129,7 @@ impl SplitFinder {
                 if let Some(start) = silence_start.take() {
                     let duration_samples = pos - start;
                     if duration_samples >= min_silence_samples {
-                        let duration_ms = (duration_samples as u64 * 1000
-                            / self.config.sample_rate as u64)
-                            as u32;
+                        let duration_ms = (duration_samples as u64 * 1000 / self.config.sample_rate as u64) as u32;
                         regions.push(SilenceRegion {
                             start_sample: start,
                             end_sample: pos,
@@ -155,8 +149,7 @@ impl SplitFinder {
         if let Some(start) = silence_start {
             let duration_samples = samples.len() - start;
             if duration_samples >= min_silence_samples {
-                let duration_ms =
-                    (duration_samples as u64 * 1000 / self.config.sample_rate as u64) as u32;
+                let duration_ms = (duration_samples as u64 * 1000 / self.config.sample_rate as u64) as u32;
                 regions.push(SilenceRegion {
                     start_sample: start,
                     end_sample: samples.len(),
@@ -173,12 +166,7 @@ impl SplitFinder {
     /// 1. Longest silence >= `semantic_silence_ms` (prefer later = larger segment)
     /// 2. Longest silence >= `vad_silence_ms`
     /// 3. Force-split at range end with overlap
-    pub fn find_best_split(
-        &self,
-        silences: &[SilenceRegion],
-        window_start: usize,
-        window_end: usize,
-    ) -> SplitPoint {
+    pub fn find_best_split(&self, silences: &[SilenceRegion], window_start: usize, window_end: usize) -> SplitPoint {
         let window_len = window_end.saturating_sub(window_start);
         if window_len <= self.config.min_segment_samples() {
             return SplitPoint::None;
@@ -308,11 +296,7 @@ mod tests {
         vec![0.5; num_samples]
     }
 
-    fn make_audio_with_silence_gap(
-        speech1_secs: f32,
-        silence_secs: f32,
-        speech2_secs: f32,
-    ) -> Vec<f32> {
+    fn make_audio_with_silence_gap(speech1_secs: f32, silence_secs: f32, speech2_secs: f32) -> Vec<f32> {
         let sr = 16000;
         let mut audio = Vec::new();
         audio.extend(make_speech((speech1_secs * sr as f32) as usize));

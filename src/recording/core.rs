@@ -78,8 +78,7 @@ impl RecordingCore {
     /// plus the completion receiver.
     pub fn stop(&self) -> (Vec<f32>, Option<Receiver<()>>) {
         self.is_recording.store(false, Ordering::SeqCst);
-        self.current_amplitude
-            .store(0.0_f32.to_bits(), Ordering::Relaxed);
+        self.current_amplitude.store(0.0_f32.to_bits(), Ordering::Relaxed);
         let completion_rx = self.completion_rx.lock().take();
         let samples = self.samples.lock().clone();
         (samples, completion_rx)
@@ -154,8 +153,7 @@ mod tests {
     #[test]
     fn test_stop_resets_amplitude() {
         let core = RecordingCore::new();
-        core.current_amplitude
-            .store(0.5_f32.to_bits(), Ordering::Relaxed);
+        core.current_amplitude.store(0.5_f32.to_bits(), Ordering::Relaxed);
         assert!(core.get_amplitude() > 0.0);
 
         core.stop();
@@ -212,9 +210,6 @@ mod tests {
 
         // The thread should exit within a reasonable time
         let result = thread_handle.join().unwrap();
-        assert!(
-            result,
-            "Thread should have exited after Drop set is_recording to false"
-        );
+        assert!(result, "Thread should have exited after Drop set is_recording to false");
     }
 }

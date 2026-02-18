@@ -38,19 +38,19 @@ use std::time::Instant;
 
 fn benchmark_model(model_path: &str, audio_samples: &[f32]) -> f64 {
     let whisper = WhisperSTT::new(model_path).unwrap();
-    
+
     let start = Instant::now();
     let _result = whisper.transcribe(audio_samples, Some("uk")).unwrap();
     let duration = start.elapsed();
-    
+
     let audio_duration_secs = audio_samples.len() as f64 / 16000.0;
     let rtf = duration.as_secs_f64() / audio_duration_secs;
-    
+
     println!("Model: {}", model_path);
     println!("Audio duration: {:.2}s", audio_duration_secs);
     println!("Processing time: {:.2}s", duration.as_secs_f64());
     println!("Real-time factor: {:.2}x", rtf);
-    
+
     rtf
 }
 ```
@@ -95,11 +95,11 @@ use faster_whisper_rs::Whisper;
 
 fn benchmark_faster_whisper(model_path: &str, audio: &[f32]) -> f64 {
     let model = Whisper::new(model_path).unwrap();
-    
+
     let start = Instant::now();
     let result = model.transcribe(audio, "uk").unwrap();
     let duration = start.elapsed();
-    
+
     // Calculate RTF
     // ...
 }
@@ -178,7 +178,7 @@ curl -L -o ~/.local/share/whisper/ggml-small-q5_0.bin \
 ## Результати тестування
 
 ### Система: [Заповнити після тестування]
-- CPU: 
+- CPU:
 - RAM:
 - OS:
 

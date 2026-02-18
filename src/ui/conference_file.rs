@@ -73,11 +73,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
         let filename = generate_recording_filename();
         let file_path = recording_path(&filename);
 
-        match save_recording(
-            &recording.mic_samples,
-            &recording.loopback_samples,
-            &file_path,
-        ) {
+        match save_recording(&recording.mic_samples, &recording.loopback_samples, &file_path) {
             Ok(()) => {
                 let status = format!(
                     "Збережено {:02}:{:02} -> {}",
@@ -86,8 +82,7 @@ pub fn handle_stop(ctx: &Arc<AppContext>, rec: &RecordingContext, ui: &Conferenc
                     file_path.display()
                 );
                 ui.base.set_status(&status);
-                ui.base
-                    .set_result_text(&format!("Файл: {}", file_path.display()));
+                ui.base.set_result_text(&format!("Файл: {}", file_path.display()));
             }
             Err(e) => {
                 ui.base.set_status(&format!("Помилка збереження: {}", e));

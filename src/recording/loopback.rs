@@ -62,10 +62,7 @@ impl LoopbackRecorder {
             .spawn()
             .context("Не вдалося запустити parec. Переконайтеся, що встановлено pulseaudio-utils (sudo dnf install pulseaudio-utils)")?;
 
-        let stdout = child
-            .stdout
-            .take()
-            .context("Не вдалося отримати stdout від parec")?;
+        let stdout = child.stdout.take().context("Не вдалося отримати stdout від parec")?;
         let mut reader = std::io::BufReader::new(stdout);
 
         // Spawn thread to read audio data
@@ -83,10 +80,7 @@ impl LoopbackRecorder {
                         .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
                         .collect();
 
-                    let f32_samples: Vec<f32> = i16_samples
-                        .iter()
-                        .map(|&sample| sample as f32 / 32768.0)
-                        .collect();
+                    let f32_samples: Vec<f32> = i16_samples.iter().map(|&sample| sample as f32 / 32768.0).collect();
 
                     // Calculate RMS amplitude
                     let amplitude = calculate_rms(&f32_samples);

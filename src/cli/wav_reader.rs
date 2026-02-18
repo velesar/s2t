@@ -33,8 +33,8 @@ pub struct PreparedAudio {
 ///
 /// Supports 8/16/24/32-bit integer and 32-bit float formats.
 pub fn read_wav(path: &Path) -> Result<WavAudio> {
-    let reader = hound::WavReader::open(path)
-        .with_context(|| format!("Failed to open WAV file: {}", path.display()))?;
+    let reader =
+        hound::WavReader::open(path).with_context(|| format!("Failed to open WAV file: {}", path.display()))?;
 
     let spec = reader.spec();
     let sample_rate = spec.sample_rate;
@@ -122,11 +122,8 @@ fn resample_to_16khz(samples: &[f32], input_rate: u32) -> Result<Vec<f32>> {
     // Process full chunks
     let frames_needed = resampler.input_frames_next();
     while input_pos + frames_needed <= samples.len() {
-        let input_chunk: Vec<Vec<f32>> =
-            vec![samples[input_pos..input_pos + frames_needed].to_vec()];
-        let resampled = resampler
-            .process(&input_chunk, None)
-            .context("Resampling failed")?;
+        let input_chunk: Vec<Vec<f32>> = vec![samples[input_pos..input_pos + frames_needed].to_vec()];
+        let resampled = resampler.process(&input_chunk, None).context("Resampling failed")?;
         output.extend_from_slice(&resampled[0]);
         input_pos += frames_needed;
     }
@@ -164,11 +161,7 @@ use crate::cli::args::ChannelMode;
 /// Prepare audio for Whisper transcription.
 ///
 /// Handles channel selection, resampling to 16kHz, and optional denoising.
-pub fn prepare_for_whisper(
-    audio: &WavAudio,
-    channel_mode: ChannelMode,
-    denoise: bool,
-) -> Result<PreparedAudio> {
+pub fn prepare_for_whisper(audio: &WavAudio, channel_mode: ChannelMode, denoise: bool) -> Result<PreparedAudio> {
     let is_stereo = audio.channels == 2;
 
     // Extract channels based on mode

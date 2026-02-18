@@ -2,9 +2,7 @@ use anyhow::{Context, Result};
 use async_channel::Receiver;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use parking_lot::Mutex;
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
-};
+use rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -73,9 +71,7 @@ impl AudioRecorder {
 
     pub fn start_recording(&self) -> Result<()> {
         let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .context("Не знайдено мікрофон")?;
+        let device = host.default_input_device().context("Не знайдено мікрофон")?;
 
         let config = device.default_input_config()?;
         let sample_rate = config.sample_rate().0;
@@ -153,11 +149,9 @@ impl AudioRecorder {
                     chunk_buf[chunk_pos..input_len].fill(0.0);
                     let input = vec![chunk_buf];
                     if let Ok(output) = resampler.process(&input, None) {
-                        let output_len = (chunk_pos as f64 * resampler.output_frames_next() as f64
-                            / input_len as f64) as usize;
-                        samples
-                            .lock()
-                            .extend(&output[0][..output_len.min(output[0].len())]);
+                        let output_len =
+                            (chunk_pos as f64 * resampler.output_frames_next() as f64 / input_len as f64) as usize;
+                        samples.lock().extend(&output[0][..output_len.min(output[0].len())]);
                     }
                 }
             });
@@ -302,10 +296,7 @@ mod tests {
     fn test_audio_recording_trait_amplitude() {
         use crate::domain::traits::AudioRecording;
         let recorder = AudioRecorder::new();
-        assert_eq!(
-            AudioRecording::amplitude(&recorder),
-            recorder.get_amplitude()
-        );
+        assert_eq!(AudioRecording::amplitude(&recorder), recorder.get_amplitude());
     }
 
     #[test]
@@ -319,9 +310,7 @@ mod tests {
     fn test_stop_resets_amplitude() {
         let recorder = AudioRecorder::new();
         let handles = recorder.core.prepare_recording();
-        handles
-            .current_amplitude
-            .store(0.5_f32.to_bits(), Ordering::Relaxed);
+        handles.current_amplitude.store(0.5_f32.to_bits(), Ordering::Relaxed);
         assert!(recorder.get_amplitude() > 0.0);
 
         recorder.stop_recording();
